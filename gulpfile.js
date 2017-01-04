@@ -69,67 +69,21 @@ var appFiles = [
 // Tasks
 //////////////////////////////////////////////
 
-// perform a variety of operations on our app js files
-// todo: need to make a change to handle for production properly
-gulp.task('app-js', ['iife-build-prod'], function (done) {
-    // model is not iife
-    var src = ['build/app-iife.js'];
-    return gulp.src(src)
-        .pipe(concat('angular-sync.min.js'))
-        .pipe(stripDebug())
-        .pipe(annotate())
-        .pipe(uglify())  
-        .pipe(filesize())
-        .pipe(gulp.dest('dist/'));
-});
-
-// wrap all angular code in bracket and add useStrict in prod
-gulp.task('iife-build-prod', function () {
-    return gulp.src(appFiles)
-        .pipe(iife({
-            useStrict: true,
-            trimCode: true,
-            prependSemicolon: false,
-            bindThis: false
-        }))
-        .pipe(concat('app-iife.js'))
-        .pipe(gulp.dest('build/'));
-
-});
-
-// perform a variety of operations on our app js files
-gulp.task('app-js-dev', ['iife-build-dev'], function () {
-    // model is not iife
-    var src = ['build/app-iife.js'];
-    //var src = appFiles.concat(genFiles);
-    return gulp.src(src)
-    // so that we load the source map in iife-build
-        .pipe(sourcemaps.init({ loadMaps: true }))
-        .pipe(concat('angular-sync.js'))
-        .pipe(annotate())
-        .pipe(filesize())
-        .pipe(sourcemaps.write())
-        .pipe(gulp.dest('dist/'));
-});
-
 // wrap all angular code in bracket and add useStrict, and add sourcemap in dev
-gulp.task('iife-build-dev', function () {
+gulp.task('lib', function () {
 
     return gulp.src(appFiles)
-        .pipe(sourcemaps.init())
         .pipe(iife({
             useStrict: true,
             trimCode: true,
             prependSemicolon: false,
             bindThis: false
         }))
-        .pipe(concat('app-iife.js'))
-        
-        // .pipe(annotate())
-        // .pipe(filesize())        
-        .pipe(sourcemaps.write())
-        .pipe(gulp.dest('build/'));
+        .pipe(concat('zerv-ng-sync.js'))
+        .pipe(annotate())
+        .pipe(gulp.dest('dist/'));
 });
+
 
 // single run testing
 gulp.task('test', function (done) {
@@ -176,13 +130,13 @@ gulp.task('bump-dev', function () {
 });
 
 // build angular-socketio.js for dev (with map) and prod (min)
-gulp.task('build', ['app-js-dev','app-js'], function () {
+gulp.task('build', ['lib'], function () {
         gulp.start([ 'test','cleanup']);
 });
 
 
 // continuous watchers
-gulp.task('default', ['app-js-dev','app-js'], function () {
+gulp.task('default', ['lib'], function () {
     gulp.start([ 'app-watch', 'tdd']);
 });
 

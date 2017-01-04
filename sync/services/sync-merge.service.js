@@ -6,11 +6,11 @@ angular
 function syncMerge() {
 
     return {
-        update: updateObject,
+        update: update,
         clearObject: clearObject
     }
 
-    function updateObject(destination, source, isStrictMode, deepMerge) {
+    function update(destination, source, isStrictMode, deepMerge) {
         if (deepMerge || _.isNil(deepMerge)) {
             updateObject(destination, source, isStrictMode)
         } else {

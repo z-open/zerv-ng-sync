@@ -6,7 +6,7 @@ Client (angular app) subscribes to a publication defined on the server.
 The subscription returns an array or object instance that remains in sync.
 
 ### Pre-Requisite:
-The backend must run the socketio-sync middleware, which is a feature of the socketio-api middleware.
+The backend must run the zerv-sync middleware, which is a feature of the zerv middleware.
 
 Publications to subscribe to are defined on the server.
  

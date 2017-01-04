@@ -164,7 +164,7 @@ function syncProvider() {
          */
 
         function Subscription(publication, scope) {
-            var timestampField, isSyncingOn = false, isSingle, updateDataStorage, cache, isInitialPushCompleted, deferredInitialization, strictMode;
+            var timestampField, isSyncingOn = false, isSingle, updateDataStorage, cache, isInitialPushCompleted, deferredInitialization, deepMerge, strictMode;
             var onReadyOff, formatRecord;
             var reconnectOff, publicationListenerOff, destroyOff;
             var objectClass;
@@ -203,6 +203,7 @@ function syncProvider() {
             this.getObjectClass = getObjectClass;
 
             this.setStrictMode = setStrictMode;
+            this.setDeepMerge = deepMerge;
 
             this.attach = attach;
             this.destroy = destroy;
@@ -255,9 +256,25 @@ function syncProvider() {
              * Forces us to use id every where.
              *
              * Should be the default...but too restrictive for now.
+             * @deprecated
              */
             function setStrictMode(value) {
                 strictMode = value;
+                return sDs;
+            }
+
+            /**
+             * Deep merge allows to maintain references in objects.
+             *
+             * But this can create circular references in objects that have inner object dependencies.
+             *
+             * To avoid circular references, it is recommended to use a shalow merge (false) 
+             *
+             * @param <boolean> false for shalow merge (default is deep merge)
+             *
+             */
+            function setDeepMerge(value) {
+                deepMerge = value;
                 return sDs;
             }
 
@@ -660,7 +677,7 @@ function syncProvider() {
                 saveRecordState(record);
 
                 if (!record.remove) {
-                    $syncMerge.update(cache, record, strictMode);
+                    $syncMerge.update(cache, record, strictMode, deepMerge);
                 } else {
                     $syncMerge.clearObject(cache);
                 }
@@ -675,12 +692,13 @@ function syncProvider() {
                         cache.push(record);
                     }
                 } else {
-                    $syncMerge.update(existing, record, strictMode);
+                    $syncMerge.update(existing, record, strictMode, deepMerge);
                     if (record.removed) {
                         cache.splice(cache.indexOf(existing), 1);
                     }
                 }
             }
+            
 
             function getRevision(record) {
                 // what reserved field do we use as timestamp

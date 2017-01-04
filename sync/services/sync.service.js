@@ -203,7 +203,7 @@ function syncProvider() {
             this.getObjectClass = getObjectClass;
 
             this.setStrictMode = setStrictMode;
-            this.setDeepMerge = deepMerge;
+            this.setDeepMerge = setDeepMerge;
 
             this.attach = attach;
             this.destroy = destroy;

@@ -407,6 +407,8 @@ function syncProvider() {
 
             this.setObjectClass = setObjectClass;
             this.getObjectClass = getObjectClass;
+            this.map = map;
+            this.mapDs = mapDs;
 
             this.setStrictMode = setStrictMode;
             this.setDeepMerge = setDeepMerge;
@@ -508,6 +510,42 @@ function syncProvider() {
                 return objectClass;
             }
 
+            /**
+             * Provide a function that returns a subscription object.
+             * The returned subscription will be automatically destroy when this datasource is destroyed.
+             * The function will build a subscription object that will map data to the objects of this datasource cache
+             */
+            var dsFns = [];
+            function mapDs(fn) {
+                dsFns.push(fn);
+                return sDs;
+            }
+
+            /**
+             * provide a function that will map some data/lookup to the provided object
+             * 
+             * ex fn = function(obj) {
+             *      obj.city = someCacheLookup(obj.cityId)
+             * }
+             * 
+             */
+            var mapFn;
+            function map(fn) {
+                mapFn = fn;
+                return sDs;
+            }
+
+            function mapData(obj) {
+                if (mapFn) {
+                    mapFn(obj);
+                }
+                // When all mapped datasources are ready, the object is utterly mapped and ready for consumption.
+                return $q.all(_.map(dsFns, function (dsFn) {
+                    return dsFn(obj)
+                        .attach(innerScope) // make sure the inner subscription  are destroyed when the scope of this subscription is destroyed
+                        .waitForDataReady();
+                }));
+            }
             /**
              * this function starts the syncing.
              * Only publication pushing data matching our fetching params will be received.
@@ -855,9 +893,18 @@ function syncProvider() {
             function addRecord(record) {
                 logDebug('Sync -> Inserted New record #' + JSON.stringify(record.id) + ' for subscription to ' + publication);// JSON.stringify(record));
                 getRevision(record); // just make sure we can get a revision before we handle this record
-                updateDataStorage(formatRecord ? formatRecord(record) : record);
-                syncListener.notify('add', record);
-                return record;
+                var obj = formatRecord ? formatRecord(record) : record;
+                updateDataStorage(obj);
+
+                // after object is mapped, let's notify
+                // return mapData(obj).then(function () {
+                //     syncListener.notify('add', obj);
+                //     return obj;
+                // })
+
+                mapData(obj);
+                syncListener.notify('add', obj);
+                return obj;
             }
 
             function updateRecord(record, force) {
@@ -866,9 +913,11 @@ function syncProvider() {
                     return null;
                 }
                 logDebug('Sync -> Updated record #' + JSON.stringify(record.id) + ' for subscription to ' + publication);// JSON.stringify(record));
-                updateDataStorage(formatRecord ? formatRecord(record) : record);
-                syncListener.notify('update', record);
-                return record;
+                var obj = formatRecord ? formatRecord(record) : record;
+                updateDataStorage(obj);
+                mapData(obj);
+                syncListener.notify('update', obj);
+                return obj;
             }
 
 
@@ -882,7 +931,7 @@ function syncProvider() {
                     updateDataStorage(record);
                     // if there is no previous record we do not need to removed any thing from our storage.     
                     if (previous) {
-                        syncListener.notify('remove', record);
+                        syncListener.notify('remove', record); // TODO: might not be right??? it is not an obj... but json data...
                         dispose(record);
                     }
                 }

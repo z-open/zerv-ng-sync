@@ -27,9 +27,19 @@ angular
 function syncProvider() {
 
     var debug;
+    var defaultDeepMerge = true;
 
     this.setDebug = function (value) {
         debug = value;
+    };
+
+    /**
+     * by default the deepMerge is used during sync, which can throw exception when syncing objects which have inner object dependency (ex the object to sync has a parent object and collection of children which point to the parent)
+     * 
+     * It is recommended to use this library with setDeepMerge to false.
+     */
+    this.setDeepMerge = function (value) {
+        defaultDeepMerge = value;
     };
 
     this.$get = function sync($rootScope, $q, $socketio, $syncGarbageCollector, $syncMerge) {
@@ -164,7 +174,7 @@ function syncProvider() {
          */
 
         function Subscription(publication, scope) {
-            var timestampField, isSyncingOn = false, isSingle, updateDataStorage, cache, isInitialPushCompleted, deferredInitialization, deepMerge, strictMode;
+            var timestampField, isSyncingOn = false, isSingle, updateDataStorage, cache, isInitialPushCompleted, deferredInitialization, strictMode;
             var onReadyOff, formatRecord;
             var reconnectOff, publicationListenerOff, destroyOff;
             var objectClass;
@@ -175,6 +185,7 @@ function syncProvider() {
             var recordStates = {};
             var innerScope;//= $rootScope.$new(true);
             var syncListener = new SyncListener();
+            var deepMerge = defaultDeepMerge;
 
 
             this.ready = false;

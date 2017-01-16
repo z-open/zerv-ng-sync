@@ -182,6 +182,8 @@ function syncProvider() {
             this.syncOff = syncOff;
             this.setOnReady = setOnReady;
 
+            this.resync = resync;
+
             this.onReady = onReady;
             this.onUpdate = onUpdate;
             this.onAdd = onAdd;
@@ -189,6 +191,8 @@ function syncProvider() {
 
             this.getData = getData;
             this.setParameters = setParameters;
+
+            this.forceChanges = forceChanges;
 
             this.waitForDataReady = waitForDataReady;
             this.waitForSubscriptionReady = waitForSubscriptionReady;
@@ -424,6 +428,20 @@ function syncProvider() {
             }
 
             /**
+            * force resyncing.
+            * 
+            * This would clear the cache then restablish the sync to load fresh data
+            *
+            * @returns this subcription
+            *
+            */
+            function resync() {
+                syncOff();
+                syncOn();
+                return sDs;
+            }
+
+            /**
              * the dataset will start listening to the datastream 
              * 
              * Note During the sync, it will also call the optional callbacks - after processing EACH record received.
@@ -546,19 +564,36 @@ function syncProvider() {
                 return matching;
 
             }
+            /** 
+             * Force the provided records into the cache
+             * And activate the call backs (ready, add,update,remove)
+             * 
+             * The changes might be overwritten by next sync/publication. To prevent this, sync off.
+             * 
+             * @param <array> records is an array of data record (json obj) 
+             */
+            function forceChanges(records) {
+                applyChanges(records, true);
+            }
 
-            // fetch all the missing records, and activate the call backs (add,update,remove) accordingly if there is something that is new or not already in sync.
-            function applyChanges(records) {
+            /**
+             *  fetch all the missing records, and activate the call backs (add,update,remove) accordingly if there is something that is new or not already in sync.
+             * 
+             * @param <array> records is an array of data record (json obj)
+             * @param <boolean> force, forces the data into the cache even whatever is the record revision.
+             * 
+             */
+            function applyChanges(records, force) {
                 var newDataArray = [];
                 var newData;
                 sDs.ready = false;
                 records.forEach(function (record) {
                     //                   logInfo('Datasync [' + dataStreamName + '] received:' +JSON.stringify(record));//+ JSON.stringify(record.id));
                     if (record.remove) {
-                        removeRecord(record);
+                        removeRecord(record, force);
                     } else if (getRecordState(record)) {
                         // if the record is already present in the cache...so it is mightbe an update..
-                        newData = updateRecord(record);
+                        newData = updateRecord(record, force);
                     } else {
                         newData = addRecord(record);
                     }
@@ -623,9 +658,9 @@ function syncProvider() {
                 return record;
             }
 
-            function updateRecord(record) {
+            function updateRecord(record, force) {
                 var previous = getRecordState(record);
-                if (getRevision(record) <= getRevision(previous)) {
+                if (!force & getRevision(record) <= getRevision(previous)) {
                     return null;
                 }
                 logDebug('Sync -> Updated record #' + JSON.stringify(record.id) + ' for subscription to ' + publication);// JSON.stringify(record));
@@ -635,9 +670,9 @@ function syncProvider() {
             }
 
 
-            function removeRecord(record) {
+            function removeRecord(record, force) {
                 var previous = getRecordState(record);
-                if (!previous || getRevision(record) > getRevision(previous)) {
+                if (force || !previous || getRevision(record) > getRevision(previous)) {
                     logDebug('Sync -> Removed #' + JSON.stringify(record.id) + ' for subscription to ' + publication);
                     // We could have for the same record consecutively fetching in this order:
                     // delete id:4, rev 10, then add id:4, rev 9.... by keeping track of what was deleted, we will not add the record since it was deleted with a most recent timestamp.
@@ -698,7 +733,7 @@ function syncProvider() {
                     }
                 }
             }
-            
+
 
             function getRevision(record) {
                 // what reserved field do we use as timestamp

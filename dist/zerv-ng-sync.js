@@ -370,7 +370,7 @@ function syncProvider() {
             var reconnectOff, publicationListenerOff, destroyOff;
             var objectClass;
             var subscriptionId;
-            var mapFn;
+            var mapDataFn;
 
             var sDs = this;
             var dependentSubscriptions = [];
@@ -523,15 +523,59 @@ function syncProvider() {
             }
 
             /**
-             * Provide a function that returns a subscription object.
-             * The returned subscription will be automatically destroy when this datasource is destroyed.
-             * The function will build a subscription object that will map data to the objects of this datasource cache
+             * defines the mapping to an additional subscription which syncs a single object
+             * 
+             * ex: 
+             *  $sync.subscribe('people.sync')
+             *    .setDeepMerge(false)
+             *    .setObjectClass(Person)
+             *    .mapArrayDs('people.address.sync',
+             *        function (person) {
+             *            return { personId: person.id };
+             *        },
+             *        // for each resource received via sync, this map functin is executed
+             *        function (address, person) {
+             *            person.address = address;
+             *        })
+             *    .waitForSubscriptionReady();
+             * 
+             * @param <String> name of publication to subscribe
+             * @param <function> function that returns the params for the inner subscription          
+             * @param <function> for each object received for this inner subscription via sync, this map function is executed
+             * 
              */
-
             function mapObjectDs(publication, paramsFn, mapFn) {
                 dependentSubscriptions.push({ publication: publication, paramsFn: paramsFn, mapFn: mapFn, single: true });
                 return sDs;
             }
+
+            /**
+             * defines the mapping to an additional subscription which syncs an array of objects
+             * 
+             *   TODO: Delete is not implemented yet!!!!!!!!!!!!!!!!!!
+             * 
+             * 
+             * ex: 
+             *  $sync.subscribe('people.sync')
+             *    .setDeepMerge(false)
+             *    .setObjectClass(Person)
+             *    .mapArrayDs('people.friends.sync',
+             *        function (person) {
+             *            return { personId: person.id };
+             *        },
+             *        function (friend, person, isDeleted) {
+             *            if (isDeleted) {
+             *               person.remove(friend);
+             *            } else {
+             *               person.addOrUpdate(friend);
+             *            }
+             *        })
+             *    .waitForSubscriptionReady();
+             *            
+             * @param <String> name of publication to subscribe
+             * @param <function> function that returns the params for the inner subscription          
+             * @param <function> for each object received for this inner subscription via sync, this map function is executed
+             */
             function mapArrayDs(publication, paramsFn, mapFn) {
                 dependentSubscriptions.push({ publication: publication, paramsFn: paramsFn, mapFn: mapFn, single: false });
                 return sDs;
@@ -545,47 +589,82 @@ function syncProvider() {
              * 
              */
             function map(fn) {
-                mapFn = fn;
+                mapDataFn = fn;
                 return sDs;
             }
 
             /**
              * map static data or subscription based data to the provided object
              * 
+             * DELETE NOT implemented !!!!!!!!!!!!
+             * - if the obj is deleted, we should delete all its object subscriptions
+             * - if the inner object is deleted, we should pass deleted true to mapFn, so that the mapping code provided does what it is supposed to do.
+             * 
+             * 
              * @param <Object> the obj is the constructed object version from the data over the network
              * @returns <Promise> returns a promise that is resolved when the object is completely mapped
-             * 
              */
             function mapAllDataToObject(obj) {
-                if (mapFn) {
-                    mapFn(obj);
+                if (mapDataFn) {
+                    mapDataFn(obj);
                 }
                 if (dependentSubscriptions.length === 0) {
                     return $q.resolve();
                 }
-
-                var objDs = _.find(datasources, { objId: obj.id });
-                if (!objDs) {
-                    var subscriptions = _.map(dependentSubscriptions,
-                        function (dependentSub) {
-                            var ds = subscribe(dependentSub.publication)
-                                .setSingle(dependentSub.single)
-                                .map(function (result) {
-                                    // each time the datasource is synced (updated), the object will be mapped with the datasource data
-                                    ds.mapFn(result, obj);
-                                });
-                            ds.mapFn = dependentSub.mapFn;
-                            // this starts the subscription
-                            return ds.setParameters(dependentSub.paramsFn(obj));
-                        });
-                    objDs = {
-                        objId: obj.id,
-                        subscriptions: subscriptions
-                    };
-                    datasources.push(objDs);
+                var objectSubscriptions = findObjectDependentSubscriptions(obj);
+                if (!objectSubscriptions) {
+                    objectSubscriptions = createObjectDependentSubscriptions(obj);
                 }
-                // map the subscriptionData
-                // When all mapped datasources are ready, the object is utterly mapped and ready for consumption.
+                return mapSubscriptionDataToObject(objDs.subscriptions, obj);
+
+            }
+
+            /**
+             * find all subscriptions linked to the current object
+             * 
+             *  @param <Object> the object of the cache that will be mapped with additional data from subscription when they arrived
+             *  @returns all the subscriptions linked to this object
+             */
+            function findObjectDependentSubscriptions(obj) {
+                var objDs = _.find(datasources, { objId: obj.id });
+                return objDs ? objDs.subscriptions : null;
+            }
+
+            /**
+             * create the dependent subscription for each object of the cache
+             * 
+             * TODO: no reuse at this time, we might subscribe multiple times to the same data
+             * 
+             *  @param <Object> the object of the cache that will be mapped with additional data from subscription when they arrived
+             *  @returns all the subscriptions linked to this object
+             */
+            function createObjectDependentSubscriptions(obj) {
+                var subscriptions = _.map(dependentSubscriptions,
+                    function (dependentSub) {
+                        var ds = subscribe(dependentSub.publication)
+                            .setSingle(dependentSub.single)
+                            .map(function (result) {
+                                // each time the datasource is synced (updated), the object will be mapped with the datasource data
+                                ds.mapFn(result, obj);
+                            });
+                        ds.mapFn = dependentSub.mapFn;
+                        // this starts the subscription
+                        return ds.setParameters(dependentSub.paramsFn(obj));
+                    });
+                datasources.push({
+                    objId: obj.id,
+                    subscriptions: subscriptions
+                });
+
+                return subscriptions;
+            }
+
+            /**
+             * wait for the subscriptions to pull their data then update the object
+             * 
+             * @returns <Promise> Resolve when it completes
+             */
+            function mapSubscriptionDataToObject(subscriptions, obj) {
                 return $q.all(_.map(objDs.subscriptions,
                     function (ds) {
                         // if the ds is already ready, then the object is mapped with the datasource data

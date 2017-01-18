@@ -182,7 +182,7 @@ function syncProvider() {
             var mapDataFn;
 
             var sDs = this;
-            var dependentSubscriptions = [];
+            var dependentSubscriptionDefinitions = [];
             var datasources = [];
             var subParams = {};
             var recordStates = {};
@@ -336,13 +336,12 @@ function syncProvider() {
              * 
              * ex: 
              *  $sync.subscribe('people.sync')
-             *    .setDeepMerge(false)
              *    .setObjectClass(Person)
-             *    .mapArrayDs('people.address.sync',
+             *    .mapObjectDs('people.address.sync',
              *        function (person) {
              *            return { personId: person.id };
              *        },
-             *        // for each resource received via sync, this map functin is executed
+             *        // for each resource received via sync, this map function is executed
              *        function (address, person) {
              *            person.address = address;
              *        })
@@ -353,8 +352,8 @@ function syncProvider() {
              * @param <function> for each object received for this inner subscription via sync, this map function is executed
              * 
              */
-            function mapObjectDs(publication, paramsFn, mapFn) {
-                dependentSubscriptions.push({ publication: publication, paramsFn: paramsFn, mapFn: mapFn, single: true });
+            function mapObjectDs(publication, paramsFn, mapFn, innerMappings) {
+                dependentSubscriptionDefinitions.push({ publication: publication, paramsFn: paramsFn, mapFn: mapFn, single: true, mappings: innerMappings });
                 return sDs;
             }
 
@@ -366,7 +365,6 @@ function syncProvider() {
              * 
              * ex: 
              *  $sync.subscribe('people.sync')
-             *    .setDeepMerge(false)
              *    .setObjectClass(Person)
              *    .mapArrayDs('people.friends.sync',
              *        function (person) {
@@ -386,7 +384,7 @@ function syncProvider() {
              * @param <function> for each object received for this inner subscription via sync, this map function is executed
              */
             function mapArrayDs(publication, paramsFn, mapFn) {
-                dependentSubscriptions.push({ publication: publication, paramsFn: paramsFn, mapFn: mapFn, single: false });
+                dependentSubscriptionDefinitions.push({ publication: publication, paramsFn: paramsFn, mapFn: mapFn, single: false });
                 return sDs;
             }
             /**
@@ -417,14 +415,14 @@ function syncProvider() {
                 if (mapDataFn) {
                     mapDataFn(obj);
                 }
-                if (dependentSubscriptions.length === 0) {
+                if (dependentSubscriptionDefinitions.length === 0) {
                     return $q.resolve();
                 }
                 var objectSubscriptions = findObjectDependentSubscriptions(obj);
                 if (!objectSubscriptions) {
                     objectSubscriptions = createObjectDependentSubscriptions(obj);
                 }
-                return mapSubscriptionDataToObject(objDs.subscriptions, obj);
+                return mapSubscriptionDataToObject(objectSubscriptions, obj);
 
             }
 
@@ -440,6 +438,24 @@ function syncProvider() {
             }
 
             /**
+             * remove the subscriptions that an object depends on if any
+             * 
+             *  @param <Object> the object of that was removed
+             */
+            function removeObjectDependentSubscriptions(obj) {
+                var objDs = _.find(datasources, { objId: obj.id });
+                if (objDs.subscriptions.length !== 0) {
+                    logDebug('Sync -> Removing dependent subscription for record #' + record.id + ' for subscription to ' + publication); /
+                    _.forEach(psubscriptions, function (sub) {
+                        sub.destroy();
+                    });
+                    var p = datasources.indexOf(objDs);
+                    datasources.slice(p, p + 1);
+                }
+
+            }
+
+            /**
              * create the dependent subscription for each object of the cache
              * 
              * TODO: no reuse at this time, we might subscribe multiple times to the same data
@@ -448,17 +464,29 @@ function syncProvider() {
              *  @returns all the subscriptions linked to this object
              */
             function createObjectDependentSubscriptions(obj) {
-                var subscriptions = _.map(dependentSubscriptions,
-                    function (dependentSub) {
-                        var ds = subscribe(dependentSub.publication)
-                            .setSingle(dependentSub.single)
-                            .map(function (result) {
-                                // each time the datasource is synced (updated), the object will be mapped with the datasource data
-                                ds.mapFn(result, obj);
+                var subscriptions = _.map(dependentSubscriptionDefinitions,
+                    function (dependentSubDef) {
+                        var ds = subscribe(dependentSubDef.publication)
+                            .setSingle(dependentSubDef.single)
+                            .map(function (dependentSubData) {
+                                // map will be trigger in the following conditions:
+                                // - when the first time, the object is received, this dependent sync will be created and call map when it receives its data
+                                // - the next time the dependent syncs
+
+                                // if the main sync is ready, it means only the dependent received update and need to update the object in the cache and inform when ready.
+                                // if th main sync is NOT ready, the mapping will happen anyway when running mapSubscriptionDataToObject
+                                if (isReady()) {
+                                    var cachedObject = getRecordState(obj);
+                                    ds.mapFn(dependentSubData, cachedObject, dependentSubData.remove);
+                                    // object in the cache is updated and ready for consumption
+                                    syncListener.notify('ready', getData(), [cachedObject]);
+                                }
                             });
-                        ds.mapFn = dependentSub.mapFn;
+                        ds.mapFn = dependentSubDef.mapFn;
+
+
                         // this starts the subscription
-                        return ds.setParameters(dependentSub.paramsFn(obj));
+                        return ds.setParameters(dependentSubDef.paramsFn(obj));
                     });
                 datasources.push({
                     objId: obj.id,
@@ -474,7 +502,7 @@ function syncProvider() {
              * @returns <Promise> Resolve when it completes
              */
             function mapSubscriptionDataToObject(subscriptions, obj) {
-                return $q.all(_.map(objDs.subscriptions,
+                return $q.all(_.map(subscriptions,
                     function (ds) {
                         // if the ds is already ready, then the object is mapped with the datasource data
                         return ds.waitForDataReady().then(function (data) {
@@ -817,7 +845,7 @@ function syncProvider() {
              * @returns if true is a sync has been processed otherwise false if the data is not ready.
              */
             function isReady() {
-                return this.ready;
+                return sDs.ready;
             }
             /**
              * 
@@ -856,19 +884,14 @@ function syncProvider() {
                 logDebug('Sync -> Inserted New record #' + JSON.stringify(record.id) + (force ? ' directly' : ' via sync') + ' for subscription to ' + publication);// JSON.stringify(record));
                 getRevision(record); // just make sure we can get a revision before we handle this record
                 var obj = formatRecord ? formatRecord(record) : record;
-                //updateDataStorage(obj);
 
-                // after object is mapped, let's notify
                 return mapAllDataToObject(obj).then(function () {
                     updateDataStorage(obj);
                     syncListener.notify('add', obj);
                     return obj;
                 });
-
-                // mapData(obj);
-                // syncListener.notify('add', obj);
-                // return obj;
             }
+
 
             function updateRecord(record, force) {
                 var previous = getRecordState(record);
@@ -877,23 +900,23 @@ function syncProvider() {
                 }
                 logDebug('Sync -> Updated record #' + JSON.stringify(record.id) + (force ? ' directly' : ' via sync') + ' for subscription to ' + publication);// JSON.stringify(record));
                 var obj = formatRecord ? formatRecord(record) : record;
-                //updateDataStorage(obj);
 
-                // after object is mapped, let's notify
                 return mapAllDataToObject(obj).then(function () {
                     updateDataStorage(obj);
                     syncListener.notify('update', obj);
                     return obj;
                 });
-
-                // mapData(obj);
-                // syncListener.notify('update', obj);
-                // return obj;
             }
 
 
             function removeRecord(record, force) {
                 var previous = getRecordState(record);
+
+                if (previous) {
+                    // no longer needs to subscriptions;
+                    removeObjectDependentSubscriptions(record);
+                }
+
                 if (force || !previous || getRevision(record) > getRevision(previous)) {
                     logDebug('Sync -> Removed #' + JSON.stringify(record.id) + (force ? ' directly' : ' via sync') + ' for subscription to ' + publication);
                     // We could have for the same record consecutively fetching in this order:

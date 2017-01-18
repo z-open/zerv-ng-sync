@@ -527,13 +527,12 @@ function syncProvider() {
              * 
              * ex: 
              *  $sync.subscribe('people.sync')
-             *    .setDeepMerge(false)
              *    .setObjectClass(Person)
-             *    .mapArrayDs('people.address.sync',
+             *    .mapObjectDs('people.address.sync',
              *        function (person) {
              *            return { personId: person.id };
              *        },
-             *        // for each resource received via sync, this map functin is executed
+             *        // for each resource received via sync, this map function is executed
              *        function (address, person) {
              *            person.address = address;
              *        })
@@ -544,7 +543,7 @@ function syncProvider() {
              * @param <function> for each object received for this inner subscription via sync, this map function is executed
              * 
              */
-            function mapObjectDs(publication, paramsFn, mapFn) {
+            function mapObjectDs(publication, paramsFn, mapFn, innerMappings) {
                 dependentSubscriptions.push({ publication: publication, paramsFn: paramsFn, mapFn: mapFn, single: true });
                 return sDs;
             }
@@ -557,7 +556,6 @@ function syncProvider() {
              * 
              * ex: 
              *  $sync.subscribe('people.sync')
-             *    .setDeepMerge(false)
              *    .setObjectClass(Person)
              *    .mapArrayDs('people.friends.sync',
              *        function (person) {
@@ -615,7 +613,7 @@ function syncProvider() {
                 if (!objectSubscriptions) {
                     objectSubscriptions = createObjectDependentSubscriptions(obj);
                 }
-                return mapSubscriptionDataToObject(objDs.subscriptions, obj);
+                return mapSubscriptionDataToObject(objectSubscriptions, obj);
 
             }
 
@@ -644,8 +642,15 @@ function syncProvider() {
                         var ds = subscribe(dependentSub.publication)
                             .setSingle(dependentSub.single)
                             .map(function (result) {
-                                // each time the datasource is synced (updated), the object will be mapped with the datasource data
-                                ds.mapFn(result, obj);
+
+                                if (isReady()) {
+                                    var cachedObject = getRecordState(obj);
+                                    // each time the datasource is synced (updated), the object will be mapped with the datasource data
+                                    ds.mapFn(result, cachedObject);
+                                    // if the dependent datasource has synced and  we do have a complete objects in cache since initialPushCompleted, 
+                                    // let's notify that data is ready for comsumption
+                                    syncListener.notify('ready', getData(), [cachedObject]);
+                                }
                             });
                         ds.mapFn = dependentSub.mapFn;
                         // this starts the subscription
@@ -665,7 +670,7 @@ function syncProvider() {
              * @returns <Promise> Resolve when it completes
              */
             function mapSubscriptionDataToObject(subscriptions, obj) {
-                return $q.all(_.map(objDs.subscriptions,
+                return $q.all(_.map(subscriptions,
                     function (ds) {
                         // if the ds is already ready, then the object is mapped with the datasource data
                         return ds.waitForDataReady().then(function (data) {
@@ -1008,7 +1013,7 @@ function syncProvider() {
              * @returns if true is a sync has been processed otherwise false if the data is not ready.
              */
             function isReady() {
-                return this.ready;
+                return sDs.ready;
             }
             /**
              * 

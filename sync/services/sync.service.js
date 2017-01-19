@@ -328,7 +328,7 @@ function syncProvider() {
              * @param classValue
              */
             function setObjectClass(classValue) {
-                if (deferredInitialization) {
+                if (!classValue || deferredInitialization) {
                     return thisSub;
                 }
 
@@ -363,10 +363,20 @@ function syncProvider() {
              * @param <String> name of publication to subscribe
              * @param <function> function that returns the params for the inner subscription          
              * @param <function> for each object received for this inner subscription via sync, this map function is executed
+             * @param <object> options object, check map()
              * 
              */
-            function mapObjectDs(publication, paramsFn, mapFn, innerMappings) {
-                dependentSubscriptionDefinitions.push({ publication: publication, paramsFn: paramsFn, mapFn: mapFn, single: true, mappings: innerMappings });
+            function mapObjectDs(publication, paramsFn, mapFn, options) {
+                options = _.assign({}, options);
+                dependentSubscriptionDefinitions.push({
+                    publication: publication,
+                    paramsFn: paramsFn,
+                    mapFn: mapFn,
+                    single: true,
+                    objectClass: options.objectClass,
+                    mappings: options.mappings,
+                    notifyReady: options.notifyReady
+                });
                 return thisSub;
             }
 
@@ -395,11 +405,24 @@ function syncProvider() {
              * @param <String> name of publication to subscribe
              * @param <function> function that returns the params for the inner subscription          
              * @param <function> for each object received for this inner subscription via sync, this map function is executed
+             * @param <object> options object, check map()
+             * 
              */
-            function mapArrayDs(publication, paramsFn, mapFn, innerMappings) {
-                dependentSubscriptionDefinitions.push({ publication: publication, paramsFn: paramsFn, mapFn: mapFn, single: false, mappings: innerMappings });
+            function mapArrayDs(publication, paramsFn, mapFn, options) {
+                options = _.assign({}, options);
+                dependentSubscriptionDefinitions.push({
+                    publication: publication,
+                    paramsFn: paramsFn,
+                    mapFn: mapFn,
+                    single: false,
+                    objectClass: options.objectClass,
+                    mappings: options.mappings,
+                    notifyReady: options.notifyReady
+                });
                 return thisSub;
             }
+
+            
             /**
              * provide a function that will map some data/lookup to the provided object
              * 
@@ -414,17 +437,53 @@ function syncProvider() {
             }
 
             /** 
-             *  this function allows to create multiple strategies at the same time
+             *  this function allows to add to the subscription multiple mapping strategies at the same time
+             * 
+             *  data mapping strategy
+             * -----------------------
+             *  {
+             *    type:'data',
+             *    mapFn: function(objectReceicedFromSync) {
+             *                    }
+             *  }
+             * 
+             *  array mapping strategy
+             * ------------------------
+             *  {
+             *    type:'array',
+             *    publication: 'myPub',
+             *    mapFn: function(objectReceicedFromSync, objectToMapTo) {
+             *                     objectToMapTo.objectProperty =  objectReceicedFromSync
+             *           }
+             *    paramsFn: function(objectOfTheParentSubscription) {
+             *                      return {
+             *                          paramOfMyPub: objectOfTheParentSubscription.someProperty
+             *                      }
+             *           }
+             *  }
+             * 
+             *  object mapping strategy
+             * -------------------------
+             *  similar to array but type is 'object, subscription only returns one object
+             * 
+             * 
+             *  object and array stragegies might have options:
+             *  options: {
+             *       notifyReady: <boolean>  (if data has changed in the subscription, the main subscription onReady is triggered)
+             *       objectClass: <ClassName>  subscription class used to build the received objects
+             *       mappings : <array> of definitions objects 
+             *  }
              * 
              *  @param <array> array of mapping definitions
              *  @returns this subscription obj
              */
             function map(mapDefinitions) {
                 _.forEach(mapDefinitions, function (def) {
+
                     if (def.type === 'object') {
-                        thisSub.mapObjectDs(def.publication, def.paramsFn, def.mapFn, def.mappings);
+                        thisSub.mapObjectDs(def.publication, def.paramsFn, def.mapFn, def.options);
                     } else if (def.type === 'array') {
-                        thisSub.mapArrayDs(def.publication, def.paramsFn, def.mapFn, def.mappings);
+                        thisSub.mapArrayDs(def.publication, def.paramsFn, def.mapFn, def.options);
                     } if (def.type === 'data') {
                         thisSub.mapData(def.mapFn);
                     }
@@ -433,7 +492,7 @@ function syncProvider() {
             /**
              * map static data or subscription based data to the provided object
              * 
-             * DELETE NOT implemented !!!!!!!!!!!!
+             * DELETE NOT TESTED !!!!!!!!!!!!
              * - if the obj is deleted, we should delete all its object subscriptions
              * - if the inner object is deleted, we should pass deleted true to mapFn, so that the mapping code provided does what it is supposed to do.
              * 
@@ -497,6 +556,7 @@ function syncProvider() {
                 var subscriptions = _.map(dependentSubscriptionDefinitions,
                     function (dependentSubDef) {
                         var depSub = subscribe(dependentSubDef.publication)
+                            .setObjectClass(dependentSubDef.objectClass)
                             .setSingle(dependentSubDef.single)
                             .mapData(function (dependentSubObject) {
                                 // map will be triggered in the following conditions:
@@ -513,7 +573,7 @@ function syncProvider() {
                             })
                             .setOnReady(function () {
                                 // if the main sync is NOT ready, it means it is in the process of being ready and will notify when it is
-                                if (isReady()) {
+                                if (dependentSubDef.notifyReady && isReady()) {
                                     notifyMainSubscription(depSub);
                                 }
                             });
@@ -525,7 +585,7 @@ function syncProvider() {
 
                         // the dependent subscription might have itself some mappings
                         if (dependentSubDef.mappings) {
-                            dependentSubDef.map(dependentSubDef.mappings);
+                            depSub.map(dependentSubDef.mappings);
                         }
                         // this starts the subscription using the params computed by the function provided when the dependent subscription was defined
                         return depSub.setParameters(dependentSubDef.paramsFn(obj, collectParentSubscriptionParams()));

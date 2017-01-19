@@ -519,7 +519,7 @@ function syncProvider() {
              * @param classValue
              */
             function setObjectClass(classValue) {
-                if (deferredInitialization) {
+                if (!classValue || deferredInitialization) {
                     return thisSub;
                 }
 
@@ -554,10 +554,22 @@ function syncProvider() {
              * @param <String> name of publication to subscribe
              * @param <function> function that returns the params for the inner subscription          
              * @param <function> for each object received for this inner subscription via sync, this map function is executed
-             * 
+             * @param <object> options object
+             *      this object might have the following properties:
+             *         <boolean> options.notifyReady if set to true, if a dependent subcription is being updated, this will trigger the onReady of the main subscription
+             *         <array> mappings is an array of definition, check map() 
              */
-            function mapObjectDs(publication, paramsFn, mapFn, innerMappings) {
-                dependentSubscriptionDefinitions.push({ publication: publication, paramsFn: paramsFn, mapFn: mapFn, single: true, mappings: innerMappings });
+            function mapObjectDs(publication, paramsFn, mapFn, options) {
+                options = _.assign({}, options);
+                dependentSubscriptionDefinitions.push({
+                    publication: publication,
+                    paramsFn: paramsFn,
+                    mapFn: mapFn,
+                    single: true,
+                    objectClass: options.objectClass,
+                    mappings: options.mappings,
+                    notifyReady: options.notifyReady
+                });
                 return thisSub;
             }
 
@@ -586,11 +598,26 @@ function syncProvider() {
              * @param <String> name of publication to subscribe
              * @param <function> function that returns the params for the inner subscription          
              * @param <function> for each object received for this inner subscription via sync, this map function is executed
+             * @param <object> options object
+             *      this object might have the following properties:
+             *         <boolean> options.notifyReady if set to true, if a dependent subcription is being updated, this will trigger the onReady of the main subscription
+             *         <array> mappings is an array of definition, check map() 
              */
-            function mapArrayDs(publication, paramsFn, mapFn, innerMappings) {
-                dependentSubscriptionDefinitions.push({ publication: publication, paramsFn: paramsFn, mapFn: mapFn, single: false, mappings: innerMappings });
+            function mapArrayDs(publication, paramsFn, mapFn, options) {
+                options = _.assign({}, options);
+                dependentSubscriptionDefinitions.push({
+                    publication: publication,
+                    paramsFn: paramsFn,
+                    mapFn: mapFn,
+                    single: false,
+                    objectClass: options.objectClass,
+                    mappings: options.mappings,
+                    notifyReady: options.notifyReady
+                });
                 return thisSub;
             }
+
+            
             /**
              * provide a function that will map some data/lookup to the provided object
              * 
@@ -612,10 +639,11 @@ function syncProvider() {
              */
             function map(mapDefinitions) {
                 _.forEach(mapDefinitions, function (def) {
+
                     if (def.type === 'object') {
-                        thisSub.mapObjectDs(def.publication, def.paramsFn, def.mapFn, def.mappings);
+                        thisSub.mapObjectDs(def.publication, def.paramsFn, def.mapFn, def.options);
                     } else if (def.type === 'array') {
-                        thisSub.mapArrayDs(def.publication, def.paramsFn, def.mapFn, def.mappings);
+                        thisSub.mapArrayDs(def.publication, def.paramsFn, def.mapFn, def.options);
                     } if (def.type === 'data') {
                         thisSub.mapData(def.mapFn);
                     }
@@ -688,6 +716,7 @@ function syncProvider() {
                 var subscriptions = _.map(dependentSubscriptionDefinitions,
                     function (dependentSubDef) {
                         var depSub = subscribe(dependentSubDef.publication)
+                            .setObjectClass(dependentSubDef.objectClass)
                             .setSingle(dependentSubDef.single)
                             .mapData(function (dependentSubObject) {
                                 // map will be triggered in the following conditions:
@@ -704,7 +733,7 @@ function syncProvider() {
                             })
                             .setOnReady(function () {
                                 // if the main sync is NOT ready, it means it is in the process of being ready and will notify when it is
-                                if (isReady()) {
+                                if (dependentSubDef.notifyReady && isReady()) {
                                     notifyMainSubscription(depSub);
                                 }
                             });
@@ -716,7 +745,7 @@ function syncProvider() {
 
                         // the dependent subscription might have itself some mappings
                         if (dependentSubDef.mappings) {
-                            dependentSubDef.map(dependentSubDef.mappings);
+                            depSub.map(dependentSubDef.mappings);
                         }
                         // this starts the subscription using the params computed by the function provided when the dependent subscription was defined
                         return depSub.setParameters(dependentSubDef.paramsFn(obj, collectParentSubscriptionParams()));

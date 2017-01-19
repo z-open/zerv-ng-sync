@@ -245,6 +245,7 @@ function syncProvider() {
 
         var service = {
             subscribe: subscribe,
+            subscribeObject: subscribeObject,
             resolveSubscription: resolveSubscription,
             getGracePeriod: getGracePeriod,
             getIdValue: getIdValue
@@ -287,6 +288,16 @@ function syncProvider() {
                     deferred.reject('Failed to subscribe to publication ' + publicationName + ' failed');
                 });
             return deferred.promise;
+        }
+
+        function subscribeObject(schema, id) {
+            var options = _.assign({}, schema.options);
+            return subscribe(schema.publication)
+                .setSingle(true)
+                .setDeepMerge(options.deepMerge)
+                .setObjectClass(options.objectClass)
+                .map(options.mappings)
+                .setParameters({ id: id });
         }
 
         /**
@@ -554,10 +565,8 @@ function syncProvider() {
              * @param <String> name of publication to subscribe
              * @param <function> function that returns the params for the inner subscription          
              * @param <function> for each object received for this inner subscription via sync, this map function is executed
-             * @param <object> options object
-             *      this object might have the following properties:
-             *         <boolean> options.notifyReady if set to true, if a dependent subcription is being updated, this will trigger the onReady of the main subscription
-             *         <array> mappings is an array of definition, check map() 
+             * @param <object> options object, check map()
+             * 
              */
             function mapObjectDs(publication, paramsFn, mapFn, options) {
                 options = _.assign({}, options);
@@ -598,10 +607,8 @@ function syncProvider() {
              * @param <String> name of publication to subscribe
              * @param <function> function that returns the params for the inner subscription          
              * @param <function> for each object received for this inner subscription via sync, this map function is executed
-             * @param <object> options object
-             *      this object might have the following properties:
-             *         <boolean> options.notifyReady if set to true, if a dependent subcription is being updated, this will trigger the onReady of the main subscription
-             *         <array> mappings is an array of definition, check map() 
+             * @param <object> options object, check map()
+             * 
              */
             function mapArrayDs(publication, paramsFn, mapFn, options) {
                 options = _.assign({}, options);
@@ -617,7 +624,7 @@ function syncProvider() {
                 return thisSub;
             }
 
-            
+
             /**
              * provide a function that will map some data/lookup to the provided object
              * 
@@ -632,7 +639,42 @@ function syncProvider() {
             }
 
             /** 
-             *  this function allows to create multiple strategies at the same time
+             *  this function allows to add to the subscription multiple mapping strategies at the same time
+             * 
+             *  data mapping strategy
+             * -----------------------
+             *  {
+             *    type:'data',
+             *    mapFn: function(objectReceicedFromSync) {
+             *                    }
+             *  }
+             * 
+             *  array mapping strategy
+             * ------------------------
+             *  {
+             *    type:'array',
+             *    publication: 'myPub',
+             *    mapFn: function(objectReceicedFromSync, objectToMapTo) {
+             *                     objectToMapTo.objectProperty =  objectReceicedFromSync
+             *           }
+             *    paramsFn: function(objectOfTheParentSubscription) {
+             *                      return {
+             *                          paramOfMyPub: objectOfTheParentSubscription.someProperty
+             *                      }
+             *           }
+             *  }
+             * 
+             *  object mapping strategy
+             * -------------------------
+             *  similar to array but type is 'object, subscription only returns one object
+             * 
+             * 
+             *  object and array stragegies might have options:
+             *  options: {
+             *       notifyReady: <boolean>  (if data has changed in the subscription, the main subscription onReady is triggered)
+             *       objectClass: <ClassName>  subscription class used to build the received objects
+             *       mappings : <array> of definitions objects 
+             *  }
              * 
              *  @param <array> array of mapping definitions
              *  @returns this subscription obj
@@ -648,11 +690,14 @@ function syncProvider() {
                         thisSub.mapData(def.mapFn);
                     }
                 });
+                return thisSub;
             }
+
+
             /**
              * map static data or subscription based data to the provided object
              * 
-             * DELETE NOT implemented !!!!!!!!!!!!
+             * DELETE NOT TESTED !!!!!!!!!!!!
              * - if the obj is deleted, we should delete all its object subscriptions
              * - if the inner object is deleted, we should pass deleted true to mapFn, so that the mapping code provided does what it is supposed to do.
              * 
@@ -701,7 +746,6 @@ function syncProvider() {
                     var p = datasources.indexOf(objDs);
                     datasources.slice(p, p + 1);
                 }
-
             }
 
             /**
@@ -713,6 +757,7 @@ function syncProvider() {
              *  @returns all the subscriptions linked to this object
              */
             function createObjectDependentSubscriptions(obj) {
+                logDebug('Sync -> creating object dependent subscription for subscription to ' + publication);
                 var subscriptions = _.map(dependentSubscriptionDefinitions,
                     function (dependentSubDef) {
                         var depSub = subscribe(dependentSubDef.publication)

@@ -54,6 +54,7 @@ function syncProvider() {
 
         var service = {
             subscribe: subscribe,
+            subscribeObject: subscribeObject,
             resolveSubscription: resolveSubscription,
             getGracePeriod: getGracePeriod,
             getIdValue: getIdValue
@@ -96,6 +97,16 @@ function syncProvider() {
                     deferred.reject('Failed to subscribe to publication ' + publicationName + ' failed');
                 });
             return deferred.promise;
+        }
+
+        function subscribeObject(schema, id) {
+            var options = _.assign({}, schema.options);
+            return subscribe(schema.publication)
+                .setSingle(true)
+                .setDeepMerge(options.deepMerge)
+                .setObjectClass(options.objectClass)
+                .map(options.mappings)
+                .setParameters({ id: id });
         }
 
         /**
@@ -422,7 +433,7 @@ function syncProvider() {
                 return thisSub;
             }
 
-            
+
             /**
              * provide a function that will map some data/lookup to the provided object
              * 
@@ -488,7 +499,10 @@ function syncProvider() {
                         thisSub.mapData(def.mapFn);
                     }
                 });
+                return thisSub;
             }
+
+
             /**
              * map static data or subscription based data to the provided object
              * 
@@ -541,7 +555,6 @@ function syncProvider() {
                     var p = datasources.indexOf(objDs);
                     datasources.slice(p, p + 1);
                 }
-
             }
 
             /**
@@ -553,6 +566,7 @@ function syncProvider() {
              *  @returns all the subscriptions linked to this object
              */
             function createObjectDependentSubscriptions(obj) {
+                logDebug('Sync -> creating object dependent subscription for subscription to ' + publication);
                 var subscriptions = _.map(dependentSubscriptionDefinitions,
                     function (dependentSubDef) {
                         var depSub = subscribe(dependentSubDef.publication)

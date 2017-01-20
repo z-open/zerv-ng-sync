@@ -129,7 +129,7 @@ describe('Sync Service: ', function () {
             spec.sds.syncOn();
             expect(spec.sds.isSyncing()).toBe(true);
         });
-        
+
         it('should start when setting params', function () {
             spec.sds.setParameters();
             expect(spec.sds.isSyncing()).toBe(true);
@@ -237,10 +237,12 @@ describe('Sync Service: ', function () {
         it('should add a record to the array when receiving an add operation', function (done) {
             spec.sds.waitForDataReady().then(function (data) {
                 expect(data.length).toBe(2);
-                backend.notifyDataChanges([spec.r3]);
-                expect(data.length).toBe(3);
-                expect(!!_.find(data, { id: spec.r3.id })).toBe(true);
-                done();
+                backend.notifyDataChanges([spec.r3])
+                    .then(function () {
+                        expect(data.length).toBe(3);
+                        expect(!!_.find(data, { id: spec.r3.id })).toBe(true);
+                        done();
+                    });
             });
             $rootScope.$digest();
         });
@@ -249,11 +251,13 @@ describe('Sync Service: ', function () {
             spec.sds.waitForDataReady().then(function (data) {
                 expect(data.length).toBe(2);
                 var rec = _.find(data, { id: spec.r1.id });
-                backend.notifyDataChanges([spec.r1b]);
-                expect(data.length).toBe(2);
-                expect(rec).toBeDefined();
-                expect(rec.description).toBe(spec.r1b.description);
-                done();
+                backend.notifyDataChanges([spec.r1b])
+                    .then(function () {
+                        expect(data.length).toBe(2);
+                        expect(rec).toBeDefined();
+                        expect(rec.description).toBe(spec.r1b.description);
+                        done();
+                    });
             });
             $rootScope.$digest();
         });
@@ -290,10 +294,12 @@ describe('Sync Service: ', function () {
         it('should add a record to the array when receiving an add operation', function (done) {
             spec.sds.waitForDataReady().then(function (data) {
                 expect(data.length).toBe(2);
-                backend.notifyDataChanges([spec.rc3]);
-                expect(data.length).toBe(3);
-                expect(!!findRecord(data, spec.rc3.id)).toBe(true);
-                done();
+                backend.notifyDataChanges([spec.rc3])
+                    .then(function () {
+                        expect(data.length).toBe(3);
+                        expect(!!findRecord(data, spec.rc3.id)).toBe(true);
+                        done();
+                    });
             });
             $rootScope.$digest();
         });
@@ -302,11 +308,13 @@ describe('Sync Service: ', function () {
             spec.sds.waitForDataReady().then(function (data) {
                 expect(data.length).toBe(2);
                 var rec = _.find(data, { id: spec.rc1.id });
-                backend.notifyDataChanges([spec.rc1b]);
-                expect(data.length).toBe(2);
-                expect(rec).toBeDefined();
-                expect(rec.description).toBe(spec.rc1b.description);
-                done();
+                backend.notifyDataChanges([spec.rc1b])
+                    .then(function () {
+                        expect(data.length).toBe(2);
+                        expect(rec).toBeDefined();
+                        expect(rec.description).toBe(spec.rc1b.description);
+                        done();
+                    });
             });
             $rootScope.$digest();
         });
@@ -348,9 +356,11 @@ describe('Sync Service: ', function () {
         it('should update existing record in the array when receiving an update operation', function (done) {
             spec.sds.waitForDataReady().then(function (data) {
                 expect(data.description).toBe(spec.r1.description);
-                backend.notifyDataChanges([spec.r1b]);
-                expect(data.description).toBe(spec.r1b.description);
-                done();
+                backend.notifyDataChanges([spec.r1b])
+                    .then(function () {
+                        expect(data.description).toBe(spec.r1b.description);
+                        done();
+                    });
             });
             $rootScope.$digest();
         });
@@ -387,11 +397,13 @@ describe('Sync Service: ', function () {
             spec.sds.waitForDataReady().then(function (data) {
                 var object = _.find(data, { id: spec.p1.id });
                 expect(data.length).toBe(2);
-                backend.notifyDataChanges([spec.p1b]);
-                expect(data.length).toBe(2);
-                expect(object).toBeDefined();
-                expect(object.getFullname()).toBe(spec.p1b.getFullname());
-                done();
+                backend.notifyDataChanges([spec.p1b])
+                    .then(function () {
+                        expect(data.length).toBe(2);
+                        expect(object).toBeDefined();
+                        expect(object.getFullname()).toBe(spec.p1b.getFullname());
+                        done();
+                    });
             });
             $rootScope.$digest();
         });
@@ -417,9 +429,11 @@ describe('Sync Service: ', function () {
         it('should update existing object when receiving an update operation', function (done) {
             spec.sds.waitForDataReady().then(function (data) {
                 expect(data.getFullname()).toBe(spec.p1.getFullname());
-                backend.notifyDataChanges([spec.p1b]);
-                expect(data.getFullname()).toBe(spec.p1b.getFullname());
-                done();
+                backend.notifyDataChanges([spec.p1b])
+                    .then(function () {
+                        expect(data.getFullname()).toBe(spec.p1b.getFullname());
+                        done();
+                    });
             });
             $rootScope.$digest();
         });
@@ -475,9 +489,12 @@ describe('Sync Service: ', function () {
 
             it('should get called on receiving updated data', function (done) {
                 spec.sds.waitForDataReady().then(function () {
-                    backend.notifyDataChanges([spec.r1b]);
-                    expect(spec.syncCallbacks.onUpdate).toHaveBeenCalled();
-                    done();
+                    backend.notifyDataChanges([spec.r1b])
+                        .then(function () {
+                            expect(spec.syncCallbacks.onUpdate).toHaveBeenCalled();
+                            done();
+                        });
+
                 })
                 $rootScope.$digest();
             });
@@ -781,7 +798,7 @@ describe('Sync Service: ', function () {
                 db[spec.$sync.getIdValue(record)] = record;
             })
             if (isSubscribedOnBackend) {
-                self.onPublicationNotficationCallback({
+                return self.onPublicationNotficationCallback({
                     name: 'myPub',
                     subscriptionId: 'sub#1',
                     records: data,

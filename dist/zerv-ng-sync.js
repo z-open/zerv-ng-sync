@@ -326,16 +326,22 @@ function syncProvider() {
 
         // every sync notification comes thru the same event then it is dispatches to the targeted subscriptions.
         function listenToSyncNotification() {
-            $socketio.on('SYNC_NOW', function (subNotification, fn) {
-                logInfo('Syncing with subscription [name:' + subNotification.name + ', id:' + subNotification.subscriptionId + ' , params:' + JSON.stringify(subNotification.params) + ']. Records:' + subNotification.records.length + '[' + (subNotification.diff ? 'Diff' : 'All') + ']');
-                var listeners = publicationListeners[subNotification.name];
-                if (listeners) {
-                    for (var listener in listeners) {
-                        listeners[listener](subNotification);
+            $socketio.on(
+                'SYNC_NOW',
+                function (subNotification, fn) {
+                    logInfo('Syncing with subscription [name:' + subNotification.name + ', id:' + subNotification.subscriptionId + ' , params:' + JSON.stringify(subNotification.params) + ']. Records:' + subNotification.records.length + '[' + (subNotification.diff ? 'Diff' : 'All') + ']');
+                    var listeners = publicationListeners[subNotification.name];
+                    var processed = [];
+                    if (listeners) {
+                        for (var listener in listeners) {
+                            processed.push(listeners[listener](subNotification));
+                        }
                     }
-                }
-                fn('SYNCED'); // let know the backend the client was able to sync.
-            });
+                    fn('SYNCED'); // let know the backend the client was able to sync.
+
+                    // returns a promise to know when the subscriptions have completed syncing    
+                    return $q.all(processed);
+                });
         };
 
 
@@ -459,10 +465,12 @@ function syncProvider() {
                 var allSubscriptions = _.flatten(_.map(datasources, function (datasource) {
                     return datasource.subscriptions;
                 }));
+                var deps = [];
                 _.forEach(allSubscriptions, function (sub) {
+                    deps.push(sub.getPublication());
                     sub.destroy();
                 });
-                logDebug('Destroy subscription to ' + publication + (allSubscriptions.length ? ' and its dependents [' + allSubscriptions.length + ']' : ''));
+                logDebug('Destroy subscription to ' + publication + (deps.length ? ' and its dependents ' + deps : ''));
             }
 
             /** this will be called when data is available 
@@ -1030,7 +1038,10 @@ function syncProvider() {
             function readyForListening() {
                 if (!publicationListenerOff) {
                     listenForReconnectionToResync();
-                    listenToPublication();
+                    publicationListenerOff = addPublicationListener(
+                        publication,
+                        processPublicationData
+                    );
                 }
             }
 
@@ -1047,7 +1058,6 @@ function syncProvider() {
                 }
                 innerScope = newScope;
                 destroyOff = innerScope.$on('$destroy', function () {
-                    console.warn('Subscription DESTROYED')
                     destroy();
                 });
 
@@ -1086,28 +1096,33 @@ function syncProvider() {
                 }
             }
 
-            function listenToPublication() {
+            /**
+             * each subscription listens to any data coming from the sync socket channel
+             * If any is related to it, it will process to update the internal cache
+             *
+             */
+            function processPublicationData(batch) {
                 // cannot only listen to subscriptionId yet...because the registration might have answer provided its id yet...but started broadcasting changes...@TODO can be improved...
-                publicationListenerOff = addPublicationListener(publication, function (batch) {
-                    if (subscriptionId === batch.subscriptionId || (!subscriptionId && checkDataSetParamsIfMatchingBatchParams(batch.params))) {
-                        if (!batch.diff) {
-                            // Clear the cache to rebuild it if all data was received.
-                            recordStates = {};
-                            if (!isSingleObjectCache) {
-                                cache.length = 0;
+                if (subscriptionId === batch.subscriptionId || (!subscriptionId && checkDataSetParamsIfMatchingBatchParams(batch.params))) {
+                    if (!batch.diff) {
+                        // Clear the cache to rebuild it if all data was received.
+                        recordStates = {};
+                        if (!isSingleObjectCache) {
+                            cache.length = 0;
+                        }
+                    }
+                    return applyChanges(batch.records).then(
+                        function () {
+                            if (!isInitialPushCompleted) {
+                                isInitialPushCompleted = true;
+                                deferredInitialization.resolve(getData());
                             }
                         }
-                        applyChanges(batch.records).then(
-                            function () {
-                                if (!isInitialPushCompleted) {
-                                    isInitialPushCompleted = true;
-                                    deferredInitialization.resolve(getData());
-                                }
-                            }
-                        );
+                    );
 
-                    }
-                });
+                }
+                // unit test will know when the apply is completed when the promise resolve;
+                return $q.resolve();
             }
 
             /**
@@ -1132,11 +1147,12 @@ function syncProvider() {
                 return matching;
 
             }
+
             /** 
              * Force the provided records into the cache
              * And activate the call backs (ready, add,update,remove)
              * 
-             * The changes might be overwritten by next sync/publication. To prevent this, sync off.
+             * The changes might be overwritten by next sync/publication. To prevent this, sync off should be called first.
              * 
              * @param <array> records is an array of data record (json obj) 
              * @returns <promise> that resolves when the changes are applied to the cache

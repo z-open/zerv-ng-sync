@@ -279,7 +279,8 @@ function syncProvider() {
                     deps.push(sub.getPublication());
                     sub.destroy();
                 });
-                logDebug('Destroy subscription to ' + publication + (deps.length ? ' and its dependents ' + deps : ''));
+                deps = _.uniq(deps);
+                logDebug('Destroy subscription to ' + publication + (deps.length ? ' and its ' + allSubscriptions.length + ' dependent(s) based on [' + deps + ']' : ''));
             }
 
             /** this will be called when data is available 

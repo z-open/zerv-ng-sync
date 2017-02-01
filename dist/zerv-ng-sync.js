@@ -734,7 +734,9 @@ function syncProvider() {
             }
 
             /** 
-             * map data to the object 
+             * map data to the object,
+             * 
+             * might also be used to map this object to the parent subscription object
              * 
              * if the mapping fails, the new object version will not be merged
              * 
@@ -744,13 +746,12 @@ function syncProvider() {
 
              * 
              */
-            function mapDataToOject(obj) {
+            function mapDataToOject(obj, force) {
                 if (mapDataFn) {
-                    var result = mapDataFn(obj);
+                    var result = mapDataFn(obj, force);
                     if (result && result.then) {
                         return result;
                     }
-                    return $q.resolve();
                 }
                 return $q.resolve();
             }
@@ -769,6 +770,7 @@ function syncProvider() {
                 var objectSubscriptions = findObjectDependentSubscriptions(obj);
                 if (!objectSubscriptions) {
                     objectSubscriptions = createObjectDependentSubscriptions(obj);
+                    // return $q.resolve();
                 }
 
                 return $q.all(_.map(objectSubscriptions,
@@ -829,7 +831,7 @@ function syncProvider() {
                         var depSub = subscribe(dependentSubDef.publication)
                             .setObjectClass(dependentSubDef.objectClass)
                             .setSingle(dependentSubDef.single)
-                            .mapData(function(dependentSubObject) {
+                            .mapData(function(dependentSubObject, force) {
                                 // map will be triggered in the following conditions:
                                 // - when the first time, the object is received, this dependent sync will be created and call map when it receives its data
                                 // - the next time the dependent syncs
@@ -837,12 +839,13 @@ function syncProvider() {
                                 // if the main sync is ready, it means 
                                 // - only the dependent received update 
                                 // if th main sync is NOT ready, the mapping will happen anyway when running mapSubscriptionDataToObject
-                                if (isReady()) {
-                                    var objectToBeMapped = getRecordState(obj);
-                                    if (objectToBeMapped) {
-                                        depSub.mapFn(dependentSubObject, objectToBeMapped, dependentSubObject.removed);
-                                    }
+                                //  if (isReady() || force) {
+                                var objectToBeMapped = getRecordState(obj);
+                                if (objectToBeMapped) {
+                                    logDebug('Sync -> mapping data of dependent sub [' + dependentSubDef.publication + '] to record of sub [' + publication + ']');
+                                    depSub.mapFn(dependentSubObject, objectToBeMapped, dependentSubObject.removed);
                                 }
+                                // }
                             })
                             .setOnReady(function() {
                                 // if the main sync is NOT ready, it means it is in the process of being ready and will notify when it is
@@ -1352,10 +1355,10 @@ function syncProvider() {
             function removeRecord(record, force) {
                 var previous = getRecordState(record);
 
-                if (previous) {
-                    // no longer needs to subscriptions;
-                    removeObjectDependentSubscriptions(record);
-                }
+                // if (previous) {
+                //     // no longer needs to subscriptions;
+                //     removeObjectDependentSubscriptions(record);
+                // }
 
                 if (force || !previous || getRevision(record) > getRevision(previous)) {
                     logDebug('Sync -> Removed #' + JSON.stringify(record.id) + (force ? ' directly' : ' via sync') + ' for subscription to ' + publication);
@@ -1365,8 +1368,14 @@ function syncProvider() {
                     // if there is no previous record we do not need to removed any thing from our storage.     
                     if (previous) {
                         updateDataStorage(record);
-                        syncListener.notify('remove', record); // TODO: might not be right??? it is not an obj... but json data...
+                        // syncListener.notify('remove', record); // TODO: might not be right??? it is not an obj... but json data...
+                        // dispose(record);
+                        removeObjectDependentSubscriptions(record);
+                        syncListener.notify('remove', record);
                         dispose(record);
+                        return mapDataToOject(previous, true).then(function() {
+
+                        });
                     }
                 }
             }

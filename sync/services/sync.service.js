@@ -45,7 +45,7 @@ function syncProvider() {
     this.$get = function sync($rootScope, $q, $socketio, $syncGarbageCollector, $syncMerge) {
 
         var publicationListeners = {},
-            publicationListenerCount = 0;
+            lastPublicationListenerUid = 0;
         var GRACE_PERIOD_IN_SECONDS = 8;
         var SYNC_VERSION = '1.2';
 
@@ -57,7 +57,8 @@ function syncProvider() {
             subscribeObject: subscribeObject,
             resolveSubscription: resolveSubscription,
             getGracePeriod: getGracePeriod,
-            getIdValue: getIdValue
+            getIdValue: getIdValue,
+            getCurrentSubscriptionCount: getCurrentSubscriptionCount
         };
 
         return service;
@@ -156,19 +157,19 @@ function syncProvider() {
 
         // this allows a dataset to listen to any SYNC_NOW event..and if the notification is about its data.
         function addPublicationListener(streamName, callback) {
-            var uid = publicationListenerCount++;
+            var uid = lastPublicationListenerUid++;
             var listeners = publicationListeners[streamName];
             if (!listeners) {
                 publicationListeners[streamName] = listeners = {};
             }
             listeners[uid] = callback;
             totalSub++;
-            console.log('Added new one. remaining active publication: ' + totalSub);
+            //    console.log('Added new one. remaining active publication: ' + totalSub);
 
 
             return function() {
                 totalSub--;
-                console.log('Release one. remaining active publication: ' + totalSub);
+                //    console.log('Release one. remaining active publication: ' + totalSub);
                 delete listeners[uid];
             }
         }
@@ -260,6 +261,7 @@ function syncProvider() {
             this.mapArrayDs = mapArrayDs;
 
             this.$notifyUpdateWithinDependentSubscription = $notifyUpdateWithinDependentSubscription;
+
 
             setSingle(false);
 
@@ -647,13 +649,13 @@ function syncProvider() {
                                 // if the main sync is ready, it means 
                                 // - only the dependent received update 
                                 // if th main sync is NOT ready, the mapping will happen anyway when running mapSubscriptionDataToObject
-                                //  if (isReady() || force) {
-                                var objectToBeMapped = getRecordState(obj);
-                                if (objectToBeMapped) {
-                                    logDebug('Sync -> mapping data of dependent sub [' + dependentSubDef.publication + '] to record of sub [' + publication + ']');
-                                    depSub.mapFn(dependentSubObject, objectToBeMapped, dependentSubObject.removed);
+                                if (isReady() || force) {
+                                    var objectToBeMapped = getRecordState(obj);
+                                    if (objectToBeMapped) {
+                                        logDebug('Sync -> mapping data of dependent sub [' + dependentSubDef.publication + '] to record of sub [' + publication + ']');
+                                        depSub.mapFn(dependentSubObject, objectToBeMapped, dependentSubObject.removed);
+                                    }
                                 }
-                                // }
                             })
                             .setOnReady(function() {
                                 // if the main sync is NOT ready, it means it is in the process of being ready and will notify when it is
@@ -694,7 +696,7 @@ function syncProvider() {
                 while (mainSub.parentSubscription) {
                     mainSub = mainSub.parentSubscription;
                 }
-                logDebug('Sync -> Notifying main subscription ' + mainSub.getPublication() + ' that dependent subscription ' + dependentSubscription.getPublication() + ' was updated.');
+                logDebug('Sync -> Notifying main subscription ' + mainSub.getPublication() + ' that its dependent subscription ' + dependentSubscription.getPublication() + ' was updated.');
                 mainSub.$notifyUpdateWithinDependentSubscription(mainObjectId);
             }
 
@@ -1163,11 +1165,6 @@ function syncProvider() {
             function removeRecord(record, force) {
                 var previous = getRecordState(record);
 
-                // if (previous) {
-                //     // no longer needs to subscriptions;
-                //     removeObjectDependentSubscriptions(record);
-                // }
-
                 if (force || !previous || getRevision(record) > getRevision(previous)) {
                     logDebug('Sync -> Removed #' + JSON.stringify(record.id) + (force ? ' directly' : ' via sync') + ' for subscription to ' + publication);
                     // We could have for the same record consecutively fetching in this order:
@@ -1176,14 +1173,10 @@ function syncProvider() {
                     // if there is no previous record we do not need to removed any thing from our storage.     
                     if (previous) {
                         updateDataStorage(record);
-                        // syncListener.notify('remove', record); // TODO: might not be right??? it is not an obj... but json data...
-                        // dispose(record);
                         removeObjectDependentSubscriptions(record);
                         syncListener.notify('remove', record);
                         dispose(record);
-                        return mapDataToOject(previous, true).then(function() {
-
-                        });
+                        return mapDataToOject(previous, true).then(function() {});
                     }
                 }
             }
@@ -1313,7 +1306,10 @@ function syncProvider() {
         if (debug >= 0) {
             console.error('SYNC(error): ' + msg, e);
         }
+    }
 
+    function getCurrentSubscriptionCount() {
+        return totalSub;
     }
 
 

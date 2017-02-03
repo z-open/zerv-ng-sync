@@ -1,12 +1,12 @@
 {
-  "name": "angular-socketio",
+  "name": "zerv-ng-sync",
   "main": "dist/sync.module.js",
   "author": "",
   "homepage": "",
   "repository": {
     "url": ""
   },
-  "version": "0.1.0",
+  "version": "0.1.1",
   "devDependencies": {
     "body-parser": "~1.13.3",
     "express": "~4.10.6",

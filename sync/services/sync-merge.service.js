@@ -6,11 +6,19 @@ angular
 function syncMerge() {
 
     return {
-        update: updateObject,
+        update: update,
         clearObject: clearObject
     }
 
-
+    function update(destination, source, isStrictMode, deepMerge) {
+        if (deepMerge || _.isNil(deepMerge)) {
+            updateObject(destination, source, isStrictMode)
+        } else {
+            clearObject(destination);
+            _.assign(destination, source);
+        }
+    }
+    
     /**
      * This function updates an object with the content of another.
      * The inner objects and objects in array will also be updated.

@@ -1,3 +1,194 @@
+(function() {
+"use strict";
+
+angular
+    .module('sync', ['socketio-auth']);
+}());
+
+(function() {
+"use strict";
+
+angular
+    .module('sync')
+    .factory('$syncGarbageCollector', syncGarbageCollector);
+
+/**
+ * safely remove deleted record/object from memory after the sync process disposed them.
+ * 
+ * TODO: Seconds should reflect the max time  that sync cache is valid (network loss would force a resync), which should match maxDisconnectionTimeBeforeDroppingSubscription on the server side.
+ * 
+ * Note:
+ * removed record should be deleted from the sync internal cache after a while so that they do not stay in the memory. They cannot be removed too early as an older version/stamp of the record could be received after its removal...which would re-add to cache...due asynchronous processing...
+ */
+function syncGarbageCollector() {
+    var items = [];
+    var seconds = 2;
+    var scheduled = false;
+
+    var service = {
+        setSeconds: setSeconds,
+        getSeconds: getSeconds,
+        dispose: dispose,
+        schedule: schedule,
+        run: run,
+        getItemCount: getItemCount
+    };
+
+    return service;
+
+    //////////
+
+    function setSeconds(value) {
+        seconds = value;
+    }
+
+    function getSeconds() {
+        return seconds;
+    }
+
+    function getItemCount() {
+        return items.length;
+    }
+
+    function dispose(collect) {
+        items.push({
+            timestamp: Date.now(),
+            collect: collect
+        });
+        if (!scheduled) {
+            service.schedule();
+        }
+    }
+
+    function schedule() {
+        if (!seconds) {
+            service.run();
+            return;
+        }
+        scheduled = true;
+        setTimeout(function () {
+            service.run();
+            if (items.length > 0) {
+                schedule();
+            } else {
+                scheduled = false;
+            }
+        }, seconds * 1000);
+    }
+
+    function run() {
+        var timeout = Date.now() - seconds * 1000;
+        while (items.length > 0 && items[0].timestamp <= timeout) {
+            items.shift().collect();
+        }
+    }
+}
+}());
+
+(function() {
+"use strict";
+
+angular
+    .module('sync')
+    .factory('$syncMerge', syncMerge);
+
+function syncMerge() {
+
+    return {
+        update: update,
+        clearObject: clearObject
+    }
+
+    function update(destination, source, isStrictMode, deepMerge) {
+        if (deepMerge || _.isNil(deepMerge)) {
+            updateObject(destination, source, isStrictMode)
+        } else {
+            clearObject(destination);
+            _.assign(destination, source);
+        }
+    }
+    
+    /**
+     * This function updates an object with the content of another.
+     * The inner objects and objects in array will also be updated.
+     * References to the original objects are maintained in the destination object so Only content is updated.
+     *
+     * The properties in the source object that are not in the destination will be removed from the destination object.
+     *
+     * 
+     *
+     *@param <object> destination  object to update
+     *@param <object> source  object to update from
+     *@param <boolean> isStrictMode default false, if true would generate an error if inner objects in array do not have id field
+     */
+    function updateObject(destination, source, isStrictMode) {
+        if (!destination) {
+            return source;// _.assign({}, source);;
+        }
+        // create new object containing only the properties of source merge with destination
+        var object = {};
+        for (var property in source) {
+            if (_.isArray(source[property])) {
+                object[property] = updateArray(destination[property], source[property], isStrictMode);
+            } else if (_.isFunction(source[property])) {
+                object[property] = source[property];
+            } else if (_.isObject(source[property]) && !_.isDate(source[property]) ) {
+                object[property] = updateObject(destination[property], source[property], isStrictMode);
+            } else {
+                object[property] = source[property];
+            }
+        }
+
+        clearObject(destination);
+        _.assign(destination, object);
+
+        return destination;
+    }
+
+    function updateArray(destination, source, isStrictMode) {
+        if (!destination) {
+            return source;
+        }
+        var array = [];
+        source.forEach(function (item) {
+            // does not try to maintain object references in arrays
+            // super loose mode.
+            if (isStrictMode==='NONE') {
+                array.push(item);
+            } else {
+                // object in array must have an id otherwise we can't maintain the instance reference
+                if (!_.isArray(item) && _.isObject(item)) {
+                    // let try to find the instance
+                    if (angular.isDefined(item.id)) {
+                        array.push(updateObject(_.find(destination, function (obj) {
+                            return obj.id.toString() === item.id.toString();
+                        }), item, isStrictMode));
+                    } else {
+                        if (isStrictMode) {
+                            throw new Error('objects in array must have an id otherwise we can\'t maintain the instance reference. ' + JSON.stringify(item));
+                        }
+                        array.push(item);
+                    }
+                } else {
+                    array.push(item);
+                }
+            }
+        });
+
+        destination.length = 0;
+        Array.prototype.push.apply(destination, array);
+        //angular.copy(destination, array);
+        return destination;
+    }
+
+    function clearObject(object) {
+        Object.keys(object).forEach(function (key) { delete object[key]; });
+    }
+};
+}());
+
+(function() {
+"use strict";
 
 /**
  * 
@@ -42,7 +233,7 @@ function syncProvider() {
         defaultDeepMerge = value;
     };
 
-    this.$get = function sync($rootScope, $q, $socketio, $syncGarbageCollector, $syncMerge) {
+    this.$get = ["$rootScope", "$q", "$socketio", "$syncGarbageCollector", "$syncMerge", function sync($rootScope, $q, $socketio, $syncGarbageCollector, $syncMerge) {
 
         var publicationListeners = {},
             publicationListenerCount = 0;
@@ -1198,7 +1389,7 @@ function syncProvider() {
                 }
             }
         }
-    };
+    }];
     function getIdValue(id) {
         if (!_.isObject(id)) {
             return id;
@@ -1227,4 +1418,4 @@ function syncProvider() {
 
 
 };
-
+}());

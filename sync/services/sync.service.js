@@ -649,13 +649,19 @@ function syncProvider() {
                                 // if the main sync is ready, it means 
                                 // - only the dependent received update 
                                 // if th main sync is NOT ready, the mapping will happen anyway when running mapSubscriptionDataToObject
-                                if (isReady() || force) {
-                                    var objectToBeMapped = getRecordState(obj);
-                                    if (objectToBeMapped) {
-                                        logDebug('Sync -> mapping data of dependent sub [' + dependentSubDef.publication + '] to record of sub [' + publication + ']');
-                                        depSub.mapFn(dependentSubObject, objectToBeMapped, dependentSubObject.removed);
-                                    }
+
+                                // -------------------------------------------------
+                                // if (isReady() || force) { this does not work!!!  with this, it seems that mapping is not executed sometimes.
+                                // 
+                                // To dig in, mostlikely when the dependent subscription is created, mapFn will be called twice.
+                                // Try to prevent this... 
+                                // -------------------------------------------------
+                                var objectToBeMapped = getRecordState(obj);
+                                if (objectToBeMapped) {
+                                    logDebug('Sync -> mapping data of dependent sub [' + dependentSubDef.publication + '] to record of sub [' + publication + ']');
+                                    depSub.mapFn(dependentSubObject, objectToBeMapped, dependentSubObject.removed);
                                 }
+                                //}
                             })
                             .setOnReady(function() {
                                 // if the main sync is NOT ready, it means it is in the process of being ready and will notify when it is

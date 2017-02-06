@@ -26,14 +26,54 @@ Sync does not work if objects do not have BOTH id and revision field!!!!
 
 ### Example: Syncing from a service
 
+### Example: syncing with simple mapping
+
+Prerequisite:
+the publication and notification must be implemented in the zerv-based backend. 
+
+Ex:
+
+    sds = $sync.subscribe('people.sync')
+                .setObjectClass(Person)
+                .mapData(
+                    function (person) {
+                         person.city = _.find(cityList,{id:person.cityId});
+                    })
+                .waitForSubscriptionReady();
+         
+
+In the above example, each time a person is synced (updated or added), the city object will be looked up in an array (using lodash).
+
+
+Ex:
+
+    sds = $sync.subscribe('people.sync')
+                .setObjectClass(Person)
+                .mapData(
+                    function (person) {
+                         person.city = _.find(cityList,{id:person.cityId});
+
+                         return myRestService.fetchFriends(person.id).then(                             
+                             function(friends) {
+                                person.setFriends(friends);
+                             }
+                         ) 
+                    })
+                .waitForSubscriptionReady();
+         
+
+In the above example, each time a person is synced (updated or added), myRestService.fetchFriends will also be called. There is no sync on friends data since it is not a subscription.
+if the rest call fails, the map and sync will fail. 
+
+
 ### Example: Multi syncing
 
 Prerequisite:
 the publication and notification must be implemented in the zerv-based backend. 
 
 Ex:
-'''
-sds = $sync.subscribe('people.sync')
+
+    sds = $sync.subscribe('people.sync')
                 .setObjectClass(Person)
                 .mapArrayDs('people.friends.sync',
                    function (person) {
@@ -47,15 +87,14 @@ sds = $sync.subscribe('people.sync')
                         }
                     })
                 .waitForSubscriptionReady();
-'''          
+         
 
 if you render sds.getData() in your angular app, any change to a person friend (added/deleted/updated) or a person in people will be displayed.
 
 
-
 Ex:
-'''
-sds = $sync.subscribe('people.sync')
+
+    sds = $sync.subscribe('people.sync')
                .setObjectClass(Person)
                 .mapObjectDs('people.address.sync',
                   function (person) {
@@ -66,12 +105,13 @@ sds = $sync.subscribe('people.sync')
                         person.address = address;
                     })
                 .waitForSubscriptionReady();
-'''
+
 if you render sds.getData() in your angular app, any change to a person address or a person in people will be displayed.
+
 
 ### Example: Multi syncing with schema
 
-sds = $sync.subscribe('people.sync')
+    sds = $sync.subscribe('people.sync')
            .setSchema(personWithAddressAndFriendsAndEventsWithAttendsSchemaDefinition)
            .setParams(family:'myFamily');
 

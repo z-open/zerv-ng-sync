@@ -55,8 +55,11 @@ The waitForDataReady starts the syncing. The promise resolves when the initial d
 
 ### Example: Syncing from a view state only or limited scope
 
+TBD: using attach(scope)
 
 ### Example: Syncing from a service
+
+TBD: No scope, but be aware to release listeners (onUpdate, onReady, onDelete, onAdd) if defined in a state or component.
 
     
 ### Example: syncing with simple mapping

@@ -219,7 +219,8 @@ function syncProvider() {
     var totalSub = 0;
 
     var debug;
-    var defaultDeepMerge = true;
+    var defaultDeepMerge = true,
+        latencyInMilliSecs = 0;
 
     this.setDebug = function (value) {
         debug = value;
@@ -232,6 +233,15 @@ function syncProvider() {
      */
     this.setDeepMerge = function (value) {
         defaultDeepMerge = value;
+    };
+    /**
+     *  add a delay before processing publication data to simulate network latency
+     * 
+     * @param <number> milliseconds
+     * 
+     */
+    this.setLatency = function (seconds) {
+        latencyInMilliSecs = seconds;
     };
 
     this.$get = ["$rootScope", "$q", "$socketio", "$syncGarbageCollector", "$syncMerge", function sync($rootScope, $q, $socketio, $syncGarbageCollector, $syncMerge) {
@@ -595,7 +605,8 @@ function syncProvider() {
                     single: true,
                     objectClass: options.objectClass,
                     mappings: options.mappings,
-                    notifyReady: options.notifyReady
+                    notifyReady: options.notifyReady,
+                    deepMerge: options.deepMerge // legacy
                 });
                 return thisSub;
             }
@@ -637,7 +648,9 @@ function syncProvider() {
                     single: false,
                     objectClass: options.objectClass,
                     mappings: options.mappings,
-                    notifyReady: options.notifyReady
+                    notifyReady: options.notifyReady,
+                    deepMerge: options.deepMerge // legacy
+
                 });
                 return thisSub;
             }
@@ -745,7 +758,7 @@ function syncProvider() {
              * @param obj
              * @param <String> action (add or update)
              * @returns <Promise> the promise resolves when the mapping as completed
-
+    
              * 
              */
             function mapDataToOject(obj, force) {
@@ -775,8 +788,13 @@ function syncProvider() {
                     // return $q.resolve();
                 }
 
+
                 return $q.all(_.map(objectSubscriptions,
                     function (ds) {
+                        // !!!!!!!!!!!!!!!!!
+                        // !!!!! must set the parameters again as the update might have caused a different subscription.
+                        // !!!!!!!!!!!!!!!!!
+
                         // if the ds is already ready, then the object is mapped with the datasource data
                         return ds.waitForDataReady().then(function (data) {
                             if (ds.isSingle()) {
@@ -833,6 +851,7 @@ function syncProvider() {
                         var depSub = subscribe(dependentSubDef.publication)
                             .setObjectClass(dependentSubDef.objectClass)
                             .setSingle(dependentSubDef.single)
+                            .setDeepMerge(dependentSubDef.deepMerge)
                             .mapData(function (dependentSubObject, force) {
                                 // map will be triggered in the following conditions:
                                 // - when the first time, the object is received, this dependent sync will be created and call map when it receives its data
@@ -1092,7 +1111,19 @@ function syncProvider() {
                     listenForReconnectionToResync();
                     publicationListenerOff = addPublicationListener(
                         publication,
-                        processPublicationData
+                        function (batch) {
+                            // Create a delay before processing publication data to simulate network latency
+                            if (latencyInMilliSecs) {
+                                logDebug('Sync -> Processing delayed for ' + latencyInMilliSecs + ' ms.'); // 
+                                setTimeout(function () {
+                                    processPublicationData(batch);
+                                }, latencyInMilliSecs);
+                            } else {
+                                return processPublicationData(batch);
+                            }
+
+                        }
+
                     );
                 }
             }

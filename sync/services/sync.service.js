@@ -922,8 +922,9 @@ function syncProvider() {
                         function (batch) {
                             // Create a delay before processing publication data to simulate network latency
                             if (latencyInMilliSecs) {
-                                logDebug('Sync -> Processing delayed for ' + latencyInMilliSecs + ' ms.'); // 
+                                logInfo('Sync -> Processing delayed for ' + latencyInMilliSecs + ' ms.'); // 
                                 setTimeout(function () {
+                                    logInfo('Sync -> Processing ' + publication + ' now.');
                                     processPublicationData(batch);
                                 }, latencyInMilliSecs);
                             } else {

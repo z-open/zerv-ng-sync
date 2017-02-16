@@ -422,7 +422,7 @@ describe('Sync Service: ', function () {
                 backend.notifyDataChanges([_.assign({}, object, { revision: 2, lastname: 'should never get thru' })])
                     .then(function () {
                         expect(object.lastname).toBe(spec.p1b.lastname);
-                        expect(object.timestamp.clientStamp).toBe('XXXX');
+                        expect(object.timestamp.clientStamp).toBe(true); // true means the object was updated locally
                         expect(object.revision).toBe(2);
                         done();
                     });
@@ -472,7 +472,7 @@ describe('Sync Service: ', function () {
                 backend.notifyDataChanges([_.assign({}, data, { revision: 2, lastname: 'should never get thru' })])
                     .then(function () {
                         expect(data.lastname).toBe(spec.p1b.lastname);
-                        expect(data.timestamp.clientStamp).toBe('XXXX');
+                        expect(data.timestamp.clientStamp).toBe(true); // true means the object was updated locally
                         expect(data.revision).toBe(2);
                         done();
                     });

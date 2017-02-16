@@ -1167,6 +1167,7 @@ function syncProvider() {
                     logDebug('Sync -> Updated own record #' + JSON.stringify(record.id) + ' for subscription to ' + publication); // JSON.stringify(record));
                     obj.revision = record.revision;
                     obj.timestamp = record.timestamp;
+                    obj.timestamp.clientStamp = true; // this allows new revision that don't change the timestamp (ex server update not initiated on client to be merged. otherwise client would believe it made the change)
                     syncListener.notify('update', obj);
                     return $q.resolve(obj);
                 }
@@ -1225,9 +1226,13 @@ function syncProvider() {
             // maybe we should have 
             // an object property 
             // timestamp { revision:, clientStamp:...} or $$sync
-            function isLocalChange(destination, source) {
-                return (source.timestamp && destination.timestamp && source.timestamp.clientStamp &&
-                    source.timestamp.clientStamp === destination.timestamp.clientStamp);
+            function isLocalChange(previous, update) {
+                return (update.timestamp
+                    && previous.timestamp
+                    && update.timestamp.clientStamp
+                    && update.timestamp.clientStamp === previous.timestamp.clientStamp
+                    && getRevision(update) === getRevision(previous) + 1
+                );
             }
 
             // clear timestamp, since this record was not originated locally

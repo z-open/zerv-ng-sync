@@ -18,14 +18,47 @@ Sync does not work if objects do not have BOTH id and revision field!!!!
 
 ### Example: Syncing an array
 
+    sds = $sync.subscribe('people.sync').syncOn();
+    data = sds.getData();
+           
+    $scope.$watchCollection(data,function() {
+        console.log(data);
+    }) 
+
+The data contains an array whose items remains in sync.
+SyncOn starts the syncing.
+
+
 ### Example: Syncing a record
+
+    sds = $sync.subscribe('person.sync')
+          .setSingle(true)
+          .setParameters({id:20})
+    data = sds.getData();
+            
+The data contains an object that remains in sync.
+SetParameters defines the parameters that the publication expects.
+setParameters starts the syncing so syncOn is not needed.
 
 ### Example: Syncing an object
 
+    promise = $sync.subscribe('people.sync')
+                .setObjectClass(Person)
+                .waitForDataReady().then(function(data){
+                    console.log('subscription is now active and data is ready');
+                });
+     
+
+
+The setObjectClass defines the class of each object in the array.
+The waitForDataReady starts the syncing. The promise resolves when the initial data is received.
+
 ### Example: Syncing from a view state only or limited scope
+
 
 ### Example: Syncing from a service
 
+    
 ### Example: syncing with simple mapping
 
 Prerequisite:

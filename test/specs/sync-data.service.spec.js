@@ -407,6 +407,28 @@ describe('Sync Service: ', function () {
             });
             $rootScope.$digest();
         });
+
+        it('should only update object revision when object synced was originated locally', function (done) {
+            spec.sds.waitForDataReady().then(function (data) {
+                var object = _.find(data, { id: spec.p1.id });
+                expect(data.length).toBe(2);
+
+                // modify local version of an object in the array to pretend something was inputed
+                object.timestamp = { clientStamp: 'XXXX' };
+                object.lastname = spec.p1b.lastname;
+
+                expect(object.revision).toBe(1);
+
+                backend.notifyDataChanges([_.assign({}, object, { revision: 2, lastname: 'should never get thru' })])
+                    .then(function () {
+                        expect(object.lastname).toBe(spec.p1b.lastname);
+                        expect(object.timestamp.clientStamp).toBe(true); // true means the object was updated locally
+                        expect(object.revision).toBe(2);
+                        done();
+                    });
+            });
+            $rootScope.$digest();
+        });
     });
 
     describe('Single Object sync', function () {
@@ -432,6 +454,26 @@ describe('Sync Service: ', function () {
                 backend.notifyDataChanges([spec.p1b])
                     .then(function () {
                         expect(data.getFullname()).toBe(spec.p1b.getFullname());
+                        done();
+                    });
+            });
+            $rootScope.$digest();
+        });
+
+        it('should only update object revision when object synced was originated locally', function (done) {
+            spec.sds.waitForDataReady().then(function (data) {
+                expect(data.getFullname()).toBe(spec.p1.getFullname());
+                // modify local version to pretend something was inputed
+                data.timestamp = { clientStamp: 'XXXX' };
+                data.lastname = spec.p1b.lastname;
+
+                expect(data.revision).toBe(1);
+
+                backend.notifyDataChanges([_.assign({}, data, { revision: 2, lastname: 'should never get thru' })])
+                    .then(function () {
+                        expect(data.lastname).toBe(spec.p1b.lastname);
+                        expect(data.timestamp.clientStamp).toBe(true); // true means the object was updated locally
+                        expect(data.revision).toBe(2);
                         done();
                     });
             });

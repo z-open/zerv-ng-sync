@@ -29,7 +29,7 @@ function syncProvider() {
     var debug;
     var defaultDeepMerge = true;
 
-    this.setDebug = function(value) {
+    this.setDebug = function (value) {
         debug = value;
     };
 
@@ -38,7 +38,7 @@ function syncProvider() {
      * 
      * It is recommended to use this library with setDeepMerge to false.
      */
-    this.setDeepMerge = function(value) {
+    this.setDeepMerge = function (value) {
         defaultDeepMerge = value;
     };
 
@@ -79,7 +79,7 @@ function syncProvider() {
             var sDs = subscribe(publicationName).setObjectClass(objectClass);
 
             // give a little time for subscription to fetch the data...otherwise give up so that we don't get stuck in a resolve waiting forever.
-            var gracePeriod = setTimeout(function() {
+            var gracePeriod = setTimeout(function () {
                 if (!sDs.ready) {
                     sDs.destroy();
                     logInfo('Attempt to subscribe to publication ' + publicationName + ' failed');
@@ -89,10 +89,10 @@ function syncProvider() {
 
             sDs.setParameters(params)
                 .waitForDataReady()
-                .then(function() {
+                .then(function () {
                     clearTimeout(gracePeriod);
                     deferred.resolve(sDs);
-                }).catch(function() {
+                }).catch(function () {
                     clearTimeout(gracePeriod);
                     sDs.destroy();
                     deferred.reject('Failed to subscribe to publication ' + publicationName + ' failed');
@@ -138,7 +138,7 @@ function syncProvider() {
         function listenToSyncNotification() {
             $socketio.on(
                 'SYNC_NOW',
-                function(subNotification, fn) {
+                function (subNotification, fn) {
                     logInfo('Syncing with subscription [name:' + subNotification.name + ', id:' + subNotification.subscriptionId + ' , params:' + JSON.stringify(subNotification.params) + ']. Records:' + subNotification.records.length + '[' + (subNotification.diff ? 'Diff' : 'All') + ']');
                     var listeners = publicationListeners[subNotification.name];
                     var processed = [];
@@ -167,7 +167,7 @@ function syncProvider() {
             //    console.log('Added new one. remaining active publication: ' + totalSub);
 
 
-            return function() {
+            return function () {
                 totalSub--;
                 //    console.log('Release one. remaining active publication: ' + totalSub);
                 delete listeners[uid];
@@ -279,11 +279,11 @@ function syncProvider() {
              */
             function destroy() {
                 syncOff();
-                var allSubscriptions = _.flatten(_.map(datasources, function(datasource) {
+                var allSubscriptions = _.flatten(_.map(datasources, function (datasource) {
                     return datasource.subscriptions;
                 }));
                 var deps = [];
-                _.forEach(allSubscriptions, function(sub) {
+                _.forEach(allSubscriptions, function (sub) {
                     deps.push(sub.getPublication());
                     sub.destroy();
                 });
@@ -361,7 +361,7 @@ function syncProvider() {
                 }
 
                 objectClass = classValue;
-                formatRecord = function(record) {
+                formatRecord = function (record) {
                     return new objectClass(record);
                 }
                 setSingle(isSingleObjectCache);
@@ -506,7 +506,7 @@ function syncProvider() {
              *  @returns this subscription obj
              */
             function map(mapDefinitions) {
-                _.forEach(mapDefinitions, function(def) {
+                _.forEach(mapDefinitions, function (def) {
 
                     if (def.type === 'object') {
                         thisSub.mapObjectDs(def.publication, def.paramsFn, def.mapFn, def.options);
@@ -536,7 +536,7 @@ function syncProvider() {
                 return $q.all([
                     mapDataToOject(obj),
                     mapSubscriptionDataToObject(obj)
-                ]).catch(function(err) {
+                ]).catch(function (err) {
                     logError('Error when mapping received object.', err);
                     $q.reject(err);
                 });
@@ -584,13 +584,13 @@ function syncProvider() {
                 }
 
                 return $q.all(_.map(objectSubscriptions,
-                    function(ds) {
+                    function (ds) {
                         // if the ds is already ready, then the object is mapped with the datasource data
-                        return ds.waitForDataReady().then(function(data) {
+                        return ds.waitForDataReady().then(function (data) {
                             if (ds.isSingle()) {
                                 ds.mapFn(data, obj);
                             } else {
-                                _.forEach(data, function(resultObj) {
+                                _.forEach(data, function (resultObj) {
                                     ds.mapFn(resultObj, obj);
                                 });
                             }
@@ -618,7 +618,7 @@ function syncProvider() {
                 var objDs = _.find(datasources, { objId: obj.id });
                 if (objDs && objDs.subscriptions.length !== 0) {
                     logDebug('Sync -> Removing dependent subscription for record #' + obj.id + ' for subscription to ' + publication);
-                    _.forEach(objDs.subscriptions, function(sub) {
+                    _.forEach(objDs.subscriptions, function (sub) {
                         sub.destroy();
                     });
                     var p = datasources.indexOf(objDs);
@@ -637,11 +637,11 @@ function syncProvider() {
             function createObjectDependentSubscriptions(obj) {
                 logDebug('Sync -> creating object dependent subscription for subscription to ' + publication);
                 var subscriptions = _.map(dependentSubscriptionDefinitions,
-                    function(dependentSubDef) {
+                    function (dependentSubDef) {
                         var depSub = subscribe(dependentSubDef.publication)
                             .setObjectClass(dependentSubDef.objectClass)
                             .setSingle(dependentSubDef.single)
-                            .mapData(function(dependentSubObject, force) {
+                            .mapData(function (dependentSubObject, force) {
                                 // map will be triggered in the following conditions:
                                 // - when the first time, the object is received, this dependent sync will be created and call map when it receives its data
                                 // - the next time the dependent syncs
@@ -663,7 +663,7 @@ function syncProvider() {
                                 }
                                 //}
                             })
-                            .setOnReady(function() {
+                            .setOnReady(function () {
                                 // if the main sync is NOT ready, it means it is in the process of being ready and will notify when it is
                                 if (dependentSubDef.notifyReady && isReady()) {
                                     notifyMainSubscription(depSub);
@@ -763,7 +763,7 @@ function syncProvider() {
              * @returns a promise that waits for the initial fetch to complete then wait for the initial fetch to complete then returns this subscription.
              */
             function waitForSubscriptionReady() {
-                return startSyncing().then(function() {
+                return startSyncing().then(function () {
                     return thisSub;
                 });
             }
@@ -791,7 +791,7 @@ function syncProvider() {
                     cache = [];
                 }
 
-                updateDataStorage = function(record) {
+                updateDataStorage = function (record) {
                     try {
                         updateFn(record);
                     } catch (e) {
@@ -917,7 +917,7 @@ function syncProvider() {
                     destroyOff();
                 }
                 innerScope = newScope;
-                destroyOff = innerScope.$on('$destroy', function() {
+                destroyOff = innerScope.$on('$destroy', function () {
                     destroy();
                 });
 
@@ -926,8 +926,8 @@ function syncProvider() {
 
             function listenForReconnectionToResync(listenNow) {
                 // give a chance to connect before listening to reconnection... @TODO should have user_reconnected_event
-                setTimeout(function() {
-                    reconnectOff = innerScope.$on('user_connected', function() {
+                setTimeout(function () {
+                    reconnectOff = innerScope.$on('user_connected', function () {
                         logDebug('Resyncing after network loss to ' + publication);
                         // note the backend might return a new subscription if the client took too much time to reconnect.
                         registerSubscription();
@@ -941,7 +941,7 @@ function syncProvider() {
                     id: subscriptionId, // to try to re-use existing subcription
                     publication: publication,
                     params: subParams
-                }).then(function(subId) {
+                }).then(function (subId) {
                     subscriptionId = subId;
                 });
             }
@@ -968,14 +968,14 @@ function syncProvider() {
                     if (!batch.diff) {
                         // Clear the cache to rebuild it if all data was received.
                         applyPromise = clearCache()
-                            .then(function() {
+                            .then(function () {
                                 return applyChanges(batch.records);
                             });
                     } else {
                         applyPromise = applyChanges(batch.records);
                     }
                     return applyPromise.then(
-                        function() {
+                        function () {
                             if (!isInitialPushCompleted) {
                                 isInitialPushCompleted = true;
                                 deferredInitialization.resolve(getData());
@@ -1001,7 +1001,7 @@ function syncProvider() {
             function clearCache() {
                 var promises = [];
                 if (!isSingleObjectCache) {
-                    _.forEach(cache, function(record) {
+                    _.forEach(cache, function (record) {
                         var previous = getRecordState(record);
                         if (previous) {
                             removeObjectDependentSubscriptions(record);
@@ -1016,7 +1016,7 @@ function syncProvider() {
                         promises.push(mapAllDataToObject(cache));
                     }
                 }
-                return $q.all(promises).then(function() {
+                return $q.all(promises).then(function () {
                     recordStates = {};
                     if (!isSingleObjectCache) {
                         cache.length = 0;
@@ -1070,25 +1070,25 @@ function syncProvider() {
                 var newDataArray = [];
                 var promises = [];
                 thisSub.ready = false;
-                records.forEach(function(record) {
+                records.forEach(function (record) {
                     //                   logInfo('Datasync [' + dataStreamName + '] received:' +JSON.stringify(record));//+ JSON.stringify(record.id));
                     if (record.remove) {
                         removeRecord(record, force);
                     } else if (getRecordState(record)) {
                         // if the record is already present in the cache...so it is mightbe an update..
-                        promises.push(updateRecord(record, force).then(function(newData) {
+                        promises.push(updateRecord(record, force).then(function (newData) {
                             newDataArray.push(newData);
                         }));
                     } else {
                         // if the record is already present in the cache...so it is mightbe an update..
-                        promises.push(addRecord(record, force).then(function(newData) {
+                        promises.push(addRecord(record, force).then(function (newData) {
                             newDataArray.push(newData);
                         }));
                     }
                 });
 
                 // TODO: Investigate could be a scenario where those promises never resolve or fail?????
-                return $q.all(promises).then(function() {
+                return $q.all(promises).then(function () {
                     thisSub.ready = true;
                     if (isSingleObjectCache) {
                         syncListener.notify('ready', getData());
@@ -1142,9 +1142,12 @@ function syncProvider() {
             function addRecord(record, force) {
                 logDebug('Sync -> Inserted New record #' + JSON.stringify(record.id) + (force ? ' directly' : ' via sync') + ' for subscription to ' + publication); // JSON.stringify(record));
                 getRevision(record); // just make sure we can get a revision before we handle this record
+
+                clearClientStamp(record);
+
                 var obj = formatRecord ? formatRecord(record) : record;
 
-                return mapAllDataToObject(obj).then(function() {
+                return mapAllDataToObject(obj).then(function () {
                     updateDataStorage(obj);
                     syncListener.notify('add', obj);
                     return obj;
@@ -1157,10 +1160,24 @@ function syncProvider() {
                 if (!force & getRevision(record) <= getRevision(previous)) {
                     return $q.resolve();
                 }
-                logDebug('Sync -> Updated record #' + JSON.stringify(record.id) + (force ? ' directly' : ' via sync') + ' for subscription to ' + publication); // JSON.stringify(record));
-                var obj = formatRecord ? formatRecord(record) : record;
 
-                return mapAllDataToObject(obj).then(function() {
+                // has Sync received a record whose version was originated locally?
+                var obj = isSingleObjectCache ? cache : previous;
+                if (isLocalChange(obj, record)) {
+                    logDebug('Sync -> Updated own record #' + JSON.stringify(record.id) + ' for subscription to ' + publication); // JSON.stringify(record));
+                    obj.revision = record.revision;
+                    obj.timestamp = record.timestamp;
+                    obj.timestamp.clientStamp = true; // this allows new revision that don't change the timestamp (ex server update not initiated on client to be merged. otherwise client would believe it made the change)
+                    syncListener.notify('update', obj);
+                    return $q.resolve(obj);
+                }
+
+                clearClientStamp(record);
+
+                logDebug('Sync -> Updated record #' + JSON.stringify(record.id) + (force ? ' directly' : ' via sync') + ' for subscription to ' + publication); // JSON.stringify(record));
+                obj = formatRecord ? formatRecord(record) : record;
+
+                return mapAllDataToObject(obj).then(function () {
                     updateDataStorage(obj);
                     syncListener.notify('update', obj);
                     return obj;
@@ -1175,14 +1192,17 @@ function syncProvider() {
                     logDebug('Sync -> Removed #' + JSON.stringify(record.id) + (force ? ' directly' : ' via sync') + ' for subscription to ' + publication);
                     // We could have for the same record consecutively fetching in this order:
                     // delete id:4, rev 10, then add id:4, rev 9.... by keeping track of what was deleted, we will not add the record since it was deleted with a most recent timestamp.
-                    record.removed = true; // So we only flag as removed, later on the garbage collector will get rid of it.         
+                    record.removed = true; // So we only flag as removed, later on the garbage collector will get rid of it.       
+
+                    clearClientStamp(record);
+
                     // if there is no previous record we do not need to removed any thing from our storage.     
                     if (previous) {
                         updateDataStorage(record);
                         removeObjectDependentSubscriptions(record);
                         syncListener.notify('remove', record);
                         dispose(record);
-                        return mapDataToOject(previous, true).then(function() {});
+                        return mapDataToOject(previous, true).then(function () { });
                     }
                 }
             }
@@ -1199,6 +1219,27 @@ function syncProvider() {
 
             function isExistingStateFor(record) {
                 return !!getRecordState(record);
+            }
+
+
+            // this will evolve... as this introduce a new field in the object (timestamp.clientStamp)
+            // maybe we should have 
+            // an object property 
+            // timestamp { revision:, clientStamp:...} or $$sync
+            function isLocalChange(previous, update) {
+                return (update.timestamp
+                    && previous.timestamp
+                    && update.timestamp.clientStamp
+                    && update.timestamp.clientStamp === previous.timestamp.clientStamp
+                    && getRevision(update) === getRevision(previous) + 1
+                );
+            }
+
+            // clear timestamp, since this record was not originated locally
+            function clearClientStamp(record) {
+                if (record.timestamp) {
+                    record.timestamp.clientStamp = null;
+                }
             }
 
             function saveRecordState(record) {
@@ -1261,7 +1302,7 @@ function syncProvider() {
             function notify(event, data1, data2) {
                 var listeners = events[event];
                 if (listeners) {
-                    _.forEach(listeners, function(callback, id) {
+                    _.forEach(listeners, function (callback, id) {
                         callback(data1, data2);
                     });
                 }
@@ -1277,7 +1318,7 @@ function syncProvider() {
                 }
                 var id = count++;
                 listeners[id++] = callback;
-                return function() {
+                return function () {
                     delete listeners[id];
                 }
             }
@@ -1289,7 +1330,7 @@ function syncProvider() {
             return id;
         }
         // build composite key value
-        var r = _.join(_.map(id, function(value) {
+        var r = _.join(_.map(id, function (value) {
             return value;
         }), '~');
         return r;

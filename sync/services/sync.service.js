@@ -546,13 +546,12 @@ function syncProvider() {
              * @returns <Promise> returns a promise that is resolved when the object is completely mapped
              */
             function mapAllDataToObject(obj) {
-                return $q.all([
-                    mapDataToOject(obj),
-                    mapSubscriptionDataToObject(obj)
-                ]).catch(function (err) {
-                    logError('Error when mapping received object.', err);
-                    $q.reject(err);
-                });
+                return mapSubscriptionDataToObject(obj)
+                    .then(mapDataToOject)
+                    .catch(function (err) {
+                        logError('Error when mapping received object.', err);
+                        $q.reject(err);
+                    });
 
             }
 
@@ -573,10 +572,13 @@ function syncProvider() {
                 if (mapDataFn) {
                     var result = mapDataFn(obj, force);
                     if (result && result.then) {
-                        return result;
+                        return result
+                            .then(function () {
+                                return obj;
+                            });
                     }
                 }
-                return $q.resolve();
+                return $q.resolve(obj);
             }
 
             /**
@@ -587,7 +589,7 @@ function syncProvider() {
             function mapSubscriptionDataToObject(obj) {
 
                 if (dependentSubscriptionDefinitions.length === 0) {
-                    return $q.resolve();
+                    return $q.resolve(obj);
                 }
 
                 var objectSubscriptions = findObjectDependentSubscriptions(obj);
@@ -613,7 +615,10 @@ function syncProvider() {
                                 });
                             }
                         });
-                    }));
+                    }))
+                    .then(function () {
+                        return obj;
+                    });
             }
 
             /**

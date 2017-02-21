@@ -738,20 +738,12 @@ function syncProvider() {
              * @returns <Promise> returns a promise that is resolved when the object is completely mapped
              */
             function mapAllDataToObject(obj) {
-                  return 
-                    mapDataToOject(obj)
-                    .then( mapSubscriptionDataToObject)
-                .catch(function (err) {
-                    logError('Error when mapping received object.', err);
-                    $q.reject(err);
-                });
-                // return $q.all([
-                //     mapDataToOject(obj),
-                //     mapSubscriptionDataToObject(obj)
-                // ]).catch(function (err) {
-                //     logError('Error when mapping received object.', err);
-                //     $q.reject(err);
-                // });
+                return mapSubscriptionDataToObject(obj)
+                    .then(mapDataToOject)
+                    .catch(function (err) {
+                        logError('Error when mapping received object.', err);
+                        $q.reject(err);
+                    });
 
             }
 
@@ -772,9 +764,10 @@ function syncProvider() {
                 if (mapDataFn) {
                     var result = mapDataFn(obj, force);
                     if (result && result.then) {
-                        return result.then(function(){
-                            return obj;
-                        });
+                        return result
+                            .then(function () {
+                                return obj;
+                            });
                     }
                 }
                 return $q.resolve(obj);
@@ -815,10 +808,9 @@ function syncProvider() {
                             }
                         });
                     }))
-                    .then(function(){
+                    .then(function () {
                         return obj;
-                    })
-
+                    });
             }
 
             /**

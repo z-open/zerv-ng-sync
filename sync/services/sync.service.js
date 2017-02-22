@@ -659,8 +659,16 @@ function syncProvider() {
              */
             function createObjectDependentSubscriptions(obj) {
                 logDebug('Sync -> creating object dependent subscription for subscription to ' + publication);
-                var subscriptions = _.map(dependentSubscriptionDefinitions,
+                var subscriptions = [];
+                _.forEach(dependentSubscriptionDefinitions,
                     function (dependentSubDef) {
+
+                        var subParams = dependentSubDef.paramsFn(obj, collectParentSubscriptionParams());
+
+                        if (_.isEmpty(subParams)) {
+                            return;
+                        }
+
                         var depSub = subscribe(dependentSubDef.publication)
                             .setObjectClass(dependentSubDef.objectClass)
                             .setSingle(dependentSubDef.single)
@@ -704,7 +712,7 @@ function syncProvider() {
                             depSub.map(dependentSubDef.mappings);
                         }
                         // this starts the subscription using the params computed by the function provided when the dependent subscription was defined
-                        return depSub.setParameters(dependentSubDef.paramsFn(obj, collectParentSubscriptionParams()));
+                        subscriptions.push(depSub.setParameters(dependentSubDef.paramsFn(obj, collectParentSubscriptionParams())));
                     });
                 datasources.push({
                     objId: obj.id,

@@ -27,7 +27,8 @@ function syncProvider() {
     var totalSub = 0;
 
     var debug;
-    var defaultDeepMerge = true;
+    var defaultDeepMerge = true,
+        latencyInMilliSecs = 0;
 
     this.setDebug = function (value) {
         debug = value;
@@ -40,6 +41,15 @@ function syncProvider() {
      */
     this.setDeepMerge = function (value) {
         defaultDeepMerge = value;
+    };
+    /**
+     *  add a delay before processing publication data to simulate network latency
+     * 
+     * @param <number> milliseconds
+     * 
+     */
+    this.setLatency = function (seconds) {
+        latencyInMilliSecs = seconds;
     };
 
     this.$get = function sync($rootScope, $q, $socketio, $syncGarbageCollector, $syncMerge) {
@@ -403,7 +413,8 @@ function syncProvider() {
                     single: true,
                     objectClass: options.objectClass,
                     mappings: options.mappings,
-                    notifyReady: options.notifyReady
+                    notifyReady: options.notifyReady,
+                    deepMerge: options.deepMerge // legacy
                 });
                 return thisSub;
             }
@@ -445,7 +456,9 @@ function syncProvider() {
                     single: false,
                     objectClass: options.objectClass,
                     mappings: options.mappings,
-                    notifyReady: options.notifyReady
+                    notifyReady: options.notifyReady,
+                    deepMerge: options.deepMerge // legacy
+
                 });
                 return thisSub;
             }
@@ -533,13 +546,12 @@ function syncProvider() {
              * @returns <Promise> returns a promise that is resolved when the object is completely mapped
              */
             function mapAllDataToObject(obj) {
-                return $q.all([
-                    mapDataToOject(obj),
-                    mapSubscriptionDataToObject(obj)
-                ]).catch(function (err) {
-                    logError('Error when mapping received object.', err);
-                    $q.reject(err);
-                });
+                return mapSubscriptionDataToObject(obj)
+                    .then(mapDataToOject)
+                    .catch(function (err) {
+                        logError('Error when mapping received object.', err);
+                        $q.reject(err);
+                    });
 
             }
 
@@ -553,17 +565,20 @@ function syncProvider() {
              * @param obj
              * @param <String> action (add or update)
              * @returns <Promise> the promise resolves when the mapping as completed
-
+    
              * 
              */
             function mapDataToOject(obj, force) {
                 if (mapDataFn) {
                     var result = mapDataFn(obj, force);
                     if (result && result.then) {
-                        return result;
+                        return result
+                            .then(function () {
+                                return obj;
+                            });
                     }
                 }
-                return $q.resolve();
+                return $q.resolve(obj);
             }
 
             /**
@@ -574,7 +589,7 @@ function syncProvider() {
             function mapSubscriptionDataToObject(obj) {
 
                 if (dependentSubscriptionDefinitions.length === 0) {
-                    return $q.resolve();
+                    return $q.resolve(obj);
                 }
 
                 var objectSubscriptions = findObjectDependentSubscriptions(obj);
@@ -583,8 +598,13 @@ function syncProvider() {
                     // return $q.resolve();
                 }
 
+
                 return $q.all(_.map(objectSubscriptions,
                     function (ds) {
+                        // !!!!!!!!!!!!!!!!!
+                        // !!!!! must set the parameters again as the update might have caused a different subscription.
+                        // !!!!!!!!!!!!!!!!!
+
                         // if the ds is already ready, then the object is mapped with the datasource data
                         return ds.waitForDataReady().then(function (data) {
                             if (ds.isSingle()) {
@@ -595,7 +615,10 @@ function syncProvider() {
                                 });
                             }
                         });
-                    }));
+                    }))
+                    .then(function () {
+                        return obj;
+                    });
             }
 
             /**
@@ -636,11 +659,20 @@ function syncProvider() {
              */
             function createObjectDependentSubscriptions(obj) {
                 logDebug('Sync -> creating object dependent subscription for subscription to ' + publication);
-                var subscriptions = _.map(dependentSubscriptionDefinitions,
+                var subscriptions = [];
+                _.forEach(dependentSubscriptionDefinitions,
                     function (dependentSubDef) {
+
+                        var subParams = dependentSubDef.paramsFn(obj, collectParentSubscriptionParams());
+
+                        if (_.isEmpty(subParams)) {
+                            return;
+                        }
+
                         var depSub = subscribe(dependentSubDef.publication)
                             .setObjectClass(dependentSubDef.objectClass)
                             .setSingle(dependentSubDef.single)
+                            .setDeepMerge(dependentSubDef.deepMerge)
                             .mapData(function (dependentSubObject, force) {
                                 // map will be triggered in the following conditions:
                                 // - when the first time, the object is received, this dependent sync will be created and call map when it receives its data
@@ -680,7 +712,7 @@ function syncProvider() {
                             depSub.map(dependentSubDef.mappings);
                         }
                         // this starts the subscription using the params computed by the function provided when the dependent subscription was defined
-                        return depSub.setParameters(dependentSubDef.paramsFn(obj, collectParentSubscriptionParams()));
+                        subscriptions.push(depSub.setParameters(dependentSubDef.paramsFn(obj, collectParentSubscriptionParams())));
                     });
                 datasources.push({
                     objId: obj.id,
@@ -900,7 +932,20 @@ function syncProvider() {
                     listenForReconnectionToResync();
                     publicationListenerOff = addPublicationListener(
                         publication,
-                        processPublicationData
+                        function (batch) {
+                            // Create a delay before processing publication data to simulate network latency
+                            if (latencyInMilliSecs) {
+                                logInfo('Sync -> Processing delayed for ' + latencyInMilliSecs + ' ms.'); // 
+                                setTimeout(function () {
+                                    logInfo('Sync -> Processing ' + publication + ' now.');
+                                    processPublicationData(batch);
+                                }, latencyInMilliSecs);
+                            } else {
+                                return processPublicationData(batch);
+                            }
+
+                        }
+
                     );
                 }
             }
@@ -1006,14 +1051,14 @@ function syncProvider() {
                         if (previous) {
                             removeObjectDependentSubscriptions(record);
                             previous.removed = true;
-                            promises.push(mapAllDataToObject(previous));
+                            promises.push(mapDataToOject(previous)); 
                         }
                     });
                 } else {
                     if (cache) {
                         removeObjectDependentSubscriptions(cache);
                         cache.removed = true;
-                        promises.push(mapAllDataToObject(cache));
+                        promises.push(mapDataToOject(cache));
                     }
                 }
                 return $q.all(promises).then(function () {

@@ -1051,14 +1051,14 @@ function syncProvider() {
                         if (previous) {
                             removeObjectDependentSubscriptions(record);
                             previous.removed = true;
-                            promises.push(mapAllDataToObject(previous));
+                            promises.push(mapDataToOject(previous)); 
                         }
                     });
                 } else {
                     if (cache) {
                         removeObjectDependentSubscriptions(cache);
                         cache.removed = true;
-                        promises.push(mapAllDataToObject(cache));
+                        promises.push(mapDataToOject(cache));
                     }
                 }
                 return $q.all(promises).then(function () {

@@ -714,9 +714,9 @@ function syncProvider() {
                 _.forEach(mapDefinitions, function (def) {
 
                     if (def.type === 'object') {
-                        thisSub.mapObjectDs(def.publication, def.paramsFn, def.mapFn, def.options);
+                        thisSub.mapObjectDs(def.publication, def.params || def.paramsFn, def.mapFn, def.options);
                     } else if (def.type === 'array') {
-                        thisSub.mapArrayDs(def.publication, def.paramsFn, def.mapFn, def.options);
+                        thisSub.mapArrayDs(def.publication, def.params || def.paramsFn, def.mapFn, def.options);
                     }
                     if (def.type === 'data') {
                         thisSub.mapData(def.mapFn);
@@ -730,23 +730,40 @@ function syncProvider() {
              *  provide the function that will returns the params to set the dependent subscription parameters
              * 
              *  @param <function> or <Map>
-             *         ex function(obj) {
+             *         ex of function: function(obj) {
              *              return {id:obj.ownerId};
              *         }
-             *         ex of map: {id:'ownerI'}
+             *         ex of map: {id:'ownerI'} 
+             *         in both example above, if ownerId was null the dependent subscription would not start.
+             * 
              *  @returns <function> that will define the parameters based on the parent object subscription
              */
             function getParamsFn(fnOrMap) {
+                var fn;
                 if (_.isFunction(fnOrMap)) {
-                    return fnOrMap;
+                    fn = fnOrMap;
+                } else {
+                    fn = function (obj) {
+                        var mappingParams = {};
+                        for (var key in fnOrMap) {
+                            var v = _.get(obj, fnOrMap[key]);
+                            if (!_.isNil(v)) {
+                                mappingParams[key] = v;
+                            }
+                        }
+                        return mappingParams;
+                    };
                 }
-                return function(obj) {
-                    var mappingParams = {};
-                    for(var key in fnOrMap) {
-                        mappingParams[key]=_.get(obj[fnOrMap[key]]);
+
+                return function () {
+                    var mappingParams = fn.apply(this, arguments);
+                    // if there is no param, there is no mapping to do, most likely, there is no need for the dependent subscription
+                    // ex a person.driverLicenceId.... if that person does not have this information, there would be no need to try to subscribe
+                    if (!mappingParams || !Object.keys(mappingParams).length) {
+                        return null;
                     }
                     return mappingParams;
-                };
+                }
             }
 
             /**
@@ -1266,7 +1283,7 @@ function syncProvider() {
                         if (previous) {
                             removeObjectDependentSubscriptions(record);
                             previous.removed = true;
-                            promises.push(mapDataToOject(previous)); 
+                            promises.push(mapDataToOject(previous));
                         }
                     });
                 } else {

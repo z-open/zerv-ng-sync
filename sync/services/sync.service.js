@@ -408,7 +408,7 @@ function syncProvider() {
                 options = _.assign({}, options);
                 dependentSubscriptionDefinitions.push({
                     publication: publication,
-                    paramsFn: paramsFn,
+                    paramsFn: getParamsFn(paramsFn),
                     mapFn: mapFn,
                     single: true,
                     objectClass: options.objectClass,
@@ -451,7 +451,7 @@ function syncProvider() {
                 options = _.assign({}, options);
                 dependentSubscriptionDefinitions.push({
                     publication: publication,
-                    paramsFn: paramsFn,
+                    paramsFn: getParamsFn(paramsFn),
                     mapFn: mapFn,
                     single: false,
                     objectClass: options.objectClass,
@@ -533,6 +533,29 @@ function syncProvider() {
                 return thisSub;
             }
 
+            /**
+             * 
+             *  provide the function that will returns the params to set the dependent subscription parameters
+             * 
+             *  @param <function> or <Map>
+             *         ex function(obj) {
+             *              return {id:obj.ownerId};
+             *         }
+             *         ex of map: {id:'ownerI'}
+             *  @returns <function> that will define the parameters based on the parent object subscription
+             */
+            function getParamsFn(fnOrMap) {
+                if (_.isFunction(fnOrMap)) {
+                    return fnOrMap;
+                }
+                return function(obj) {
+                    var mappingParams = {};
+                    for(var key in fnOrMap) {
+                        mappingParams[key]=_.get(obj[fnOrMap[key]]);
+                    }
+                    return mappingParams;
+                };
+            }
 
             /**
              * map static data or subscription based data to the provided object

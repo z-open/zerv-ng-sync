@@ -219,7 +219,7 @@ function syncProvider() {
     var totalSub = 0;
 
     var debug;
-    var defaultDeepMerge = true,
+    var defaultDeepMerge = false,
         latencyInMilliSecs = 0;
 
     this.setDebug = function (value) {
@@ -711,8 +711,15 @@ function syncProvider() {
              *  @returns this subscription obj
              */
             function map(mapDefinitions) {
-                _.forEach(mapDefinitions, function (def) {
+                if (_.isArray(mapDefinitions)) {
+                    _.forEach(mapDefinitions, setMapping);
+                } else {
+                    setMapping(mapDefinitions);
+                }
 
+                return thisSub;
+
+                function setMapping(def) {
                     if (def.type === 'object') {
                         thisSub.mapObjectDs(def.publication, def.params || def.paramsFn, def.mapFn, def.options);
                     } else if (def.type === 'array') {
@@ -721,8 +728,8 @@ function syncProvider() {
                     if (def.type === 'data') {
                         thisSub.mapData(def.mapFn);
                     }
-                });
-                return thisSub;
+                }
+
             }
 
             /**
@@ -833,20 +840,22 @@ function syncProvider() {
 
                 return $q.all(_.map(objectSubscriptions,
                     function (ds) {
-                        // !!!!!!!!!!!!!!!!!
-                        // !!!!! must set the parameters again as the update might have caused a different subscription.
-                        // !!!!!!!!!!!!!!!!!
-
                         // if the ds is already ready, then the object is mapped with the datasource data
-                        return ds.waitForDataReady().then(function (data) {
-                            if (ds.isSingle()) {
-                                ds.mapFn(data, obj);
-                            } else {
-                                _.forEach(data, function (resultObj) {
-                                    ds.mapFn(resultObj, obj);
-                                });
-                            }
-                        });
+                        return ds
+                            // !!!!!!!!!!!!!!!!!
+                            // !!!!! must set the parameters again as the update might have caused a different subscription.
+                            //     the parameter might also become null, then the subscription should stop.
+                            // !!!!!!!!!!!!!!!!!
+                            // not tested.setParameters(dependentSubDef.paramsFn(obj, collectParentSubscriptionParams()))
+                            .waitForDataReady().then(function (data) {
+                                if (ds.isSingle()) {
+                                    ds.mapFn(data, obj);
+                                } else {
+                                    _.forEach(data, function (resultObj) {
+                                        ds.mapFn(resultObj, obj);
+                                    });
+                                }
+                            });
                     }))
                     .then(function () {
                         return obj;
@@ -944,6 +953,9 @@ function syncProvider() {
                             depSub.map(dependentSubDef.mappings);
                         }
                         // this starts the subscription using the params computed by the function provided when the dependent subscription was defined
+
+                        // !!!! should not start subscription if no parameters, but what about the parameter is set.
+                        
                         subscriptions.push(depSub.setParameters(dependentSubDef.paramsFn(obj, collectParentSubscriptionParams())));
                     });
                 datasources.push({

@@ -1098,14 +1098,14 @@ function syncProvider() {
              * 
              */
             function getData(id) {
-                return !_.isNil(id) ? getObject(id) : cache;
+                return !_.isNil(id) ? getCachedObject(id) : cache;
             }
 
-            function getObject(id) {
+            function getCachedObject(id) {
                 if (isSingleObjectCache) {
                     return cache.id === id ? cache : null;
                 }
-                return _.find(thisSub.cache, { id: id });
+                return _.find(cache, { id: id });
             }
 
 

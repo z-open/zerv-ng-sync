@@ -915,7 +915,7 @@ function syncProvider() {
                         var depSub = subscribe(dependentSubDef.publication)
                             .setObjectClass(dependentSubDef.objectClass)
                             .setSingle(dependentSubDef.single)
-                            .setDeepMerge(dependentSubDef.deepMerge)
+                            .setDeepMerge(dependentSubDef.deepMerge || defaultDeepMerge)
                             .mapData(function (dependentSubObject, operation) {
                                 // map will be triggered in the following conditions:
                                 // - when the first time, the object is received, this dependent sync will be created and call map when it receives its data
@@ -1271,7 +1271,7 @@ function syncProvider() {
                 // cannot only listen to subscriptionId yet...because the registration might have answer provided its id yet...but started broadcasting changes...@TODO can be improved...
                 if (subscriptionId === batch.subscriptionId || (!subscriptionId && checkDataSetParamsIfMatchingBatchParams(batch.params))) {
                     var applyPromise;
-                    if (!batch.diff) {
+                    if (!batch.diff && isDataCached()) {
                         // Clear the cache to rebuild it if all data was received.
                         applyPromise = clearCache()
                             .then(function () {
@@ -1295,6 +1295,13 @@ function syncProvider() {
 
 
             /**
+             * @return {boolean} true if record states are in memory, it implied data has been cached.
+             */
+            function isDataCached() {
+                return Object.keys(recordStates).length > 0;
+            }
+
+            /**
              * this releases all objects currently in the cache 
              * 
              * if they have dependent subscriptions, they will be released.
@@ -1302,32 +1309,44 @@ function syncProvider() {
              * the mapAllDataObject will be called on each object to make sure object can unmapped if necessary
              * 
              * 
-             * 
              */
             function clearCache() {
-                var promises = [];
+                var result;
                 if (!isSingleObjectCache) {
-                    _.forEach(cache, function (record) {
-                        var previous = getRecordState(record);
-                        if (previous) {
-                            removeObjectDependentSubscriptions(record);
-                            previous.removed = true;
-                            promises.push(mapDataToOject(previous));
-                        }
-                    });
+                    result = clearArrayCache();
                 } else {
-                    if (cache) {
-                        removeObjectDependentSubscriptions(cache);
-                        cache.removed = true;
-                        promises.push(mapDataToOject(cache));
-                    }
+                    result = clearObjectCache();
                 }
-                return $q.all(promises).then(function () {
-                    recordStates = {};
-                    if (!isSingleObjectCache) {
-                        cache.length = 0;
-                    }
+                return result.catch(function (err) {
+                    logError('Error clearing subscription cache - ' + err);
+                })
+            }
+
+            function clearArrayCache() {
+                var promises = [];
+                _.forEach(cache, function (obj) {
+                    removeObjectDependentSubscriptions(obj);
+                    obj.removed = true;
+                    promises.push(mapDataToOject(obj));
+
+                    //   var recordState = getRecordState(obj);
+                    //     if (recordState) {
+                    //         removeObjectDependentSubscriptions(obj);
+                    //         recordState.removed = true;
+                    //         promises.push(mapDataToOject(recordState));
+                    //     }
                 });
+                return $q.all(promises).finally(function () {
+                    recordStates = {};
+                    cache.length = 0;
+                });
+            }
+
+            function clearObjectCache() {
+                removeObjectDependentSubscriptions(cache);
+                cache.removed = true;
+                recordStates = {};
+                return mapDataToOject(cache);
             }
             /**
              * if the params of the dataset matches the notification, it means the data needs to be collect to update array.

@@ -481,6 +481,11 @@ function syncProvider() {
              */
             function destroy() {
                 syncOff();
+                logDebug('Destroy subscription to ' + publication);
+                destroyDependentSubscriptions();
+            }
+
+            function destroyDependentSubscriptions() {
                 var allSubscriptions = _.flatten(_.map(datasources, function (datasource) {
                     return datasource.subscriptions;
                 }));
@@ -489,8 +494,10 @@ function syncProvider() {
                     deps.push(sub.getPublication());
                     sub.destroy();
                 });
-                deps = _.uniq(deps);
-                logDebug('Destroy subscription to ' + publication + (deps.length ? ' and its ' + allSubscriptions.length + ' dependent(s) based on [' + deps + ']' : ''));
+                if (deps.length > 0) {
+                    deps = _.uniq(deps);
+                    logDebug('Destroy its ' + allSubscriptions.length + ' dependent subscription(s)  [' + deps + ']');
+                }
             }
 
             /** this will be called when data is available 
@@ -1190,7 +1197,12 @@ function syncProvider() {
 
             function readyForListening() {
                 if (!publicationListenerOff) {
-                    listenForReconnectionToResync();
+
+                    // if the subscription belongs to a parent one and the network is lost, the top parent subscription will release/destroy all dependent subscriptions and take care of re-registering itself and its dependents.
+                    if (!thisSub.parentSubscription) {
+                        listenForReconnectionToResync();
+                    }
+
                     publicationListenerOff = addPublicationListener(
                         publication,
                         function (batch) {

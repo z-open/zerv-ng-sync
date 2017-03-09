@@ -760,11 +760,19 @@ describe('Sync Service: ', function () {
         spec.sds.waitForDataReady().then(function (data) {
             // initial subscription call
             expect(spec.$socketio.fetch.calls.count()).toEqual(1);
+              backend.setData([spec.r3]);
+            spec.sds.onReady(function () {
+                //expect(spec.sds.getData().length).toEqual(2);
+                done();
+            });
             $scope.$broadcast('user_connected');
             expect(spec.$socketio.fetch.calls.count()).toEqual(2);
             // 2nd subscription for reconnect
             expect(spec.$socketio.fetch.calls.mostRecent().args[0]).toEqual('sync.subscribe');
-            done();
+            
+            // spec.sds.waitForDataReady().then(function () {
+
+            // });
         });
         $scope.$digest();
     });
@@ -871,6 +879,7 @@ describe('Sync Service: ', function () {
                 isSubscribedOnBackend = true;
                 self.onPublicationNotficationCallback({
                     name: 'myPub',
+                    subscriptionId: subId,
                     records: Object.keys(db).length ? _.values(db) : []
                 }, self.acknowledge);
                 return subId;

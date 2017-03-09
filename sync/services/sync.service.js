@@ -27,21 +27,12 @@ function syncProvider() {
     var totalSub = 0;
 
     var debug;
-    var defaultDeepMerge = false,
-        latencyInMilliSecs = 0;
+    var latencyInMilliSecs = 0;
 
     this.setDebug = function (value) {
         debug = value;
     };
 
-    /**
-     * by default the deepMerge is used during sync, which can throw exception when syncing objects which have inner object dependency (ex the object to sync has a parent object and collection of children which point to the parent)
-     * 
-     * It is recommended to use this library with setDeepMerge to false.
-     */
-    this.setDeepMerge = function (value) {
-        defaultDeepMerge = value;
-    };
     /**
      *  add a delay before processing publication data to simulate network latency
      * 
@@ -52,7 +43,7 @@ function syncProvider() {
         latencyInMilliSecs = seconds;
     };
 
-    this.$get = function sync($rootScope, $q, $socketio, $syncGarbageCollector, $syncMerge) {
+    this.$get = function sync($rootScope, $q, $socketio, $syncGarbageCollector) {
 
         var publicationListeners = {},
             lastPublicationListenerUid = 0;
@@ -114,7 +105,6 @@ function syncProvider() {
             var options = _.assign({}, schema.options);
             return subscribe(schema.publication)
                 .setSingle(true)
-                .setDeepMerge(options.deepMerge)
                 .setObjectClass(options.objectClass)
                 .map(options.mappings)
                 .setParameters({ id: id });
@@ -208,7 +198,7 @@ function syncProvider() {
 
         function Subscription(publication, scope) {
             var timestampField, isSyncingOn = false,
-                isSingleObjectCache, updateDataStorage, cache, isInitialPushCompleted, deferredInitialization, strictMode;
+                isSingleObjectCache, updateDataStorage, cache, isInitialPushCompleted, deferredInitialization;
             var onReadyOff, formatRecord;
             var reconnectOff, publicationListenerOff, destroyOff;
             var objectClass;
@@ -222,7 +212,6 @@ function syncProvider() {
             var recordStates = {};
             var innerScope; //= $rootScope.$new(true);
             var syncListener = new SyncListener();
-            var deepMerge = defaultDeepMerge;
 
             //  ----public----
             this.getPublication = getPublication;
@@ -256,9 +245,6 @@ function syncProvider() {
 
             this.setObjectClass = setObjectClass;
             this.getObjectClass = getObjectClass;
-
-            this.setStrictMode = setStrictMode;
-            this.setDeepMerge = setDeepMerge;
 
             this.attach = attach;
             this.destroy = destroy;
@@ -336,36 +322,6 @@ function syncProvider() {
             }
 
             /**
-             * if set to true, if an object within an array property of the record to sync has no ID field.
-             * an error would be thrown.
-             * It is important if we want to be able to maintain instance references even for the objects inside arrays.
-             *
-             * Forces us to use id every where.
-             *
-             * Should be the default...but too restrictive for now.
-             * @deprecated
-             */
-            function setStrictMode(value) {
-                strictMode = value;
-                return thisSub;
-            }
-
-            /**
-             * Deep merge allows to maintain references in objects.
-             *
-             * But this can create circular references in objects that have inner object dependencies.
-             *
-             * To avoid circular references, it is recommended to use a shalow merge (false) 
-             *
-             * @param <boolean> false for shalow merge (default is deep merge)
-             *
-             */
-            function setDeepMerge(value) {
-                deepMerge = value;
-                return thisSub;
-            }
-
-            /**
              * The following object will be built upon each record received from the backend
              * 
              * This cannot be modified after the sync has started.
@@ -420,8 +376,7 @@ function syncProvider() {
                     single: true,
                     objectClass: options.objectClass,
                     mappings: options.mappings,
-                    notifyReady: options.notifyReady,
-                    deepMerge: options.deepMerge // legacy
+                    notifyReady: options.notifyReady
                 });
                 return thisSub;
             }
@@ -463,8 +418,7 @@ function syncProvider() {
                     single: false,
                     objectClass: options.objectClass,
                     mappings: options.mappings,
-                    notifyReady: options.notifyReady,
-                    deepMerge: options.deepMerge // legacy
+                    notifyReady: options.notifyReady
 
                 });
                 return thisSub;
@@ -730,7 +684,6 @@ function syncProvider() {
                         var depSub = subscribe(dependentSubDef.publication)
                             .setObjectClass(dependentSubDef.objectClass)
                             .setSingle(dependentSubDef.single)
-                            .setDeepMerge(dependentSubDef.deepMerge || defaultDeepMerge)
                             .mapData(function (dependentSubObject, operation) {
                                 // map will be triggered in the following conditions:
                                 // - when the first time, the object is received, this dependent sync will be created and call map when it receives its data
@@ -1405,9 +1358,9 @@ function syncProvider() {
                 saveRecordState(record);
 
                 if (!record.remove) {
-                    $syncMerge.update(cache, record, strictMode, deepMerge);
+                    merge(cache, record);
                 } else {
-                    $syncMerge.clearObject(cache);
+                    clearObject(cache);
                 }
             }
 
@@ -1420,13 +1373,21 @@ function syncProvider() {
                         cache.push(record);
                     }
                 } else {
-                    $syncMerge.update(existing, record, strictMode, deepMerge);
+                    merge(existing, record);
                     if (record.removed) {
                         cache.splice(cache.indexOf(existing), 1);
                     }
                 }
             }
 
+            function merge(destination, source) {
+                clearObject(destination);
+                _.assign(destination, source);
+            }
+
+            function clearObject(object) {
+                Object.keys(object).forEach(function (key) { delete object[key]; });
+            }
 
             function getRevision(record) {
                 // what reserved field do we use as timestamp

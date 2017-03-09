@@ -112,9 +112,7 @@ Ex:
     sds = $sync.subscribe('people.sync')
                 .setObjectClass(Person)
                 .mapArrayDs('people.friends.sync',
-                   function (person) {
-                       return { personId: person.id };
-                    },
+                    { personId: 'id' },
                     function (friend, person, isDeleted) {
                        if (isDeleted) {
                             person.remove(friend);
@@ -126,6 +124,8 @@ Ex:
          
 
 if you render sds.getData() in your angular app, any change to a person friend (added/deleted/updated) or a person in people will be displayed.
+
+Notice that that the 'id' value comes from each person record to set the personId parameter on the dependent subscription.
 
 
 Ex:
@@ -144,6 +144,7 @@ Ex:
 
 if you render sds.getData() in your angular app, any change to a person address or a person in people will be displayed.
 
+Notice here that a function is called to set the personId parameter on the dependent subscription.
 
 ### Example: Multi syncing with schema
 
@@ -151,7 +152,9 @@ if you render sds.getData() in your angular app, any change to a person address 
            .setSchema(personWithAddressAndFriendsAndEventsWithAttendsSchemaDefinition)
            .setParams(family:'myFamily');
 
-if the schema is defined properly, person object will have all its contents in sync from different syncs
+if the schema is defined properly, person object will have all its contents in sync from different syncs.
+
+TODO: provide specifics.
 
 
 ### To improve

@@ -14,8 +14,52 @@ function service() {
 
         return backend;
 
-        function MockBackend() {
+        function Db() {
             var db = {};
+            this.setData = setData;
+            this.getData = getData;
+            this.update = update;
+            this.remove = remove;
+
+            function setData(data) {
+                copyAll(data).forEach(function (record) {
+                    db[$sync.getIdValue(record)] = record;
+                });
+            }
+
+            function getData() {
+                return Object.keys(db).length ? _.values(db) : [];
+            }
+
+            function update(data) {
+                data = copyAll(data);
+                data.forEach(function (record) {
+                    db[$sync.getIdValue(record)] = record;
+                });
+                return data;
+            }
+
+            function remove(data) {
+                data = copyAll(data);
+                data.forEach(function (record) {
+                    delete db[$sync.getIdValue(record)];
+                });
+                return data;
+            }
+
+            function copyAll(array) {
+                var r = [];
+                array.forEach(function (i) {
+                    r.push(angular.copy(i));
+                })
+                return r;
+            }
+        }
+
+        function MockBackend() {
+            var db = new Db();
+            var subCount = 0;
+
             var isSubscribedOnBackend = false;
 
             var self = this;
@@ -31,7 +75,7 @@ function service() {
                 return self.subscribe.apply(self, arguments);
             });
 
-            $socketio.onFetch('sync.unsubscribe',  function () {
+            $socketio.onFetch('sync.unsubscribe', function () {
                 return self.unsubscribe.apply(self, arguments);
             });
 
@@ -40,24 +84,11 @@ function service() {
             }
 
             function setData(data) {
-                copyAll(data).forEach(function (record) {
-                    db[$sync.getIdValue(record)] = record;
-                });
-            }
-
-            function copyAll(array) {
-                var r = [];
-                array.forEach(function (i) {
-                    r.push(angular.copy(i));
-                })
-                return r;
+                return db.setData(data);
             }
 
             function notifyDataChanges(data) {
-                data = copyAll(data);
-                data.forEach(function (record) {
-                    db[$sync.getIdValue(record)] = record;
-                })
+                data = db.update(data);
                 if (isSubscribedOnBackend) {
                     return self.onPublicationNotficationCallback({
                         name: 'myPub',
@@ -69,11 +100,8 @@ function service() {
             }
 
             function notifyDataRemovals(data) {
-                data = copyAll(data);
-                data.forEach(function (record) {
-                    record.remove = true;
-                    delete db[$sync.getIdValue(record)];
-                });
+                data = db.remove(data);
+                _.forEach(data, function (record) { record.remove = true; });
                 if (isSubscribedOnBackend) {
                     self.onPublicationNotficationCallback({
                         name: 'myPub',
@@ -85,14 +113,16 @@ function service() {
             }
 
             function subscribe(data) {
-                //console.log("fetch: " + operation, data);
                 console.log('Subscribe ', data);
+                subCount++;
+                //                              return $q.resolve('sub#'+subCount).then(function (subId) {
+
                 return $q.resolve('sub#1').then(function (subId) {
                     isSubscribedOnBackend = true;
                     self.onPublicationNotficationCallback({
                         name: 'myPub',
                         subscriptionId: subId,
-                        records: Object.keys(db).length ? _.values(db) : []
+                        records: db.getData()
                     }, self.acknowledge);
                     return subId;
                 })

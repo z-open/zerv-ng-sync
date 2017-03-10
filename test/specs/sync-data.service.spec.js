@@ -8,11 +8,8 @@ describe('Sync Service: ', function () {
     beforeEach(module('sync.test'));
 
     beforeEach(module(function ($provide, 
-    //$socketioProvider,
      $syncProvider, mockServerProvider) {
-    //    $provide.value('$socketio', mockServerProvider.socketio);
         $syncProvider.setDebug(2);
-      //  $socketioProvider.setDebug(true);
     }));
 
 

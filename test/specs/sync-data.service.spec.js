@@ -7,8 +7,8 @@ describe('Sync Service: ', function () {
     beforeEach(module('sync'));
     beforeEach(module('sync.test'));
 
-    beforeEach(module(function ($provide, 
-     $syncProvider, mockServerProvider) {
+    beforeEach(module(function ($provide,
+        $syncProvider, mockServerProvider) {
         $syncProvider.setDebug(2);
     }));
 
@@ -82,6 +82,7 @@ describe('Sync Service: ', function () {
     });
 
     it('should subscribe and acknowledge to receive empty list', function (done) {
+        backend.setData([]);
         expect(backend.acknowledge).not.toHaveBeenCalled();
         spec.sds = spec.$sync.subscribe('myPub');
         expect(spec.sds.isSyncing()).toBe(false);

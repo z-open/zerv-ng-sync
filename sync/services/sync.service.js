@@ -214,6 +214,7 @@ function syncProvider() {
 
             //  ----public----
             this.getPublication = getPublication;
+            this.getIdb = getId;
             this.ready = false;
             this.syncOn = syncOn;
             this.syncOff = syncOff;
@@ -264,7 +265,10 @@ function syncProvider() {
             attach(scope || $rootScope);
 
             ///////////////////////////////////////////
-
+            function getId() {
+                return subscriptionId;
+            }
+            
             function getPublication() {
                 return publication;
             }

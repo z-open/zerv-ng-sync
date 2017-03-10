@@ -15,34 +15,71 @@ function service() {
         return backend;
 
         function Db() {
-            var db = {};
+            var publications = [];
             this.setData = setData;
             this.getData = getData;
             this.update = update;
             this.remove = remove;
+            this.findPublication = findPublication;
+            this.findPublicationBySubscriptionId = findPublicationBySubscriptionId;
 
-            function setData(data) {
-                copyAll(data).forEach(function (record) {
-                    db[$sync.getIdValue(record)] = record;
+
+
+            function findPublicationBySubscriptionId(id) {
+                // find the data for this subscription
+                return _.find(publications, function (pub) {
+                    return _.indexOf(pub.ids, id) !== -1;
                 });
             }
 
-            function getData() {
-                return Object.keys(db).length ? _.values(db) : [];
+            function findPublication(subParams) {
+                // find the data for this subscription
+                return _.find(publications, function (pub) {
+                    return pub.publication === subParams.publication;
+                });
             }
 
-            function update(data) {
+            function setData(data, subParams) {
+                var pub = findPublication(subParams);
+                if (!pub) {
+                    pub = subParams;
+                    pub.data = {};
+                    pub.ids = [];
+                    publications.push(pub);
+                }
+
+                copyAll(data).forEach(function (record) {
+                    pub.data[$sync.getIdValue(record)] = record;
+                });
+            }
+
+            function getData(subParams) {
+                // find the data for this subscription
+                var pub = findPublication(subParams);
+                //return sub?sub.data:null;
+                return pub && Object.keys(pub.data).length ? _.values(pub.data) : [];
+            }
+
+            function update(data, subParams) {
+                var pub = findPublication(subParams);
+                if (!pub) {
+                    throw ('Call setData before update');
+                }
                 data = copyAll(data);
                 data.forEach(function (record) {
-                    db[$sync.getIdValue(record)] = record;
+                    pub.data[$sync.getIdValue(record)] = record;
                 });
                 return data;
             }
 
-            function remove(data) {
+            function remove(data, subParams) {
+                var pub = findPublication(subParams);
+                if (!pub) {
+                    throw ('Call setData before remove');
+                }
                 data = copyAll(data);
                 data.forEach(function (record) {
-                    delete db[$sync.getIdValue(record)];
+                    delete pub.data[$sync.getIdValue(record)];
                 });
                 return data;
             }
@@ -57,7 +94,8 @@ function service() {
         }
 
         function MockBackend() {
-            var db = new Db();
+            var publicationsWithSubscriptions = new Db();
+            var defaultSub = {};
             var subCount = 0;
 
             var isSubscribedOnBackend = false;
@@ -83,46 +121,76 @@ function service() {
                 return $socketio.send('SYNC_NOW', data, self.acknowledge);
             }
 
-            function setData(data) {
-                return db.setData(data);
+            function setData(data, subParams) {
+                subParams = subParams || defaultSub;
+                return publicationsWithSubscriptions.setData(data, subParams);
             }
 
-            function notifyDataChanges(data) {
-                data = db.update(data);
+            function notifyDataChanges(data, subParams) {
+                subscriptions = subParams ? publicationsWithSubscriptions.findPublication(subParams) : defaultSub;
+                data = publicationsWithSubscriptions.update(data, subscriptions);
                 if (isSubscribedOnBackend) {
-                    return self.onPublicationNotficationCallback({
-                        name: 'myPub',
-                        subscriptionId: 'sub#1',
-                        records: data,
-                        diff: true
-                    }, self.acknowledge);
+                    return notifySubscriptions(subscriptions, data);
                 }
             }
 
-            function notifyDataRemovals(data) {
-                data = db.remove(data);
+            function notifyDataRemovals(data, subParams) {
+                subscriptions = subParams ? publicationsWithSubscriptions.findPublication(subParams) : defaultSub;
+                data = publicationsWithSubscriptions.remove(data, subscriptions);
                 _.forEach(data, function (record) { record.remove = true; });
+
                 if (isSubscribedOnBackend) {
-                    self.onPublicationNotficationCallback({
-                        name: 'myPub',
-                        subscriptionId: 'sub#1',
-                        records: data,
-                        diff: true
-                    }, self.acknowledge);
+                    return notifySubscriptions(subscriptions, data);
                 }
             }
 
-            function subscribe(data) {
-                console.log('Subscribe ', data);
-                subCount++;
-                //                              return $q.resolve('sub#'+subCount).then(function (subId) {
+            function notifySubscriptions(publication, data) {
+                return $q.all(_.map(publication.ids, function (id) {
+                    return self.onPublicationNotficationCallback({
+                        name: publication.publication,
+                        subscriptionId: id,
+                        records: data,
+                        diff: true
+                    }, self.acknowledge);
+                }));
+            }
 
-                return $q.resolve('sub#1').then(function (subId) {
+            function subscribe(params) {
+                console.log('Subscribe ', params);
+                var subscriptions;
+                var subId;
+                if (!defaultSub.publication) {
+                    //defaultSub.publication = params.publication;
+                    _.assign(defaultSub, params);
+                    subscriptions = defaultSub;
+                    subId = 'sub#' + 0;
+                    subscriptions.ids = [subId];
+
+
+                } else {
+                    if (params.id) {
+                        subscriptions = publicationsWithSubscriptions.findPublicationBySubscriptionId(params.id);
+                        subId = params.id;
+                    } else {
+                        subscriptions = publicationsWithSubscriptions.findPublication(params);
+                        subId = 'sub#' + (++subCount);
+                        subscriptions.ids.push(subId);
+                    }
+                    if (!subscriptions) {
+                        throw new Error('Subscription was not initialized with setData.');
+                    }
+                }
+
+
+
+
+                return $q.resolve(subId).then(function (subId) {
+                    subscriptions.subId = subId;
                     isSubscribedOnBackend = true;
                     self.onPublicationNotficationCallback({
-                        name: 'myPub',
-                        subscriptionId: subId,
-                        records: db.getData()
+                        name: subscriptions.publication,
+                        subscriptionId: subscriptions.subId,
+                        records: publicationsWithSubscriptions.getData(subscriptions)
                     }, self.acknowledge);
                     return subId;
                 })

@@ -1,22 +1,26 @@
 describe('Sync Service: ', function () {
-    var $rootScope, $timeout, $q;
+    var $rootScope, $q;
     var backend;
     var spec;
 
 
-    beforeEach(module('sync')); // still depends on commont...until we create a bower/npm
+    beforeEach(module('sync'));
+    beforeEach(module('sync.test'));
 
-    beforeEach(module(function ($provide, $socketioProvider, $syncProvider) {
-        backend = new MockBackend();
-        $provide.value('$socketio', new MockSocketio());
+    beforeEach(module(function ($provide, 
+    //$socketioProvider,
+     $syncProvider, mockServerProvider) {
+    //    $provide.value('$socketio', mockServerProvider.socketio);
         $syncProvider.setDebug(2);
-        $socketioProvider.setDebug(true);
+      //  $socketioProvider.setDebug(true);
     }));
 
-    beforeEach(inject(function (_$rootScope_, _$sync_, _$q_, _$timeout_, _$syncGarbageCollector_, _$socketio_) {
+
+    beforeEach(inject(function (_$rootScope_, mockServer, _$sync_, _$q_, _$syncGarbageCollector_, _$socketio_) {
         $rootScope = _$rootScope_;
         $q = _$q_;
-        $timeout = _$timeout_;
+
+        backend = mockServer;
 
         var syncCallbacks = {
             onUpdate: function () { },
@@ -760,7 +764,7 @@ describe('Sync Service: ', function () {
         spec.sds.waitForDataReady().then(function (data) {
             // initial subscription call
             expect(spec.$socketio.fetch.calls.count()).toEqual(1);
-              backend.setData([spec.r3]);
+            backend.setData([spec.r3]);
             spec.sds.onReady(function () {
                 //expect(spec.sds.getData().length).toEqual(2);
                 done();
@@ -769,7 +773,7 @@ describe('Sync Service: ', function () {
             expect(spec.$socketio.fetch.calls.count()).toEqual(2);
             // 2nd subscription for reconnect
             expect(spec.$socketio.fetch.calls.mostRecent().args[0]).toEqual('sync.subscribe');
-            
+
             // spec.sds.waitForDataReady().then(function () {
 
             // });
@@ -815,114 +819,4 @@ describe('Sync Service: ', function () {
 
 
 
-    function MockBackend() {
-        var db = {};
-        var isSubscribedOnBackend = false;
-
-        var self = this;
-        this.onPublicationNotficationCallback = null;
-        this.setData = setData;
-        this.notifyDataChanges = notifyDataChanges;
-        this.notifyDataRemovals = notifyDataRemovals;
-        this.subscribe = subscribe;
-        this.unsubscribe = unsubscribe;
-        this.acknowledge = acknowledge;
-
-        function setData(data) {
-            copyAll(data).forEach(function (record) {
-                db[spec.$sync.getIdValue(record)] = record;
-            });
-        }
-
-        function copyAll(array) {
-            var r = [];
-            array.forEach(function (i) {
-                r.push(angular.copy(i));
-            })
-            return r;
-        }
-
-        function notifyDataChanges(data) {
-            data = copyAll(data);
-            data.forEach(function (record) {
-                db[spec.$sync.getIdValue(record)] = record;
-            })
-            if (isSubscribedOnBackend) {
-                return self.onPublicationNotficationCallback({
-                    name: 'myPub',
-                    subscriptionId: 'sub#1',
-                    records: data,
-                    diff: true
-                }, self.acknowledge);
-            }
-        }
-
-        function notifyDataRemovals(data) {
-            data = copyAll(data);
-            data.forEach(function (record) {
-                record.remove = true;
-                delete db[spec.$sync.getIdValue(record)];
-            });
-            if (isSubscribedOnBackend) {
-                self.onPublicationNotficationCallback({
-                    name: 'myPub',
-                    subscriptionId: 'sub#1',
-                    records: data,
-                    diff: true
-                }, self.acknowledge);
-            }
-        }
-
-        function subscribe(data) {
-            //console.log("fetch: " + operation, data);
-            return $q.resolve('sub#1').then(function (subId) {
-                isSubscribedOnBackend = true;
-                self.onPublicationNotficationCallback({
-                    name: 'myPub',
-                    subscriptionId: subId,
-                    records: Object.keys(db).length ? _.values(db) : []
-                }, self.acknowledge);
-                return subId;
-            })
-        }
-
-        function unsubscribe(data) {
-            console.log("Unsubscribed: " + JSON.stringify(data));
-            isSubscribedOnBackend = false;
-            return $q.resolve();
-        }
-
-        function acknowledge(ack) {
-            console.log('Client acknowledge receiving data');
-        }
-    }
-
-    function MockSocketio() {
-        var self = this;
-        this.network = true;
-
-        this.on = function (event, callback) {
-            // if (!self.network) {
-            //     return $q.defer().promise;
-            // }
-            console.log("ON: " + event);
-            if (event === 'SYNC_NOW') {
-                backend.onPublicationNotficationCallback = callback;
-            }
-        }
-        this.fetch = function (operation, data) {
-            if (!self.network) {
-                // never returns..
-                return $q.defer().promise;
-            }
-
-            if (operation === 'sync.subscribe') {
-                return backend.subscribe(data);
-            }
-            if (operation === 'sync.unsubscribe') {
-                return backend.unsubscribe(data);
-            }
-        }
-
-    }
 });

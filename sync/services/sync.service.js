@@ -50,8 +50,7 @@ function syncProvider() {
         var GRACE_PERIOD_IN_SECONDS = 8;
         var SYNC_VERSION = '1.2';
 
-
-        listenToSyncNotification();
+        listenToPublicationNotification();
 
         var service = {
             subscribe: subscribe,
@@ -135,7 +134,7 @@ function syncProvider() {
         // HELPERS
 
         // every sync notification comes thru the same event then it is dispatches to the targeted subscriptions.
-        function listenToSyncNotification() {
+        function listenToPublicationNotification() {
             $socketio.on(
                 'SYNC_NOW',
                 function (subNotification, fn) {

@@ -24,11 +24,10 @@ function service() {
             this.findPublicationBySubscriptionId = findPublicationBySubscriptionId;
 
 
-
             function findPublicationBySubscriptionId(id) {
                 // find the data for this subscription
                 return _.find(publications, function (pub) {
-                    return _.indexOf(pub.ids, id) !== -1;
+                    return _.indexOf(pub.subscriptionIds, id) !== -1;
                 });
             }
 
@@ -43,8 +42,9 @@ function service() {
                 var pub = findPublication(subParams);
                 if (!pub) {
                     pub = subParams;
+                    pub.name = subParams.publication;
                     pub.data = {};
-                    pub.ids = [];
+                    pub.subscriptionIds = [];
                     publications.push(pub);
                 }
 
@@ -95,7 +95,7 @@ function service() {
 
         function MockBackend() {
             var publicationsWithSubscriptions = new Db();
-            var defaultSub = {};
+            var defaultPublication = {};
             var subCount = 0;
 
             var isSubscribedOnBackend = false;
@@ -122,32 +122,33 @@ function service() {
             }
 
             function setData(data, subParams) {
-                subParams = subParams || defaultSub;
-                return publicationsWithSubscriptions.setData(data, subParams);
+                // wrong !!!
+                // if params are passed and cannot find a publication
+                // should create a new one here, 
+                // the setData should return the pub which would become the default one if not any!
+                
+                // now create a test to see if I can create multiple sync and test individually!
+                var publication = subParams ? publicationsWithSubscriptions.findPublication(subParams) : defaultPublication;
+                return publicationsWithSubscriptions.setData(data, publication);
             }
 
             function notifyDataChanges(data, subParams) {
-                subscriptions = subParams ? publicationsWithSubscriptions.findPublication(subParams) : defaultSub;
-                data = publicationsWithSubscriptions.update(data, subscriptions);
-                if (isSubscribedOnBackend) {
-                    return notifySubscriptions(subscriptions, data);
-                }
+                var publication = subParams ? publicationsWithSubscriptions.findPublication(subParams) : defaultPublication;
+                data = publicationsWithSubscriptions.update(data, publication);
+                return notifySubscriptions(publication, data);
             }
 
             function notifyDataRemovals(data, subParams) {
-                subscriptions = subParams ? publicationsWithSubscriptions.findPublication(subParams) : defaultSub;
-                data = publicationsWithSubscriptions.remove(data, subscriptions);
+                var publication = subParams ? publicationsWithSubscriptions.findPublication(subParams) : defaultPublication;
+                data = publicationsWithSubscriptions.remove(data, publication);
                 _.forEach(data, function (record) { record.remove = true; });
-
-                if (isSubscribedOnBackend) {
-                    return notifySubscriptions(subscriptions, data);
-                }
+                return notifySubscriptions(publication, data);
             }
 
             function notifySubscriptions(publication, data) {
-                return $q.all(_.map(publication.ids, function (id) {
+                return $q.all(_.map(publication.subscriptionIds, function (id) {
                     return self.onPublicationNotficationCallback({
-                        name: publication.publication,
+                        name: publication.name,
                         subscriptionId: id,
                         records: data,
                         diff: true
@@ -155,26 +156,28 @@ function service() {
                 }));
             }
 
-            function subscribe(params) {
-                console.log('Subscribe ', params);
+            function subscribe(subParams) {
+                console.log('Subscribe ', subParams);
                 var subscriptions;
                 var subId;
-                if (!defaultSub.publication) {
+                if (!defaultPublication.name) {
                     //defaultSub.publication = params.publication;
-                    _.assign(defaultSub, params);
-                    subscriptions = defaultSub;
+                    _.assign(defaultPublication, subParams);
+                    defaultPublication.name = subParams.publication;
+                    defaultPublication.params = subParams.params;
+                    subscriptions = defaultPublication;
                     subId = 'sub#' + 0;
-                    subscriptions.ids = [subId];
+                    subscriptions.subscriptionIds = [subId];
 
 
                 } else {
-                    if (params.id) {
-                        subscriptions = publicationsWithSubscriptions.findPublicationBySubscriptionId(params.id);
-                        subId = params.id;
+                    if (subParams.id) {
+                        subscriptions = publicationsWithSubscriptions.findPublicationBySubscriptionId(subParams.id);
+                        subId = subParams.id;
                     } else {
-                        subscriptions = publicationsWithSubscriptions.findPublication(params);
+                        subscriptions = publicationsWithSubscriptions.findPublication(subParams);
                         subId = 'sub#' + (++subCount);
-                        subscriptions.ids.push(subId);
+                        subscriptions.subscriptionIds.push(subId);
                     }
                     if (!subscriptions) {
                         throw new Error('Subscription was not initialized with setData.');

@@ -8,16 +8,16 @@ describe('Sync Service: ', function () {
     beforeEach(module('sync.test'));
 
     beforeEach(module(function ($provide,
-        $syncProvider, mockServerProvider) {
+        $syncProvider) {
         $syncProvider.setDebug(2);
     }));
 
 
-    beforeEach(inject(function (_$rootScope_, mockServer, _$sync_, _$q_, _$syncGarbageCollector_, _$socketio_) {
+    beforeEach(inject(function (_$rootScope_, mockSyncServer, _$sync_, _$q_, _$syncGarbageCollector_, _$socketio_) {
         $rootScope = _$rootScope_;
         $q = _$q_;
 
-        backend = mockServer;
+        backend = mockSyncServer;
 
         var syncCallbacks = {
             onUpdate: function () { },

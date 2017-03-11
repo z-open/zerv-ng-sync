@@ -1,8 +1,8 @@
 angular
     .module('sync.test')
-    .service('$socketio', MockSocketio);
+    .service('$socketio', mockSocketio);
 
-function MockSocketio($q) {
+function mockSocketio($q) {
 
     var self = this;
     this.network = true;

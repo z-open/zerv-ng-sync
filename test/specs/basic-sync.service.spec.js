@@ -1,4 +1,4 @@
-describe('Sync Service: ', function () {
+describe('Basic Sync Service: ', function () {
     var $rootScope, $q;
     var backend;
     var spec;
@@ -792,11 +792,6 @@ describe('Sync Service: ', function () {
     });
 
 
-    //         make sure notif and sync works in the app...
-    // make sure that callbacks are unregistered
-    // then test with params...$q
-
-    // maybe make sure subscribe received subId before sending sync-now...but involved working on server..
 
     //////////////////////////////////////////////
     function definePersonClass() {

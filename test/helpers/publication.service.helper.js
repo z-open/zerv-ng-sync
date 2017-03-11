@@ -23,7 +23,10 @@ function publicationService($sync) {
     function findPublication(subParams) {
         // find the data for this subscription
         return _.find(publications, function (pub) {
-            return pub.publication === subParams.publication;
+            return pub.publication === subParams.publication && (
+                (subParams.params && pub.params && _.isEqual(subParams.params, pub.params)) ||
+                (!subParams.params && !pub.params)
+            );
         });
     }
 
@@ -40,6 +43,7 @@ function publicationService($sync) {
         copyAll(data).forEach(function (record) {
             pub.data[$sync.getIdValue(record)] = record;
         });
+        return pub;
     }
 
     function getData(subParams) {

@@ -14,12 +14,14 @@ function mockSyncServer($q, $socketio, $sync, publicationService) {
     var self = this;
     this.onPublicationNotficationCallback = onPublicationNotficationCallback;
     this.setData = setData;
+    this.setArrayData = setArrayData;
+    this.setObjectData = setObjectData;
     this.notifyDataChanges = notifyDataChanges;
     this.notifyDataRemovals = notifyDataRemovals;
     this.subscribe = subscribe;
     this.unsubscribe = unsubscribe;
     this.acknowledge = acknowledge;
-    
+
 
     $socketio.onFetch('sync.subscribe', function () {
         return self.subscribe.apply(self, arguments);
@@ -33,15 +35,15 @@ function mockSyncServer($q, $socketio, $sync, publicationService) {
         return $socketio.send('SYNC_NOW', data, self.acknowledge);
     }
 
-    function setData(data, subParams) {
-        // wrong !!!
-        // if params are passed and cannot find a publication
-        // should create a new one here, 
-        // the setData should return the pub which would become the default one if not any!
+    function setArrayData(data, subParams) {
+        setData(data, subParams);
+    }
+    function setObjectData(obj, subParams) {
+        setData([obj], subParams);
+    }
 
-        // now create a test to see if I can create multiple sync and test individually!
-        var publication = subParams ? publicationsWithSubscriptions.findPublication(subParams) : defaultPublication;
-        return publicationsWithSubscriptions.setData(data, publication);
+    function setData(data, subParams) {
+        var publication = publicationsWithSubscriptions.setData(data, subParams || defaultPublication);
     }
 
     function notifyDataChanges(data, subParams) {
@@ -80,24 +82,23 @@ function mockSyncServer($q, $socketio, $sync, publicationService) {
             subscriptions = defaultPublication;
             subId = 'sub#' + 0;
             subscriptions.subscriptionIds = [subId];
-
-
         } else {
             if (subParams.id) {
                 subscriptions = publicationsWithSubscriptions.findPublicationBySubscriptionId(subParams.id);
                 subId = subParams.id;
+                if (!subscriptions) {
+                    throw new Error('Subscription with id [' + subParams.id + '] does not exist.');
+                }
             } else {
                 subscriptions = publicationsWithSubscriptions.findPublication(subParams);
+                if (!subscriptions) {
+                    throw new Error('Subscription [' + JSON.stringify(subParams) + '] was not initialized with setData. Check your unit test setup.');
+                }
                 subId = 'sub#' + (++subCount);
                 subscriptions.subscriptionIds.push(subId);
             }
-            if (!subscriptions) {
-                throw new Error('Subscription was not initialized with setData.');
-            }
+
         }
-
-
-
 
         return $q.resolve(subId).then(function (subId) {
             subscriptions.subId = subId;

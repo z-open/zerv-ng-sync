@@ -41,7 +41,7 @@ function publicationService($sync) {
         }
 
         copyAll(data).forEach(function (record) {
-            pub.data[$sync.getIdValue(record)] = record;
+            pub.data[$sync.getIdValue(record.id)] = record;
         });
         return pub;
     }
@@ -56,11 +56,11 @@ function publicationService($sync) {
     function update(data, subParams) {
         var pub = findPublication(subParams);
         if (!pub) {
-            throw ('Call setData before update');
+            throw ('Attempt to update data from a publication that does NOT exist. You must set the publication during the unit test setup phase (use setData functions).');
         }
         data = copyAll(data);
         data.forEach(function (record) {
-            pub.data[$sync.getIdValue(record)] = record;
+            pub.data[$sync.getIdValue(record.id)] = record;
         });
         return data;
     }
@@ -68,11 +68,11 @@ function publicationService($sync) {
     function remove(data, subParams) {
         var pub = findPublication(subParams);
         if (!pub) {
-            throw ('Call setData before remove');
+            throw ('Attempt to remove data from a publication that does NOT exist. You must set the publication during the unit test setup phase (use setData functions).');
         }
         data = copyAll(data);
         data.forEach(function (record) {
-            delete pub.data[$sync.getIdValue(record)];
+            delete pub.data[$sync.getIdValue(record.id)];
         });
         return data;
     }

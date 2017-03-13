@@ -42,8 +42,21 @@ function mockSyncServer($q, $socketio, $sync, publicationService) {
         setData([obj], subParams);
     }
 
+    /**
+     * @param data
+     * @param <object> subParams
+     *   which contains publication and params
+     *   if not provided, a default publication will be created
+     */
     function setData(data, subParams) {
-        var publication = publicationsWithSubscriptions.setData(data, subParams || defaultPublication);
+        // if (!defaultPublication){
+        //      defaultPublication = _.assign({ name: subParams.publication }, subParams); 
+        // }
+        if (!subParams) {
+            return publicationsWithSubscriptions.setData(data, defaultPublication)
+        }
+        defaultPublication = _.assign({ name: subParams.publication }, subParams);
+        return publicationsWithSubscriptions.setData(data, subParams);
     }
 
     function notifyDataChanges(data, subParams) {
@@ -92,7 +105,7 @@ function mockSyncServer($q, $socketio, $sync, publicationService) {
             } else {
                 subscriptions = publicationsWithSubscriptions.findPublication(subParams);
                 if (!subscriptions) {
-                    throw new Error('Subscription [' + JSON.stringify(subParams) + '] was not initialized with setData. Check your unit test setup.');
+                    throw new Error('Subscription [' + JSON.stringify(subParams) + '] was not initialized with setData. You must define the data that the subscription will receive when initializing during your unit test setup phase (Data).');
                 }
                 subId = 'sub#' + (++subCount);
                 subscriptions.subscriptionIds.push(subId);

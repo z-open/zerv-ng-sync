@@ -41,22 +41,23 @@ describe('Multi Sync Service: ', function () {
     }));
 
     beforeEach(function setupData() {
-        spec.biz1 = new Business({ id: 1, name: 'biz1', revision: 0, managerId: '1' });
+        spec.biz1 = new Business({ id: 1, name: 'biz1', revision: 0, managerId: 1 });
         spec.biz1b = new Business({ id: 1, name: 'bizOne', revision: 1 });
         spec.biz2 = new Business({ id: 2, name: 'biz2', revision: 4 });
-        spec.biz3 = new Business({ id: 3, name: 'biz3', revision: 5 });
+        spec.biz3 = new Business({ id: 3, name: 'biz3', revision: 5, managerId: 3 });
         spec.recordWithNoRevision = { id: 44, name: 'biz44' };
 
-        spec.person1 = { id: { id1: 1, id2: 1 }, name: 'person1', revision: 0 };
-        spec.person1b = { id: { id1: 1, id2: 1 }, name: 'personOne', revision: 1 };
-        spec.person2 = { id: { id1: 2, id2: 1 }, name: 'person2', revision: 4 };
-        spec.person3 = { id: { id1: 3, id2: 1 }, name: 'person3', revision: 5 };
+        // spec.person1 = { id: { id1: 1, id2: 1 }, name: 'person1', revision: 0 };
+        // spec.person1b = { id: { id1: 1, id2: 1 }, name: 'personOne', revision: 1 };
+        // spec.person2 = { id: { id1: 2, id2: 1 }, name: 'person2', revision: 4 };
+        // spec.person3 = { id: { id1: 3, id2: 1 }, name: 'person3', revision: 5 };
 
 
         Person = definePersonClass();
         spec.p1 = new Person({ id: 1, firstname: 'Tom', lastname: 'Great', revision: 1 });
         spec.p1b = new Person({ id: 1, firstname: 'Tom', lastname: 'Greater', revision: 2 });
         spec.p2 = new Person({ id: 2, firstname: 'John', lastname: 'Super', revision: 1 });
+        spec.p3 = new Person({ id: 3, firstname: 'Mateo', lastname: 'Nexto', revision: 0 });
     });
 
 
@@ -85,7 +86,7 @@ describe('Multi Sync Service: ', function () {
     describe('Subscribing to one subscription mapping subscription ', function () {
         beforeEach(function setupSpies() {
             bizSubParams = { publication: 'businesses.pub', params: {} };
-            personSubParams = { publication: 'person.pub', params: { id: '1' } };
+            personSubParams = { publication: 'person.pub', params: { id:  spec.p1.id } };
             backend.setArrayData(bizSubParams, [spec.biz1, spec.biz2]);
             backend.setObjectData(personSubParams, spec.p1);
 
@@ -123,6 +124,45 @@ describe('Multi Sync Service: ', function () {
             $rootScope.$digest();
         });
 
+        describe(', Syncing to add a new object with its dependent ', function () {
+            beforeEach(function (done) {
+                backend.setObjectData({ publication: 'person.pub', params: { id: spec.p3.id } }, spec.p3);
+
+                var promise = spec.sds.waitForDataReady()
+                    .then(function (data) {
+                        expect(data.length).toBe(2);
+
+                        done();
+
+                    });
+                $rootScope.$digest();
+            });
+            
+            it('should add a new object', function (done) {
+                var data = spec.sds.getData();
+                backend.notifyDataChanges(bizSubParams, [spec.biz3])
+                    .then(function () {
+                        expect(data.length).toBe(3);
+                        var rec = _.find(data, { id: spec.biz3.id });
+                        expect(rec.name).toBe(spec.biz3.name);
+                        done();
+                    });
+
+            });
+
+            it('should set the dependent object within the main object', function (done) {
+                var data = spec.sds.getData();
+                backend.notifyDataChanges(bizSubParams, [spec.biz3])
+                    .then(function () {
+                        expect(data.length).toBe(3);
+                        var rec = _.find(data, { id: spec.biz3.id });
+                        expect(rec.manager).toEqual(spec.p3);
+                        done();
+                    });
+
+            });
+        });
+
         it('should sync main object with an update', function (done) {
 
             var promise = spec.sds.waitForDataReady()
@@ -139,6 +179,21 @@ describe('Multi Sync Service: ', function () {
             $rootScope.$digest();
         });
 
+        it('should sync dependent object with an update and update main object', function (done) {
+
+            var promise = spec.sds.waitForDataReady()
+                .then(function (data) {
+                    expect(data.length).toBe(2);
+                    var rec = _.find(data, { id: spec.biz1.id });
+                    backend.notifyDataChanges(personSubParams, [spec.p1b])
+                        .then(function () {
+                            expect(data.length).toBe(2);
+                            expect(rec.manager.name).toBe(spec.p1b.name);
+                            done();
+                        });
+                });
+            $rootScope.$digest();
+        });
     });
 
     //////////////////////////////////////////////

@@ -23,7 +23,7 @@ function publicationService($sync) {
     function findPublication(subParams) {
         // find the data for this subscription
         return _.find(publications, function (pub) {
-            return pub.publication === subParams.publication && (
+            return pub.name === subParams.publication && (
                 (subParams.params && pub.params && _.isEqual(subParams.params, pub.params)) ||
                 (!subParams.params && !pub.params)
             );
@@ -33,8 +33,9 @@ function publicationService($sync) {
     function setData(data, subParams) {
         var pub = findPublication(subParams);
         if (!pub) {
-            pub = subParams;
+            pub = {};//_.assign({},subParams);
             pub.name = subParams.publication;
+            pub.params = subParams.params || {};
             pub.data = {};
             pub.subscriptionIds = [];
             publications.push(pub);

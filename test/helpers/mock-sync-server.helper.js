@@ -6,7 +6,7 @@ angular
 function mockSyncServer($q, $socketio, $sync, publicationService) {
 
     var publicationsWithSubscriptions = publicationService;
-    var defaultPublication = {};
+
     var subCount = 0;
 
     var isSubscribedOnBackend = false;
@@ -35,11 +35,11 @@ function mockSyncServer($q, $socketio, $sync, publicationService) {
         return $socketio.send('SYNC_NOW', data, self.acknowledge);
     }
 
-    function setArrayData(data, subParams) {
-        setData(data, subParams);
+    function setArrayData(subParams, data) {
+        setData(subParams, data);
     }
-    function setObjectData(obj, subParams) {
-        setData([obj], subParams);
+    function setObjectData(subParams, obj) {
+        setData(subParams, [obj]);
     }
 
     /**
@@ -48,26 +48,19 @@ function mockSyncServer($q, $socketio, $sync, publicationService) {
      *   which contains publication and params
      *   if not provided, a default publication will be created
      */
-    function setData(data, subParams) {
-        // if (!defaultPublication){
-        //      defaultPublication = _.assign({ name: subParams.publication }, subParams); 
-        // }
-        if (!subParams) {
-            return publicationsWithSubscriptions.setData(data, defaultPublication)
-        }
-        defaultPublication = _.assign({ name: subParams.publication }, subParams);
+    function setData(subParams, data) {
         return publicationsWithSubscriptions.setData(data, subParams);
     }
 
-    function notifyDataChanges(data, subParams) {
-        var publication = subParams ? publicationsWithSubscriptions.findPublication(subParams) : defaultPublication;
-        data = publicationsWithSubscriptions.update(data, publication);
+    function notifyDataChanges(subParams, data) {
+        var publication = publicationsWithSubscriptions.findPublication(subParams);
+        data = publicationsWithSubscriptions.update(data, subParams);
         return notifySubscriptions(publication, data);
     }
 
-    function notifyDataRemovals(data, subParams) {
-        var publication = subParams ? publicationsWithSubscriptions.findPublication(subParams) : defaultPublication;
-        data = publicationsWithSubscriptions.remove(data, publication);
+    function notifyDataRemovals(subParams, data) {
+        var publication = publicationsWithSubscriptions.findPublication(subParams);
+        data = publicationsWithSubscriptions.remove(data, subParams);
         _.forEach(data, function (record) { record.remove = true; });
         return notifySubscriptions(publication, data);
     }
@@ -87,39 +80,31 @@ function mockSyncServer($q, $socketio, $sync, publicationService) {
         console.log('Subscribe ', subParams);
         var subscriptions;
         var subId;
-        if (!defaultPublication.name) {
-            //defaultSub.publication = params.publication;
-            _.assign(defaultPublication, subParams);
-            defaultPublication.name = subParams.publication;
-            defaultPublication.params = subParams.params;
-            subscriptions = defaultPublication;
-            subId = 'sub#' + 0;
-            subscriptions.subscriptionIds = [subId];
-        } else {
-            if (subParams.id) {
-                subscriptions = publicationsWithSubscriptions.findPublicationBySubscriptionId(subParams.id);
-                subId = subParams.id;
-                if (!subscriptions) {
-                    throw new Error('Subscription with id [' + subParams.id + '] does not exist.');
-                }
-            } else {
-                subscriptions = publicationsWithSubscriptions.findPublication(subParams);
-                if (!subscriptions) {
-                    throw new Error('Subscription [' + JSON.stringify(subParams) + '] was not initialized with setData. You must define the data that the subscription will receive when initializing during your unit test setup phase (Data).');
-                }
-                subId = 'sub#' + (++subCount);
-                subscriptions.subscriptionIds.push(subId);
-            }
 
+        if (subParams.id) {
+            subscriptions = publicationsWithSubscriptions.findPublicationBySubscriptionId(subParams.id);
+            subId = subParams.id;
+            if (!subscriptions) {
+                throw new Error('Subscription with id [' + subParams.id + '] does not exist.');
+            }
+        } else {
+            subscriptions = publicationsWithSubscriptions.findPublication(subParams);
+            if (!subscriptions) {
+                throw new Error('Subscription [' + JSON.stringify(subParams) + '] was not initialized with setData. You must define the data that the subscription will receive when initializing during your unit test setup phase (Data).');
+            }
+            subId = 'sub#' + (++subCount);
+            subscriptions.subscriptionIds.push(subId);
         }
+
+
 
         return $q.resolve(subId).then(function (subId) {
             subscriptions.subId = subId;
             isSubscribedOnBackend = true;
             self.onPublicationNotficationCallback({
-                name: subscriptions.publication,
-                subscriptionId: subscriptions.subId,
-                records: publicationsWithSubscriptions.getData(subscriptions)
+                name: subscriptions.name,
+                subscriptionId: subId,
+                records: _.values(subscriptions.data),//publicationsWithSubscriptions.getData(subscriptions)
             }, self.acknowledge);
             return subId;
         })

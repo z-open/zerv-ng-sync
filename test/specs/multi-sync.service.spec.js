@@ -86,8 +86,8 @@ describe('Multi Sync Service: ', function () {
         beforeEach(function setupSpies() {
             bizSubParams = { publication: 'businesses.pub', params: {} };
             personSubParams = { publication: 'person.pub', params: { id: '1' } };
-            backend.setArrayData([spec.biz1, spec.biz2], bizSubParams);
-            backend.setObjectData(spec.p1, personSubParams);
+            backend.setArrayData(bizSubParams, [spec.biz1, spec.biz2]);
+            backend.setObjectData(personSubParams, spec.p1);
 
             expect(backend.acknowledge).not.toHaveBeenCalled();
             spec.sds = spec.$sync
@@ -129,7 +129,7 @@ describe('Multi Sync Service: ', function () {
                 .then(function (data) {
                     expect(data.length).toBe(2);
                     var rec = _.find(data, { id: spec.biz1.id });
-                    backend.notifyDataChanges([spec.biz1b],bizSubParams)
+                    backend.notifyDataChanges(bizSubParams, [spec.biz1b])
                         .then(function () {
                             expect(data.length).toBe(2);
                             expect(rec.name).toBe(spec.biz1b.name);

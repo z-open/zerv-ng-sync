@@ -9,8 +9,6 @@ function mockSyncServer($q, $socketio, $sync, publicationService) {
 
     var subCount = 0;
 
-    var isSubscribedOnBackend = false;
-
     var self = this;
     this.onPublicationNotficationCallback = onPublicationNotficationCallback;
     this.setData = setData;
@@ -49,18 +47,27 @@ function mockSyncServer($q, $socketio, $sync, publicationService) {
      *   if not provided, a default publication will be created
      */
     function setData(subParams, data) {
-        return publicationsWithSubscriptions.setData(data, subParams);
+        return publicationsWithSubscriptions.setData(data, subParams.publication, subParams.params);
     }
 
     function notifyDataChanges(subParams, data) {
-        var publication = publicationsWithSubscriptions.findPublication(subParams);
-        data = publicationsWithSubscriptions.update(data, subParams);
+        var publication = publicationsWithSubscriptions.findPublication(subParams.publication, subParams.params);
+
+        if (!publication) {
+            throw ('Attempt to update data from a publication that does NOT exist. You must set the publication data during the unit test setup phase (use setData functions).');
+        }
+        data = publication.update(data);
         return notifySubscriptions(publication, data);
     }
 
     function notifyDataRemovals(subParams, data) {
-        var publication = publicationsWithSubscriptions.findPublication(subParams);
-        data = publicationsWithSubscriptions.remove(data, subParams);
+        var publication = publicationsWithSubscriptions.findPublication(subParams.publication, subParams.params);
+
+        if (!publication) {
+            throw ('Attempt to remove data from a publication that does NOT exist. You must set the publication data during the unit test setup phase (use setData functions).');
+        }
+
+        data = publication.remove(data);
         _.forEach(data, function (record) { record.remove = true; });
         return notifySubscriptions(publication, data);
     }
@@ -78,33 +85,32 @@ function mockSyncServer($q, $socketio, $sync, publicationService) {
 
     function subscribe(subParams) {
         console.log('Subscribe ', subParams);
-        var subscriptions;
+        var publications;
         var subId;
 
         if (subParams.id) {
-            subscriptions = publicationsWithSubscriptions.findPublicationBySubscriptionId(subParams.id);
+            publications = publicationsWithSubscriptions.findPublicationBySubscriptionId(subParams.id);
             subId = subParams.id;
-            if (!subscriptions) {
+            if (!publications) {
                 throw new Error('Subscription with id [' + subParams.id + '] does not exist.');
             }
         } else {
-            subscriptions = publicationsWithSubscriptions.findPublication(subParams);
-            if (!subscriptions) {
+            publications = publicationsWithSubscriptions.findPublication(subParams.publication, subParams.params);
+            if (!publications) {
                 throw new Error('Subscription [' + JSON.stringify(subParams) + '] was not initialized with setData. You must define the data that the subscription will receive when initializing during your unit test setup phase (Data).');
             }
             subId = 'sub#' + (++subCount);
-            subscriptions.subscriptionIds.push(subId);
+            publications.subscriptionIds.push(subId);
         }
 
 
 
         return $q.resolve(subId).then(function (subId) {
-            subscriptions.subId = subId;
-            isSubscribedOnBackend = true;
+            publications.subId = subId;
             self.onPublicationNotficationCallback({
-                name: subscriptions.name,
+                name: publications.name,
                 subscriptionId: subId,
-                records: _.values(subscriptions.data),//publicationsWithSubscriptions.getData(subscriptions)
+                records: publications.getData(),
             }, self.acknowledge);
             return subId;
         })
@@ -112,7 +118,6 @@ function mockSyncServer($q, $socketio, $sync, publicationService) {
 
     function unsubscribe(data) {
         console.log("Unsubscribed: ", data);
-        isSubscribedOnBackend = false;
         return $q.resolve();
     }
 

@@ -7,8 +7,6 @@ function publicationService($sync) {
     var publications = [];
     this.setData = setData;
     this.getData = getData;
-    this.update = update;
-    this.remove = remove;
     this.findPublication = findPublication;
     this.findPublicationBySubscriptionId = findPublicationBySubscriptionId;
 
@@ -20,63 +18,32 @@ function publicationService($sync) {
         });
     }
 
-    function findPublication(subParams) {
+    function findPublication(name, params) {
         // find the data for this subscription
         return _.find(publications, function (pub) {
-            return pub.name === subParams.publication && (
-                (subParams.params && pub.params && _.isEqual(subParams.params, pub.params)) ||
-                (!subParams.params && !pub.params)
+            return pub.name === name && (
+                (params && pub.params && _.isEqual(params, pub.params)) ||
+                (!params && !pub.params)
             );
         });
     }
 
-    function setData(data, subParams) {
-        var pub = findPublication(subParams);
+    function setData(data, name, params) {
+        var pub = findPublication(name, params);
         if (!pub) {
-            pub = {};//_.assign({},subParams);
-            pub.name = subParams.publication;
-            pub.params = subParams.params || {};
-            pub.data = {};
-            pub.subscriptionIds = [];
+            pub = new Publication(name, params);
             publications.push(pub);
         }
-
-        copyAll(data).forEach(function (record) {
-            pub.data[$sync.getIdValue(record.id)] = record;
-        });
+        pub.reset(data);
         return pub;
     }
 
-    function getData(subParams) {
+    function getData(publication, params) {
         // find the data for this subscription
-        var pub = findPublication(subParams);
-        //return sub?sub.data:null;
+        var pub = findPublication(publication, params);
         return pub && Object.keys(pub.data).length ? _.values(pub.data) : [];
     }
 
-    function update(data, subParams) {
-        var pub = findPublication(subParams);
-        if (!pub) {
-            throw ('Attempt to update data from a publication that does NOT exist. You must set the publication during the unit test setup phase (use setData functions).');
-        }
-        data = copyAll(data);
-        data.forEach(function (record) {
-            pub.data[$sync.getIdValue(record.id)] = record;
-        });
-        return data;
-    }
-
-    function remove(data, subParams) {
-        var pub = findPublication(subParams);
-        if (!pub) {
-            throw ('Attempt to remove data from a publication that does NOT exist. You must set the publication during the unit test setup phase (use setData functions).');
-        }
-        data = copyAll(data);
-        data.forEach(function (record) {
-            delete pub.data[$sync.getIdValue(record.id)];
-        });
-        return data;
-    }
 
     function copyAll(array) {
         var r = [];
@@ -84,6 +51,41 @@ function publicationService($sync) {
             r.push(angular.copy(i));
         })
         return r;
+    }
+
+    function Publication(name, params) {
+        this.cache={};
+        this.name = name;
+        this.params = params || {};
+        this.subscriptionIds = [];
+    }
+
+    Publication.prototype.reset = function (data) {
+        this.cache = {};
+        this.update(data);
+        return data;
+    }
+
+    Publication.prototype.update = function (data) {
+        var self = this;
+        data = copyAll(data);
+        data.forEach(function (record) {
+            self.cache[$sync.getIdValue(record.id)] = record;
+        });
+        return data;
+    }
+
+    Publication.prototype.remove = function (data) {
+        var self = this;
+        data = copyAll(data);
+        data.forEach(function (record) {
+            delete self.cache[$sync.getIdValue(record.id)];
+        });
+        return data;
+    }
+
+    Publication.prototype.getData = function () {
+        return _.values(this.cache);
     }
 }
 

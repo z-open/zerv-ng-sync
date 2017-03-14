@@ -31,17 +31,6 @@ function mockSyncServer() {
             unsubscribe: unsubscribe,
             acknowledge: acknowledge,
         }
-        var self = service;
-        // this.onPublicationNotficationCallback = onPublicationNotficationCallback;
-        // this.setData = setData;
-        // this.publishArray = publishArray;
-        // this.publishObject = publishObject;
-        // this.notifyDataChanges = notifyDataChanges;
-        // this.notifyDataRemovals = notifyDataRemovals;
-        // this.subscribe = subscribe;
-        // this.unsubscribe = unsubscribe;
-        // this.acknowledge = acknowledge;
-
 
         $socketio.onFetch('sync.subscribe', function () {
             return service.subscribe.apply(self, arguments);
@@ -58,9 +47,15 @@ function mockSyncServer() {
         }
 
         function publishArray(subParams, data) {
+            if (!_.isArray(data)) {
+                throw new Error('Parameter data must be an array');
+            }
             setData(subParams, data);
         }
         function publishObject(subParams, obj) {
+            if (!_.isObject(obj) || _.isArray(obj)) {
+                throw new Error('Parameter obj must be an object including publication and params fields');
+            }
             setData(subParams, [obj]);
         }
 
@@ -106,6 +101,7 @@ function mockSyncServer() {
                 return onPublicationNotficationCallback({
                     name: publication.name,
                     subscriptionId: id,
+                    params: publication.params,
                     records: data,
                     diff: true
                 }, service.acknowledge);
@@ -113,33 +109,35 @@ function mockSyncServer() {
         }
 
         function subscribe(subParams) {
+            subParams = _.omit(subParams, ['version']);
             logDebug('Subscribe ', subParams);
-            var publications;
+            var publication;
             var subId;
 
             if (subParams.id) {
-                publications = publicationsWithSubscriptions.findPublicationBySubscriptionId(subParams.id);
+                publication = publicationsWithSubscriptions.findPublicationBySubscriptionId(subParams.id);
                 subId = subParams.id;
-                if (!publications) {
+                if (!publication) {
                     throw new Error('Subscription with id [' + subParams.id + '] does not exist.');
                 }
             } else {
-                publications = publicationsWithSubscriptions.findPublication(subParams.publication, subParams.params);
-                if (!publications) {
-                    throw new Error('Subscription [' + JSON.stringify(subParams) + '] was not initialized with setData. You must define the data that the subscription will receive when initializing during your unit test setup phase (Data).');
+                publication = publicationsWithSubscriptions.findPublication(subParams.publication, subParams.params);
+                if (!publication) {
+                    throw new Error('Publication [' + JSON.stringify(subParams) + '] was NOT initialized before use. You must create this publication in your unit test setup phase (use a publish function). Then only the subscription will be able to receive its data.');
                 }
                 subId = 'sub#' + (++subCount);
-                publications.subscriptionIds.push(subId);
+                publication.subscriptionIds.push(subId);
             }
 
 
 
             return $q.resolve(subId).then(function (subId) {
-                publications.subId = subId;
+                publication.subId = subId;
                 onPublicationNotficationCallback({
-                    name: publications.name,
-                    subscriptionId: subId,
-                    records: publications.getData(),
+                    name: publication.name,
+                    subscriptionId: subId,  // this is the id for the new subscription.
+                    params: publication.params,
+                    records: publication.getData(),
                 }, service.acknowledge);
                 return subId;
             })

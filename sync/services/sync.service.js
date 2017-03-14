@@ -686,7 +686,7 @@ function syncProvider() {
              *  @returns all the subscriptions linked to this object
              */
             function createObjectDependentSubscriptions(obj) {
-                logDebug('Sync -> creating object dependent subscription for subscription to ' + publication);
+                logDebug('Sync -> creating object dependent subscription(s) of subscription ' + thisSub);
                 var subscriptions = [];
                 _.forEach(dependentSubscriptionDefinitions,
                     function (dependentSubDef) {

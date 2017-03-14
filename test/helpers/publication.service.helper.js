@@ -54,7 +54,7 @@ function publicationService($sync) {
     }
 
     function Publication(name, params) {
-        this.cache={};
+        this.cache = {};
         this.name = name;
         this.params = params || {};
         this.subscriptionIds = [];

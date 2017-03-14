@@ -1,3 +1,101 @@
+(function() {
+"use strict";
+
+angular
+    .module('sync.test', []);
+}());
+
+(function() {
+"use strict";
+
+angular
+    .module('sync.test')
+    .provider('$socketio', mockSocketio);
+
+function mockSocketio() {
+
+    var debug;
+
+    this.setDebug = function (value) {
+        debug = value;
+    };
+
+
+    this.$get =
+        ["$q", function ($q) {
+
+            var self = this;
+            this.network = true;
+            var events = {},
+                fetches = {};
+
+
+            this.onFetch = onFetch;
+            this.send = send;
+
+            this.on = on;
+            this.fetch = fetch;
+
+            return this;
+
+            /**
+             *  Register the call back that will be executed on the server side when fetch is called by the client
+             */
+            function onFetch(operation, callback) {
+                logDebug('registering fetch operation [' + operation + '] callback.');
+                fetches[operation] = callback;
+            }
+
+            /** 
+             *  Send data thru the socket to the client from the server side
+             *  This will trigger the event callback on the client side
+             * 
+             */
+            function send(event, data, acknowledge) {
+                var callback = events[event];
+                if (callback) {
+                    return callback(data, acknowledge);
+                }
+                return null;
+            }
+
+            /**
+             * the client registers to listen so specific event whose server will use to send data to.
+             */
+            function on(event, callback) {
+                // if (!self.network) {
+                //     return $q.defer().promise;
+                // }
+                logDebug('registering ON event [' + event + '] callback.');
+                events[event] = callback;
+            }
+
+            /**
+             *  The client uses fetch to send data over the server.
+             *  Server will react to the fetch via the callback registered with onFetch
+             */
+            function fetch(operation, data) {
+                if (!self.network) {
+                    // never returns..
+                    return $q.defer().promise;
+                }
+                var fn = fetches[operation];
+                if (fn) {
+                    logDebug('Fetching ' + operation + ' - ', data);
+                    return fn(data);
+                }
+            }
+            function logDebug(msg) {
+                if (debug) {
+                    console.debug('SOCKETIO: ' + msg);
+                }
+            }
+        }]
+}
+}());
+
+(function() {
+"use strict";
 
 angular
     .module('sync.test')
@@ -12,7 +110,7 @@ function mockSyncServer() {
     };
 
 
-    this.$get = function sync($q, $socketio, $sync, publicationService) {
+    this.$get = ["$q", "$socketio", "$sync", "publicationService", function sync($q, $socketio, $sync, publicationService) {
 
         var publicationsWithSubscriptions = publicationService;
 
@@ -159,11 +257,101 @@ function mockSyncServer() {
                 console.debug('MOCKSERV: ' + msg);
             }
         }
+    }]
+}
+}());
+
+(function() {
+"use strict";
+
+publicationService.$inject = ["$sync"];
+angular
+    .module('sync.test')
+    .service('publicationService', publicationService);
+
+function publicationService($sync) {
+    var publications = [];
+    this.setData = setData;
+    this.getData = getData;
+    this.findPublication = findPublication;
+    this.findPublicationBySubscriptionId = findPublicationBySubscriptionId;
+
+
+    function findPublicationBySubscriptionId(id) {
+        // find the data for this subscription
+        return _.find(publications, function (pub) {
+            return _.indexOf(pub.subscriptionIds, id) !== -1;
+        });
+    }
+
+    function findPublication(name, params) {
+        // find the data for this subscription
+        return _.find(publications, function (pub) {
+            return pub.name === name && (
+                (params && pub.params && _.isEqual(params, pub.params)) ||
+                (!params && !pub.params)
+            );
+        });
+    }
+
+    function setData(data, name, params) {
+        var pub = findPublication(name, params);
+        if (!pub) {
+            pub = new Publication(name, params);
+            publications.push(pub);
+        }
+        pub.reset(data);
+        return pub;
+    }
+
+    function getData(publication, params) {
+        // find the data for this subscription
+        var pub = findPublication(publication, params);
+        return pub && Object.keys(pub.data).length ? _.values(pub.data) : [];
+    }
+
+
+    function copyAll(array) {
+        var r = [];
+        array.forEach(function (i) {
+            r.push(angular.copy(i));
+        })
+        return r;
+    }
+
+    function Publication(name, params) {
+        this.cache = {};
+        this.name = name;
+        this.params = params || {};
+        this.subscriptionIds = [];
+    }
+
+    Publication.prototype.reset = function (data) {
+        this.cache = {};
+        this.update(data);
+        return data;
+    }
+
+    Publication.prototype.update = function (data) {
+        var self = this;
+        data = copyAll(data);
+        data.forEach(function (record) {
+            self.cache[$sync.getIdValue(record.id)] = record;
+        });
+        return data;
+    }
+
+    Publication.prototype.remove = function (data) {
+        var self = this;
+        data = copyAll(data);
+        data.forEach(function (record) {
+            delete self.cache[$sync.getIdValue(record.id)];
+        });
+        return data;
+    }
+
+    Publication.prototype.getData = function () {
+        return _.values(this.cache);
     }
 }
-
-
-
-
-
-
+}());

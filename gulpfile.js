@@ -62,8 +62,12 @@ var consolidate = require('gulp-consolidate');
 
 // All application JS files.
 var appFiles = [
-//'api/models/**/*.model.js',
+    //'api/models/**/*.model.js',
     'sync/**/*.js'];
+
+var mockFiles = [
+    //'api/models/**/*.model.js',
+    'test/helpers/**/*.js'];
 
 //////////////////////////////////////////////
 // Tasks
@@ -84,25 +88,38 @@ gulp.task('lib', function () {
         .pipe(gulp.dest('dist/'));
 });
 
+gulp.task('mockLib', function () {
+
+    return gulp.src(mockFiles)
+        .pipe(iife({
+            useStrict: true,
+            trimCode: true,
+            prependSemicolon: false,
+            bindThis: false
+        }))
+        .pipe(concat('zerv-ng-sync-mock.js'))
+        .pipe(annotate())
+        .pipe(gulp.dest('dist/'));
+});
 
 // single run testing
 gulp.task('test', function (done) {
-    new Server({ configFile: __dirname + '/karma.conf.js', singleRun: true }, 
-        function(code) {
-            if (code == 1){
+    new Server({ configFile: __dirname + '/karma.conf.js', singleRun: true },
+        function (code) {
+            if (code == 1) {
                 console.log('Unit Test failures, exiting process');
                 //done(new Error(`Karma exited with status code ${code}`));
                 return process.exit(code);
             } else {
                 console.log('Unit Tests passed');
                 done();
-            }    
+            }
         }).start();
 });
 
 // continuous testing
 gulp.task('tdd', function (done) {
-    new Server({ configFile: __dirname + '/karma.conf.js' }, function() {
+    new Server({ configFile: __dirname + '/karma.conf.js' }, function () {
         done();
     }).start();
 });
@@ -116,8 +133,8 @@ gulp.task('app-watch', function () {
 
 // clean up files after builds
 gulp.task('cleanup', function () {
-    return gulp.src('build', {read: false})
-		.pipe(clean());
+    return gulp.src('build', { read: false })
+        .pipe(clean());
 });
 
 // bump the dev version (NOTE: NOT IN USE RIGHT NOW)
@@ -130,14 +147,14 @@ gulp.task('bump-dev', function () {
 });
 
 // build angular-socketio.js for dev (with map) and prod (min)
-gulp.task('build', ['lib'], function () {
-        gulp.start([ 'test','cleanup']);
+gulp.task('build', ['lib','mockLib'], function () {
+    gulp.start(['test', 'cleanup']);
 });
 
 
 // continuous watchers
 gulp.task('default', ['lib'], function () {
-    gulp.start([ 'app-watch', 'tdd']);
+    gulp.start(['app-watch', 'tdd']);
 });
 
 

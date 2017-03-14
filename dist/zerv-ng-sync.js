@@ -140,8 +140,7 @@ function syncProvider() {
         var GRACE_PERIOD_IN_SECONDS = 8;
         var SYNC_VERSION = '1.2';
 
-
-        listenToSyncNotification();
+        listenToPublicationNotification();
 
         var service = {
             subscribe: subscribe,
@@ -225,7 +224,7 @@ function syncProvider() {
         // HELPERS
 
         // every sync notification comes thru the same event then it is dispatches to the targeted subscriptions.
-        function listenToSyncNotification() {
+        function listenToPublicationNotification() {
             $socketio.on(
                 'SYNC_NOW',
                 function (subNotification, fn) {
@@ -287,7 +286,7 @@ function syncProvider() {
          */
 
         function Subscription(publication, scope) {
-            var timestampField, isSyncingOn = false,
+            var timestampField, isSyncingOn = false, destroyed,
                 isSingleObjectCache, updateDataStorage, cache, isInitialPushCompleted, deferredInitialization;
             var onReadyOff, formatRecord;
             var reconnectOff, publicationListenerOff, destroyOff;
@@ -304,7 +303,9 @@ function syncProvider() {
             var syncListener = new SyncListener();
 
             //  ----public----
+            this.toString = toString;
             this.getPublication = getPublication;
+            this.getIdb = getId;
             this.ready = false;
             this.syncOn = syncOn;
             this.syncOff = syncOff;
@@ -355,18 +356,33 @@ function syncProvider() {
             attach(scope || $rootScope);
 
             ///////////////////////////////////////////
+            function getId() {
+                return subscriptionId;
+            }
 
             function getPublication() {
                 return publication;
             }
 
+            function toString() {
+                return publication + ' ' + JSON.stringify(subParams);
+            }
             /**
              * destroy this subscription but also dependent subscriptions if any
              */
             function destroy() {
+                if (destroyed) {
+                    return;
+                }
+                destroyed = true;
+                if (thisSub.parentSubscription) {
+                    logDebug('Destroying Sub Subscription to ' + thisSub + ', parentSubscription to ' + thisSub.parentSubscription);
+                } else {
+                    logDebug('Destroying Subscription to ' + thisSub);
+                }
                 syncOff();
-                logDebug('Destroy subscription to ' + publication);
                 destroyDependentSubscriptions();
+                logDebug('Subscription to ' + thisSub + ' destroyed.');
             }
 
             function destroyDependentSubscriptions() {
@@ -378,10 +394,10 @@ function syncProvider() {
                     deps.push(sub.getPublication());
                     sub.destroy();
                 });
-                if (deps.length > 0) {
-                    deps = _.uniq(deps);
-                    logDebug('Destroy its ' + allSubscriptions.length + ' dependent subscription(s)  [' + deps + ']');
-                }
+                // if (deps.length > 0) {
+                //     deps = _.uniq(deps);
+                //     logDebug('Destroy its ' + allSubscriptions.length + ' dependent subscription(s)  [' + deps + ']');
+                // }
             }
 
             /** this will be called when data is available 
@@ -760,7 +776,7 @@ function syncProvider() {
              *  @returns all the subscriptions linked to this object
              */
             function createObjectDependentSubscriptions(obj) {
-                logDebug('Sync -> creating object dependent subscription for subscription to ' + publication);
+                logDebug('Sync -> creating object dependent subscription(s) of subscription ' + thisSub);
                 var subscriptions = [];
                 _.forEach(dependentSubscriptionDefinitions,
                     function (dependentSubDef) {
@@ -1119,7 +1135,10 @@ function syncProvider() {
                 if (subscriptionId) {
                     $socketio.fetch('sync.unsubscribe', {
                         version: SYNC_VERSION,
-                        id: subscriptionId
+                        id: subscriptionId,
+                        // following only useful for unit testing
+                        publication:publication,
+                        params:subParams
                     });
                     subscriptionId = null;
                 }

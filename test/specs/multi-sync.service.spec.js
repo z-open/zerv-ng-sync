@@ -10,8 +10,10 @@ describe('Multi Sync Service: ', function () {
     beforeEach(module('sync.test'));
 
     beforeEach(module(function ($provide,
-        $syncProvider) {
+        $syncProvider, $socketioProvider, mockSyncServerProvider) {
         $syncProvider.setDebug(2);
+        mockSyncServerProvider.setDebug(true);
+        $socketioProvider.setDebug(true);
     }));
 
 
@@ -82,8 +84,8 @@ describe('Multi Sync Service: ', function () {
             bizSubParams = { publication: 'businesses.pub', params: {} };
             personSubParams = { publication: 'person.pub', params: { id: spec.p1.id } };
             person3SubParams = { publication: 'person.pub', params: { id: spec.p3.id } };
-            backend.setArrayData(bizSubParams, [spec.biz1, spec.biz2]);
-            backend.setObjectData(personSubParams, spec.p1);
+            backend.publishArray(bizSubParams, [spec.biz1, spec.biz2]);
+            backend.publishObject(personSubParams, spec.p1);
 
             expect(backend.acknowledge).not.toHaveBeenCalled();
             spec.sds = spec.$sync
@@ -122,7 +124,7 @@ describe('Multi Sync Service: ', function () {
 
         describe(', Syncing to add a new object with its dependent ', function () {
             beforeEach(function (done) {
-                backend.setObjectData(person3SubParams, spec.p3);
+                backend.publishObject(person3SubParams, spec.p3);
 
                 var promise = spec.sds.waitForDataReady()
                     .then(function (data) {

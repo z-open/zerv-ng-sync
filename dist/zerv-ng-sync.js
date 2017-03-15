@@ -913,19 +913,33 @@ function syncProvider() {
             }
 
             /**
+             * Wait for the subscription to establish initial retrieval of data and returns this subscription in a promise
+             * 
+             * @param {function} optional function that will be called with this subscription object when the data is ready 
              * @returns a promise that waits for the initial fetch to complete then wait for the initial fetch to complete then returns this subscription.
              */
-            function waitForSubscriptionReady() {
+            function waitForSubscriptionReady(callback) {
                 return startSyncing().then(function () {
+                    if (callback) {
+                        callback(thisSub);
+                    }
                     return thisSub;
                 });
             }
 
             /**
+             * Wait for the subscription to establish initial retrieval of data and returns the data in a promise
+             * 
+             * @param {function} optional function that will be called with the synced data and this subscription object when the data is ready 
              * @returns a promise that waits for the initial fetch to complete then returns the data
              */
-            function waitForDataReady() {
-                return startSyncing();
+            function waitForDataReady(callback) {
+                return startSyncing().then(function () {
+                    if (callback) {
+                        callback(getData(), thisSub);
+                    }
+                    return thisSub;
+                });
             }
 
             // does the dataset returns only one object? not an array?
@@ -1137,8 +1151,8 @@ function syncProvider() {
                         version: SYNC_VERSION,
                         id: subscriptionId,
                         // following only useful for unit testing
-                        publication:publication,
-                        params:subParams
+                        publication: publication,
+                        params: subParams
                     });
                     subscriptionId = null;
                 }

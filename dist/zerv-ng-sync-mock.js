@@ -244,7 +244,7 @@ function mockSyncServer() {
             }
 
             data = publication.remove(data);
-            _.forEach(data, function (record) { record.remove = true; });
+            _.forEach(data, function (record) { record.remove = new Date(); });
             return notifySubscriptions(publication, data);
         }
 

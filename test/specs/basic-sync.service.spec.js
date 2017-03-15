@@ -102,7 +102,26 @@ describe('Basic Sync Service: ', function () {
         $rootScope.$digest();
     });
 
+    it('should subscribe and run the waitForDataReady callback', function (done) {
+        backend.setData(subParams, [spec.r1, spec.r2]);
+        spec.sds = spec.$sync.subscribe('myPub');
+        spec.sds.waitForDataReady(function (data, sds) {
+            expect(data.length).toBe(2);
+            expect(sds).toBe(spec.sds);
+            done();
+        });
+        $rootScope.$digest();
+    });
 
+    it('should subscribe and run the waitForSubscriptionReady callback', function (done) {
+        backend.setData(subParams, [spec.r1, spec.r2]);
+        spec.sds = spec.$sync.subscribe('myPub');
+        spec.sds.waitForSubscriptionReady(function (sds) {
+            expect(sds).toBe(spec.sds);
+            done();
+        });
+        $rootScope.$digest();
+    });
     it('should subscribe and acknowledge to receive inital data', function (done) {
         backend.setData(subParams, [spec.r1, spec.r2]);
         expect(backend.acknowledge).not.toHaveBeenCalled();
@@ -222,7 +241,7 @@ describe('Basic Sync Service: ', function () {
         });
 
         it('should receive an array', function (done) {
-            spec.sds.waitForDataReady().then(function (data) {
+            spec.sds.waitForDataReady(function (data) {
                 expect(_.isArray(data)).toBe(true);
                 done();
             });

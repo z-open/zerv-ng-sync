@@ -18,7 +18,9 @@ Sync does not work if objects do not have BOTH id and revision field!!!!
 
 ### Example: Syncing an array
 
-    sds = $sync.subscribe('people.sync').syncOn();
+    sds = $sync
+          .subscribe('people.sync')
+          .syncOn();
     data = sds.getData();
            
     $scope.$watchCollection(data,function() {
@@ -31,9 +33,10 @@ SyncOn starts the syncing.
 
 ### Example: Syncing a record
 
-    sds = $sync.subscribe('person.sync')
+    sds = $sync
+          .subscribe('person.sync')
           .setSingle(true)
-          .setParameters({id:20})
+          .setParameters({id:20});
     data = sds.getData();
             
 The data contains an object that remains in sync.
@@ -156,11 +159,50 @@ if the schema is defined properly, person object will have all its contents in s
 
 TODO: provide specifics.
 
+### Unit testing
 
-### To improve
+For service or component involving Syncing, the mockSyncServer can simulate the server side.
+
+    describe('syncTest', function () {
+
+        var $rootScope,$sync,server;
+        beforeEach(module('sync'));
+        beforeEach(module('sync.test'));
+
+        beforeEach(module(function (
+            $syncProvider) {
+            $syncProvider.setDebug(1); // to output debug information if needed
+        }));
+
+        beforeEach(inject(function (_$rootScope_, _$sync_, _mockSyncServer_) {
+        }
+
+        it('should return an array in sync',function(){
+            
+        })
+
+        it('should add an object to the array',function(){
+            
+        })
+        
+        it('should update an array in sync',function(){
+            
+        })
+
+        it('should remove an object from the array',function(){
+            
+        })
+
+
+### Future Enhancements
 
 Multisync creates a subscription for each record which would lead to performance impact on the back end and front end
 
-- front end could resuse dependent subscription is the setParameters is the same to prevent creating new subscription to the server and release the subscription if no record needs it.Ï
+- front end could resuse dependent subscription is the setParameters is the same to prevent creating new subscription to the server and release the subscription if no record needs it.
 - backend could cache data, so if multiple subscriptions request same data from in a short time there is no access to the db.
 Cache size could depends on time (life expectancy or memory size or fixed size)
+
+In addition,
+
+- notify creation, update and removals of multiple objects at once (back end change)
+- Buffer data notifications on the backend to decrease number of pushes thru the socket 

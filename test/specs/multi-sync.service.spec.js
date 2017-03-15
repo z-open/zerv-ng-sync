@@ -129,7 +129,7 @@ describe('Multi Sync Service: ', function () {
                 var promise = spec.sds.waitForDataReady()
                     .then(function (data) {
                         syncedData = data;
-                        backend.notifyDataChanges(bizSubParams, [spec.biz3])
+                        backend.notifyDataCreation(bizSubParams, [spec.biz3])
                             .then(function () {
                                 done();
                             });
@@ -179,7 +179,7 @@ describe('Multi Sync Service: ', function () {
                 var promise = spec.sds.waitForDataReady()
                     .then(function (data) {
                         syncedData = data;
-                        backend.notifyDataChanges(bizSubParams, [spec.biz1b])
+                        backend.notifyDataUpdate(bizSubParams, [spec.biz1b])
                             .then(function () {
                                 done();
                             });
@@ -201,7 +201,7 @@ describe('Multi Sync Service: ', function () {
             xit('should update main object with removing the dependent subscription object and release the previous dependent subscription ', function (done) {
                 var rec = _.find(syncedData, { id: spec.biz1.id });
                 // does not work, because sync does remove the previous sub object
-                backend.notifyDataChanges(bizSubParams, [spec.biz1c])
+                backend.notifyDataUpdate(bizSubParams, [spec.biz1c])
                     .then(function () {
                         expect(rec.manager).toBeUndefined();
 
@@ -223,7 +223,7 @@ describe('Multi Sync Service: ', function () {
                 .then(function (data) {
                     expect(data.length).toBe(2);
                     var rec = _.find(data, { id: spec.biz1.id });
-                    backend.notifyDataChanges(personSubParams, [spec.p1b])
+                    backend.notifyDataUpdate(personSubParams, [spec.p1b])
                         .then(function () {
                             expect(data.length).toBe(2);
                             expect(rec.manager.firstname).toBe(spec.p1b.firstname);

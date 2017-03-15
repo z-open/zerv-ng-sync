@@ -15,21 +15,23 @@ function mockSyncServer() {
     this.$get = function sync($q, $socketio, $sync, publicationService) {
 
         var publicationsWithSubscriptions = publicationService;
-
         var subCount = 0;
 
-
-
         var service = {
-            onPublicationNotficationCallback: onPublicationNotficationCallback,
-            setData: setData,
             publishArray: publishArray,
             publishObject: publishObject,
-            notifyDataChanges: notifyDataChanges,
-            notifyDataRemovals: notifyDataRemovals,
+            publish: publish,
+
+            notifyDataCreation: notifyDataUpdate,
+            notifyDataUpdate: notifyDataUpdate,
+            notifyDataDelete: notifyDataDelete,
+
+            // useful for spying the internals
             subscribe: subscribe,
             unsubscribe: unsubscribe,
             acknowledge: acknowledge,
+
+            setData: setData
         }
 
         $socketio.onFetch('sync.subscribe', function () {
@@ -42,21 +44,70 @@ function mockSyncServer() {
 
         return service;
 
-        function onPublicationNotficationCallback(data) {
-            return $socketio.send('SYNC_NOW', data, service.acknowledge);
-        }
 
-        function publishArray(subParams, data) {
-            if (!_.isArray(data)) {
+        /**
+         * Declare a new publication and the array of data that will be returned to a subscription at initial fetch.
+         * 
+         * @param {object} subParams object contains the following fields
+         *      - {String} publication : name of the publication to create
+         *      - {Object} params: subscription params corresponding to the data returned
+         * @param {array} data: Array of objects/records that will be returned. Each item must have an id and revision number
+         * 
+         * @returns {Object} the publication object
+         */
+        function publishArray(subParams, array) {
+            if (!_.isArray(array)) {
                 throw new Error('Parameter data must be an array');
             }
-            setData(subParams, data);
+            return setData(subParams, array);
         }
+
+        /**
+         * Declare a new publication and the object that will be returned to a subscription at initial fetch.
+         * 
+         * @param {object} subParams object contains the following fields
+         *      - {String} publication : name of the publication to create
+         *      - {Object} params: subscription params corresponding to the data returned
+         * @param {Object} obj:  object/record that will be returned. The item must have an id and revision number
+         * 
+         * @returns {Object} the publication object
+         */
         function publishObject(subParams, obj) {
             if (!_.isObject(obj) || _.isArray(obj)) {
                 throw new Error('Parameter obj must be an object including publication and params fields');
             }
-            setData(subParams, [obj]);
+            return setData(subParams, [obj]);
+        }
+
+        /**
+         * Declare one or multiple publications and their assotiated data to be returned to the subscription at initialization.
+         * 
+         * @param {array} array of object or single object containing the following information
+         * 
+         *      - {String} type: 'array' or 'object'
+         *      - {object} sub:  object contains the following fields
+         *         - {String} publication : name of the publication to create
+         *         - {Object} params: subscription params corresponding to the data returned
+         *      - {Object} data:  array of object or single object that will be returned. The item must have an id and revision number
+         * 
+         */
+        function publish(definition) {
+            if (_.isArray(definition)) {
+                _.forEach(definition, function (def) {
+                    if (!def.type) {
+                        throw new Error('Publish array argument must contain objects with a type property ("object" or "array")');
+                    }
+                    if (def.type === 'array') {
+                        publishArray(def.sub, def.data);
+                    } else {
+                        publishObject(def.sub, def.data);
+                    }
+                })
+            } else if (_.isObject(definition)) {
+                publishObject(definition.sub, definition.data);
+            } else {
+                throw new Error('Publish argument must be an array or an object');
+            }
         }
 
         /**
@@ -74,7 +125,10 @@ function mockSyncServer() {
             return publicationsWithSubscriptions.setData(data, subParams.publication, subParams.params);
         }
 
-        function notifyDataChanges(subParams, data) {
+
+
+
+        function notifyDataUpdate(subParams, data) {
             var publication = publicationsWithSubscriptions.findPublication(subParams.publication, subParams.params);
 
             if (!publication) {
@@ -84,7 +138,7 @@ function mockSyncServer() {
             return notifySubscriptions(publication, data);
         }
 
-        function notifyDataRemovals(subParams, data) {
+        function notifyDataDelete(subParams, data) {
             var publication = publicationsWithSubscriptions.findPublication(subParams.publication, subParams.params);
 
             if (!publication) {
@@ -150,6 +204,10 @@ function mockSyncServer() {
 
         function acknowledge(ack) {
             logDebug('Client acknowledge receiving data');
+        }
+
+        function onPublicationNotficationCallback(data) {
+            return $socketio.send('SYNC_NOW', data, service.acknowledge);
         }
 
         function logDebug(msg) {

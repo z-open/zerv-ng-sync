@@ -175,7 +175,17 @@ describe('Basic Sync Service: ', function () {
         });
     });
 
-    it('should unsubscribe when subscription is destroyed', function (done) {
+    it('should release subscription in mockSyncServer', function () {
+        expect(backend.exists(subParams)).toBe(false);
+        backend.setData(subParams, []);
+        expect(backend.exists(subParams)).toBe(true);
+        spec.sds = spec.$sync.subscribe('myPub').syncOn();
+        $rootScope.$digest();
+        spec.sds.destroy();
+        expect(backend.exists(subParams)).toBe(false);
+    });
+
+    it('should unsubscribe when subscription is destroyed', function () {
         backend.setData(subParams, []);
         spec.sds = spec.$sync.subscribe('myPub');
         spec.sds.waitForDataReady();
@@ -185,7 +195,6 @@ describe('Basic Sync Service: ', function () {
         spec.sds.destroy();
         expect(spec.sds.isSyncing()).toBe(false);
         expect(backend.unsubscribe).toHaveBeenCalled();
-        done();
     });
 
     it('should unsubscribe when attached scope is destroyed', function (done) {

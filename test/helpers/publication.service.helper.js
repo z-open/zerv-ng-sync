@@ -6,6 +6,7 @@ angular
 function publicationService($sync) {
     var publications = [];
     this.create = create;
+    this.release = release;
     this.find = find;
     this.findBySubscriptionId = findBySubscriptionId;
 
@@ -37,11 +38,22 @@ function publicationService($sync) {
         return pub;
     }
 
+    function release(subId, name, params) {
+        var pub = find(name, params);
+        if (pub) {
+            if (pub.subscriptionIds.indexOf(subId) !== -1) {
+                _.pull(pub.subscriptionIds, subId);
+                if (pub.subscriptionIds.length === 0) {
+                    _.remove(publications, pub);
+                }
+            }
+        }
+    }
 
     function copyAll(array) {
         var r = [];
         array.forEach(function (i) {
-            if(!_.isObject(i)) {
+            if (!_.isObject(i)) {
                 throw new Error('Publication data cannot be null');
             }
             r.push(angular.copy(i));

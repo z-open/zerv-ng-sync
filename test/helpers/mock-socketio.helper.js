@@ -42,20 +42,6 @@ function mockSocketio() {
              * 
              */
             function send(event, data, acknowledge) {
-                // var r;
-                // var callback = events[event];
-                // if (callback) {
-                //     $rootScope.$apply(function () {
-                //         r = callback(data, acknowledge);
-
-                //     });
-                // }
-                //  $rootScope.$digest();
-                //                 setTimeout(function () {
-                //                     $rootScope.$digest();
-                //                 }, 100)
-                // $rootScope.$digest();
-                // return r;
                 var callback = events[event];
                 return callback?  callback(data, acknowledge):null;
             }

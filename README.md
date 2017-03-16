@@ -167,8 +167,7 @@ The library must be set up in your test runner beforehand in addition of dist/ze
 
     describe('syncTest', function () {
 
-        var $rootScope,$sync,server;
-        beforeEach(module('sync'));
+        var $rootScope,$sync,backend,spec;
         beforeEach(module('sync.test'));
 
         beforeEach(module(function (
@@ -177,23 +176,62 @@ The library must be set up in your test runner beforehand in addition of dist/ze
         }));
 
         beforeEach(inject(function (_$rootScope_, _$sync_, _mockSyncServer_) {
+            backend = _mockSyncServer_;
+            $rootScope = _$rootScope_;
         }
+        
+        beforeEach(function setupData() {
+            spec.r1 = { id: 1, description: 'person1', revision: 0 };
+            spec.r1b = { id: 1, description: 'personOne', revision: 1 };
+            spec.r2 = { id: 2, description: 'person2', revision: 4 };
+            spec.r3 = { id: 3, description: 'person3', revision: 5 };
+            spec.subParams = { publication: 'myPub', params: {} };
 
-        it('should return an array in sync',function(){
-            
+            backend.setData(spec.subParams, [spec.r1,spec.r2]);
+            spec.sds = spec.$sync.subscribe('myPub').setParams({});
+            // Calling digest will run the syncing process to get the data from the backend.
+            $rootScope.$digest();
+        });
+
+        it('should have the data received',function(done){  
+                   expect(sds.getData().length).toBe(2);
+        })
+
+        it('should return an array via the resolved promise',function(done){
+               spec.sds.waitForDataReady(function(data){
+                   expect(sds.getData().length).toBe(2);
+                   done();
+               });
         })
 
         it('should add an object to the array',function(){
-            
+            backend.notifyDataCreation(spec.subParams, [spec.r3]);
+            expect(spec.sds.getData().length).toBe(3);
         })
         
         it('should update an array in sync',function(){
-            
+            backend.notifyDataUpdate(spec.subParams, [spec.r1b]);
+            expect(spec.sds.getData()[0].description).toBe(spec.r1b.description);
         })
 
         it('should remove an object from the array',function(){
-            
+            spec.r1.revision++;
+            backend.notifyDataDelete(spec.subParams, [spec.r1]);
+            expect(spec.sds.getData().length).toBe(1);
         })
+
+        it('should remove the subscription to the server on subscription destruction',function(){
+            expect(backend.exists(spec.subParams).toBe(true);
+            spec.sds.destroy();
+            expect(backend.exists(spec.subParams).toBe(false);
+        })
+
+        it('should provide the number of active subscriptions on the front end',function(){
+            expect($sync.getCurrentSubscriptionCount()).toBe(1);
+        })
+    });
+
+    The notify functions do run internally a digest cycle.
 
 
 ### Future Enhancements

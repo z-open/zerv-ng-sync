@@ -12,7 +12,7 @@ function mockSyncServer() {
     };
 
 
-    this.$get = function sync($q, $socketio, $sync, publicationService) {
+    this.$get = function sync($rootScope, $q, $socketio, $sync, publicationService) {
 
         var publicationsWithSubscriptions = publicationService;
         var subCount = 0;
@@ -26,10 +26,14 @@ function mockSyncServer() {
             notifyDataUpdate: notifyDataUpdate,
             notifyDataDelete: notifyDataDelete,
 
+            exists: exists,
+
             // useful for spying the internals
             subscribe: subscribe,
             unsubscribe: unsubscribe,
             acknowledge: acknowledge,
+
+
 
             setData: setData
         }
@@ -132,7 +136,7 @@ function mockSyncServer() {
             var publication = publicationsWithSubscriptions.find(subParams.publication, subParams.params);
 
             if (!publication) {
-                throw ('Attempt to update data from a publication that does NOT exist. You must set the publication data during the unit test setup phase (use setData functions).');
+                throw new Error('Attempt to update data from a publication that does NOT exist. You must set the publication data during the unit test setup phase (use setData functions).');
             }
             data = publication.update(data);
             return notifySubscriptions(publication, data);
@@ -142,7 +146,7 @@ function mockSyncServer() {
             var publication = publicationsWithSubscriptions.find(subParams.publication, subParams.params);
 
             if (!publication) {
-                throw ('Attempt to remove data from a publication that does NOT exist. You must set the publication data during the unit test setup phase (use setData functions).');
+                throw new Error('Attempt to remove data from a publication that does NOT exist. You must set the publication data during the unit test setup phase (use setData functions).');
             }
 
             data = publication.remove(data);
@@ -151,7 +155,7 @@ function mockSyncServer() {
         }
 
         function notifySubscriptions(publication, data) {
-            return $q.all(_.map(publication.subscriptionIds, function (id) {
+            var r = $q.all(_.map(publication.subscriptionIds, function (id) {
                 return onPublicationNotficationCallback({
                     name: publication.name,
                     subscriptionId: id,
@@ -160,6 +164,14 @@ function mockSyncServer() {
                     diff: true
                 }, service.acknowledge);
             }));
+            if (!$rootScope.$$phase) {
+                // if there is no current digest cycle,
+                // start one to make sure all promises have completed before returning to the caller
+                $rootScope.$digest();
+                // when the digest is completed, the notification has been processed by the client, UI might have reacted too.
+            }
+            return r;
+
         }
 
         function subscribe(subParams) {
@@ -183,8 +195,6 @@ function mockSyncServer() {
                 publication.subscriptionIds.push(subId);
             }
 
-
-
             return $q.resolve(subId).then(function (subId) {
                 publication.subId = subId;
                 onPublicationNotficationCallback({
@@ -194,12 +204,17 @@ function mockSyncServer() {
                     records: publication.getData(),
                 }, service.acknowledge);
                 return subId;
-            })
+            });
         }
 
-        function unsubscribe(data) {
-            logDebug("Unsubscribed: ", data);
+        function unsubscribe(subParams) {
+            var publication = publicationsWithSubscriptions.release(subParams.id, subParams.publication, subParams.params);
+            logDebug("Unsubscribed: " + JSON.stringify(subParams));
             return $q.resolve();
+        }
+
+        function exists(subParams) {
+            return _.isObject(publicationsWithSubscriptions.find(subParams.publication, subParams.params));
         }
 
         function acknowledge(ack) {

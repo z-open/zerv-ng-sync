@@ -5,20 +5,19 @@ angular
 
 function publicationService($sync) {
     var publications = [];
-    this.setData = setData;
-    this.getData = getData;
-    this.findPublication = findPublication;
-    this.findPublicationBySubscriptionId = findPublicationBySubscriptionId;
+    this.create = create;
+    this.find = find;
+    this.findBySubscriptionId = findBySubscriptionId;
 
 
-    function findPublicationBySubscriptionId(id) {
+    function findBySubscriptionId(id) {
         // find the data for this subscription
         return _.find(publications, function (pub) {
             return _.indexOf(pub.subscriptionIds, id) !== -1;
         });
     }
 
-    function findPublication(name, params) {
+    function find(name, params) {
         // find the data for this subscription
         return _.find(publications, function (pub) {
             return pub.name === name && (
@@ -28,8 +27,8 @@ function publicationService($sync) {
         });
     }
 
-    function setData(data, name, params) {
-        var pub = findPublication(name, params);
+    function create(data, name, params) {
+        var pub = find(name, params);
         if (!pub) {
             pub = new Publication(name, params);
             publications.push(pub);
@@ -38,16 +37,13 @@ function publicationService($sync) {
         return pub;
     }
 
-    function getData(publication, params) {
-        // find the data for this subscription
-        var pub = findPublication(publication, params);
-        return pub && Object.keys(pub.data).length ? _.values(pub.data) : [];
-    }
-
 
     function copyAll(array) {
         var r = [];
         array.forEach(function (i) {
+            if(!_.isObject(i)) {
+                throw new Error('Publication data cannot be null');
+            }
             r.push(angular.copy(i));
         })
         return r;

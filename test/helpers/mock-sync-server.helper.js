@@ -122,14 +122,14 @@ function mockSyncServer() {
                     throw new Error('Objects in publication must have a revision and id. Check you unit test data for ' + JSON.stringify(subParams));
                 }
             });
-            return publicationsWithSubscriptions.setData(data, subParams.publication, subParams.params);
+            return publicationsWithSubscriptions.create(data, subParams.publication, subParams.params);
         }
 
 
 
 
         function notifyDataUpdate(subParams, data) {
-            var publication = publicationsWithSubscriptions.findPublication(subParams.publication, subParams.params);
+            var publication = publicationsWithSubscriptions.find(subParams.publication, subParams.params);
 
             if (!publication) {
                 throw ('Attempt to update data from a publication that does NOT exist. You must set the publication data during the unit test setup phase (use setData functions).');
@@ -139,7 +139,7 @@ function mockSyncServer() {
         }
 
         function notifyDataDelete(subParams, data) {
-            var publication = publicationsWithSubscriptions.findPublication(subParams.publication, subParams.params);
+            var publication = publicationsWithSubscriptions.find(subParams.publication, subParams.params);
 
             if (!publication) {
                 throw ('Attempt to remove data from a publication that does NOT exist. You must set the publication data during the unit test setup phase (use setData functions).');
@@ -169,13 +169,13 @@ function mockSyncServer() {
             var subId;
 
             if (subParams.id) {
-                publication = publicationsWithSubscriptions.findPublicationBySubscriptionId(subParams.id);
+                publication = publicationsWithSubscriptions.findBySubscriptionId(subParams.id);
                 subId = subParams.id;
                 if (!publication) {
                     throw new Error('Subscription with id [' + subParams.id + '] does not exist.');
                 }
             } else {
-                publication = publicationsWithSubscriptions.findPublication(subParams.publication, subParams.params);
+                publication = publicationsWithSubscriptions.find(subParams.publication, subParams.params);
                 if (!publication) {
                     throw new Error('Publication [' + JSON.stringify(subParams) + '] was NOT initialized before use. You must create this publication in your unit test setup phase (use a publish function). Then only the subscription will be able to receive its data.');
                 }

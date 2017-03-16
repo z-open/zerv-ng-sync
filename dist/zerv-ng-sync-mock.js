@@ -2,7 +2,7 @@
 "use strict";
 
 angular
-    .module('sync.test', []);
+    .module('sync.test', ['sync']);
 }());
 
 (function() {
@@ -22,7 +22,7 @@ function mockSocketio() {
 
 
     this.$get =
-        ["$q", function ($q) {
+        ["$rootScope", "$q", function ($rootScope, $q) {
 
             var self = this;
             this.network = true;
@@ -52,11 +52,22 @@ function mockSocketio() {
              * 
              */
             function send(event, data, acknowledge) {
+                // var r;
+                // var callback = events[event];
+                // if (callback) {
+                //     $rootScope.$apply(function () {
+                //         r = callback(data, acknowledge);
+
+                //     });
+                // }
+                //  $rootScope.$digest();
+                //                 setTimeout(function () {
+                //                     $rootScope.$digest();
+                //                 }, 100)
+                // $rootScope.$digest();
+                // return r;
                 var callback = events[event];
-                if (callback) {
-                    return callback(data, acknowledge);
-                }
-                return null;
+                return callback?  callback(data, acknowledge):null;
             }
 
             /**
@@ -220,14 +231,14 @@ function mockSyncServer() {
                     throw new Error('Objects in publication must have a revision and id. Check you unit test data for ' + JSON.stringify(subParams));
                 }
             });
-            return publicationsWithSubscriptions.setData(data, subParams.publication, subParams.params);
+            return publicationsWithSubscriptions.create(data, subParams.publication, subParams.params);
         }
 
 
 
 
         function notifyDataUpdate(subParams, data) {
-            var publication = publicationsWithSubscriptions.findPublication(subParams.publication, subParams.params);
+            var publication = publicationsWithSubscriptions.find(subParams.publication, subParams.params);
 
             if (!publication) {
                 throw ('Attempt to update data from a publication that does NOT exist. You must set the publication data during the unit test setup phase (use setData functions).');
@@ -237,7 +248,7 @@ function mockSyncServer() {
         }
 
         function notifyDataDelete(subParams, data) {
-            var publication = publicationsWithSubscriptions.findPublication(subParams.publication, subParams.params);
+            var publication = publicationsWithSubscriptions.find(subParams.publication, subParams.params);
 
             if (!publication) {
                 throw ('Attempt to remove data from a publication that does NOT exist. You must set the publication data during the unit test setup phase (use setData functions).');
@@ -267,13 +278,13 @@ function mockSyncServer() {
             var subId;
 
             if (subParams.id) {
-                publication = publicationsWithSubscriptions.findPublicationBySubscriptionId(subParams.id);
+                publication = publicationsWithSubscriptions.findBySubscriptionId(subParams.id);
                 subId = subParams.id;
                 if (!publication) {
                     throw new Error('Subscription with id [' + subParams.id + '] does not exist.');
                 }
             } else {
-                publication = publicationsWithSubscriptions.findPublication(subParams.publication, subParams.params);
+                publication = publicationsWithSubscriptions.find(subParams.publication, subParams.params);
                 if (!publication) {
                     throw new Error('Publication [' + JSON.stringify(subParams) + '] was NOT initialized before use. You must create this publication in your unit test setup phase (use a publish function). Then only the subscription will be able to receive its data.');
                 }
@@ -327,20 +338,19 @@ angular
 
 function publicationService($sync) {
     var publications = [];
-    this.setData = setData;
-    this.getData = getData;
-    this.findPublication = findPublication;
-    this.findPublicationBySubscriptionId = findPublicationBySubscriptionId;
+    this.create = create;
+    this.find = find;
+    this.findBySubscriptionId = findBySubscriptionId;
 
 
-    function findPublicationBySubscriptionId(id) {
+    function findBySubscriptionId(id) {
         // find the data for this subscription
         return _.find(publications, function (pub) {
             return _.indexOf(pub.subscriptionIds, id) !== -1;
         });
     }
 
-    function findPublication(name, params) {
+    function find(name, params) {
         // find the data for this subscription
         return _.find(publications, function (pub) {
             return pub.name === name && (
@@ -350,8 +360,8 @@ function publicationService($sync) {
         });
     }
 
-    function setData(data, name, params) {
-        var pub = findPublication(name, params);
+    function create(data, name, params) {
+        var pub = find(name, params);
         if (!pub) {
             pub = new Publication(name, params);
             publications.push(pub);
@@ -360,16 +370,13 @@ function publicationService($sync) {
         return pub;
     }
 
-    function getData(publication, params) {
-        // find the data for this subscription
-        var pub = findPublication(publication, params);
-        return pub && Object.keys(pub.data).length ? _.values(pub.data) : [];
-    }
-
 
     function copyAll(array) {
         var r = [];
         array.forEach(function (i) {
+            if(!_.isObject(i)) {
+                throw new Error('Publication data cannot be null');
+            }
             r.push(angular.copy(i));
         })
         return r;

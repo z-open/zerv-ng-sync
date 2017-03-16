@@ -934,11 +934,11 @@ function syncProvider() {
              * @returns a promise that waits for the initial fetch to complete then returns the data
              */
             function waitForDataReady(callback) {
-                return startSyncing().then(function () {
+                return startSyncing().then(function (data) {
                     if (callback) {
-                        callback(getData(), thisSub);
+                        callback(data, thisSub);
                     }
-                    return thisSub;
+                    return data;
                 });
             }
 

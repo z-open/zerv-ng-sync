@@ -12,7 +12,7 @@ function mockSocketio() {
 
 
     this.$get =
-        function ($q) {
+        function ($rootScope, $q) {
 
             var self = this;
             this.network = true;
@@ -42,11 +42,22 @@ function mockSocketio() {
              * 
              */
             function send(event, data, acknowledge) {
+                // var r;
+                // var callback = events[event];
+                // if (callback) {
+                //     $rootScope.$apply(function () {
+                //         r = callback(data, acknowledge);
+
+                //     });
+                // }
+                //  $rootScope.$digest();
+                //                 setTimeout(function () {
+                //                     $rootScope.$digest();
+                //                 }, 100)
+                // $rootScope.$digest();
+                // return r;
                 var callback = events[event];
-                if (callback) {
-                    return callback(data, acknowledge);
-                }
-                return null;
+                return callback?  callback(data, acknowledge):null;
             }
 
             /**

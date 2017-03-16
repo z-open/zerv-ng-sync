@@ -162,6 +162,8 @@ TODO: provide specifics.
 ### Unit testing
 
 For service or component involving Syncing, the mockSyncServer can simulate the server side.
+This service is available in the sync.test module. This module is provide in dist/zerv-ng-sync-mock.js.
+The library must be set up in your test runner beforehand in addition of dist/zerv-ng-sync.js library.
 
     describe('syncTest', function () {
 

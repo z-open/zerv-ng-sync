@@ -1,3 +1,3 @@
 angular
-    .module('sync.test', []);
+    .module('sync.test', ['sync']);
 

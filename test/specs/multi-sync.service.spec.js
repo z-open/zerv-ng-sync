@@ -2,7 +2,7 @@ describe('Multi Sync Service: ', function () {
     var $rootScope, $q;
     var backend;
     var spec;
-    var bizSubParams, personSubParams, person3SubParams;
+    var bizSubParams, personSubParams, person2SubParams, person3SubParams;
     var syncedData;
 
 
@@ -83,9 +83,11 @@ describe('Multi Sync Service: ', function () {
         beforeEach(function setupSpies() {
             bizSubParams = { publication: 'businesses.pub', params: {} };
             personSubParams = { publication: 'person.pub', params: { id: spec.p1.id } };
+            person2SubParams = { publication: 'person.pub', params: { id: spec.p2.id } };
             person3SubParams = { publication: 'person.pub', params: { id: spec.p3.id } };
             backend.publishArray(bizSubParams, [spec.biz1, spec.biz2]);
             backend.publishObject(personSubParams, spec.p1);
+            backend.publishObject(person2SubParams, spec.p2);
 
             expect(backend.acknowledge).not.toHaveBeenCalled();
             spec.sds = spec.$sync
@@ -99,42 +101,45 @@ describe('Multi Sync Service: ', function () {
                 },
                 { objectClass: Person }
                 );
+            syncedData = spec.sds.getData();
         });
-
-        it('should subscribe and acknowledge to receive inital data', function (done) {
-
+        it('should not subscribe before sync is on', function () {
             expect(backend.acknowledge).not.toHaveBeenCalled();
             expect(spec.sds.isSyncing()).toBe(false);
-            var promise = spec.sds.waitForDataReady();
-            expect(spec.sds.isSyncing()).toBe(true);
-            promise.then(function (data) {
-                expect(backend.acknowledge).toHaveBeenCalled();
-                expect(data.length).toBe(2);
-                var biz1 = _.find(data, spec.biz1);
-                expect(!!biz1).toBe(true);
-                expect(biz1.manager).toBeDefined();
-                expect(biz1.manager).toEqual(spec.p1);
-                var biz2 = _.find(data, spec.biz2)
-                expect(!!biz2).toBe(true);
-                expect(biz2.manager).toBeUndefined();
-                done();
-            });
             $rootScope.$digest();
         });
 
-        describe(', Syncing to add a new object with its dependent ', function () {
-            beforeEach(function (done) {
-                backend.publishObject(person3SubParams, spec.p3);
-
-                var promise = spec.sds.waitForDataReady()
-                    .then(function (data) {
-                        syncedData = data;
-                        backend.notifyDataCreation(bizSubParams, [spec.biz3])
-                            .then(function () {
-                                done();
-                            });
-                    });
+        describe(', Syncing initialization', function () {
+            beforeEach(function () {
+                spec.sds.syncOn();
                 $rootScope.$digest();
+            });
+            it('should subscribe and receive inital data', function () {
+                expect(syncedData.length).toBe(2);
+            });
+
+            it('should subscribe and acknowledge to receive inital data', function () {
+                expect(spec.sds.isSyncing()).toBe(true);
+                expect(backend.acknowledge).toHaveBeenCalled();
+            });
+
+            it('should map secondary objects to the main ones', function () {
+                var biz1 = _.find(syncedData, spec.biz1);
+                expect(!!biz1).toBe(true);
+                expect(biz1.manager).toBeDefined();
+                expect(biz1.manager).toEqual(spec.p1);
+                var biz2 = _.find(syncedData, spec.biz2)
+                expect(!!biz2).toBe(true);
+                expect(biz2.manager).toBeUndefined();
+            });
+        });
+
+        describe(', Syncing to add a new object with its dependent ', function () {
+            beforeEach(function () {
+                backend.publishObject(person3SubParams, spec.p3);
+                spec.sds.syncOn();
+                $rootScope.$digest();
+                backend.notifyDataCreation(bizSubParams, [spec.biz3]);
             });
 
             it('should add a new object', function () {
@@ -174,63 +179,53 @@ describe('Multi Sync Service: ', function () {
         });
         describe(', Syncing to update an object with its dependent ', function () {
 
-            beforeEach(function (done) {
-
-                var promise = spec.sds.waitForDataReady()
-                    .then(function (data) {
-                        syncedData = data;
-                        backend.notifyDataUpdate(bizSubParams, [spec.biz1b])
-                            .then(function () {
-                                done();
-                            });
-                    });
+            beforeEach(function () {
+                spec.sds.syncOn();
                 $rootScope.$digest();
+
             });
 
             it('should update main object with the field change', function () {
+                backend.notifyDataUpdate(bizSubParams, [spec.biz1b]);
                 var rec = _.find(syncedData, { id: spec.biz1.id });
                 expect(rec.name).toBe(spec.biz1b.name);
             });
 
-            xit('should update main object with the dependent subscription object change', function () {
+            it('should update main object with the dependent subscription object change', function () {
+                backend.notifyDataUpdate(bizSubParams, [spec.biz1b]);
                 var rec = _.find(syncedData, { id: spec.biz1.id });
                 // does not work, because sync does set the params properly to the new value
-                expect(rec.manager.firstname).toBe(spec.p3.firstname);
+                expect(rec.manager.firstname).toBe(spec.p2.firstname);
             });
 
-            xit('should update main object with removing the dependent subscription object and release the previous dependent subscription ', function (done) {
+            it('should update main object with removing the dependent subscription object and release the previous dependent subscription ', function () {
+                backend.notifyDataUpdate(bizSubParams, [spec.biz1c]);
                 var rec = _.find(syncedData, { id: spec.biz1.id });
-                // does not work, because sync does remove the previous sub object
-                backend.notifyDataUpdate(bizSubParams, [spec.biz1c])
-                    .then(function () {
-                        expect(rec.manager).toBeUndefined();
+                expect(rec.manager).toBeUndefined();
+                // the subscription to the person who was a manager is no longer needed
+                expect(backend.unsubscribe.calls.count()).toEqual(1);
 
-                        expect(backend.unsubscribe.calls.count()).toEqual(1);
-
-                        var paramOfSecondCall = backend.unsubscribe.calls.argsFor(0)[0];
-                        expect(paramOfSecondCall.id).toEqual('sub#2');
-                        expect(paramOfSecondCall.publication).toEqual(personSubParams.publication);
-                        expect(paramOfSecondCall.params).toEqual(personSubParams.params);
-                        done();
-                    });
+                var paramOfSecondCall = backend.unsubscribe.calls.argsFor(0)[0];
+                expect(paramOfSecondCall.id).toEqual('sub#2');
+                expect(paramOfSecondCall.publication).toEqual(personSubParams.publication);
+                expect(paramOfSecondCall.params).toEqual(personSubParams.params);
+                //  });
             });
 
 
         });
 
-        it('should sync dependent object with an update and update main object', function (done) {
-            var promise = spec.sds.waitForDataReady()
-                .then(function (data) {
-                    expect(data.length).toBe(2);
-                    var rec = _.find(data, { id: spec.biz1.id });
-                    backend.notifyDataUpdate(personSubParams, [spec.p1b])
-                        .then(function () {
-                            expect(data.length).toBe(2);
-                            expect(rec.manager.firstname).toBe(spec.p1b.firstname);
-                            done();
-                        });
-                });
+        it('should sync dependent object with an update and update main object', function () {
+            var promise = spec.sds.syncOn();
             $rootScope.$digest();
+            expect(syncedData.length).toBe(2);
+            var rec = _.find(syncedData, { id: spec.biz1.id });
+            backend.notifyDataUpdate(personSubParams, [spec.p1b])
+                .then(function () {
+                    expect(syncedData.length).toBe(2);
+                    expect(rec.manager.firstname).toBe(spec.p1b.firstname);
+
+                });
         });
     });
 

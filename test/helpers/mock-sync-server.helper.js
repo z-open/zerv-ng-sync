@@ -168,7 +168,7 @@ function mockSyncServer() {
                 // if there is no current digest cycle,
                 // start one to make sure all promises have completed before returning to the caller
                 $rootScope.$digest();
-                // when the digest is completed, the notification has been processed by the client, UI might have reacted too.
+                // when the digest completes, the notification has been processed by the client, UI might have reacted too.
             }
             return r;
 

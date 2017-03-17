@@ -275,7 +275,7 @@ function syncProvider() {
             }
 
             function toString() {
-                return publication + ' ' + JSON.stringify(subParams);
+                return publication + '/' + JSON.stringify(subParams);
             }
             /**
              * destroy this subscription but also dependent subscriptions if any
@@ -618,41 +618,55 @@ function syncProvider() {
                     return $q.resolve(obj);
                 }
 
-                var objectSubscriptions = findObjectDependentSubscriptions(obj);
-                if (!objectSubscriptions) {
-                    objectSubscriptions = createObjectDependentSubscriptions(obj);
-                    // return $q.resolve();
-                }
+                var objListeners = prepareObjectDependentSubscriptions(obj);
 
-
-                return $q.all(_.map(objectSubscriptions,
-                    function (ds) {
-
-                        var subParams = ds.definition.paramsFn(obj, collectParentSubscriptionParams());
-
-                        // if the object has no information to mapped to dependent subscription, the subscription data is no longer needed and can released.
-                        // ex: a buziness has a managerId.  When the managerId is set to null,  the data of the previous manager is no longer needed, so is its subscription.
-                        if (_.isEmpty(subParams)) {
-                            ds.syncOff();
-                            return $q.resolve();
-                        }
-
+                return $q.all(_.map(objListeners,
+                    function (objListener) {
                         // When the dependent ds is already ready, then the object is mapped with its data
-                        return ds
-                            .setParameters(subParams)
-                            .waitForDataReady().then(function (data) {
-                                if (ds.isSingle()) {
-                                    ds.mapFn(data, obj);
-                                } else {
-                                    _.forEach(data, function (resultObj) {
-                                        ds.mapFn(resultObj, obj);
-                                    });
-                                }
-                            });
+                        return objListener.subscription.waitForDataReady().then(function (data) {
+                            if (objListener.subscription.isSingle()) {
+                                objListener.definition.mapFn(data, obj,false,'');
+                            } else {
+                                _.forEach(data, function (resultObj) {
+                                    objListener.definition.mapFn(resultObj, obj,false,'');
+                                });
+                            }
+                        });
                     }))
                     .then(function () {
                         return obj;
                     });
+            }
+
+
+            function prepareObjectDependentSubscriptions(obj) {
+                var listeners = findObjectDependentSubscriptions(obj);
+                if (!listeners) {
+                    listeners = createObjectDependentSubscriptions(obj);
+                    // return $q.resolve();
+                }
+                var dss = [];
+                // _.forEach(objectSubscriptions,
+                //     function (ds) {
+                //         var subParams = ds.definition.paramsFn(obj, collectParentSubscriptionParams());
+                //         // if the object has no information to mapped to dependent subscription, the subscription data is no longer needed and can released.
+                //         // ex: a buziness has a managerId.  When the managerId is set to null,  the data of the previous manager is no longer needed, so is its subscription.
+                //         if (_.isEmpty(subParams)) {
+                //             ds.syncOff();
+                //         } else {
+                //             // When the dependent ds is already ready, then the object is mapped with its data
+                //             ds.setParameters(subParams);
+                //             dss.push(ds);
+                //         }
+                //     });
+                //return dss;
+                _.forEach(listeners,
+                    function (listener) {
+                        if (listener.subscription.isSyncing()) {
+                            dss.push(listener);
+                        }
+                    });
+                return dss;
             }
 
             /**
@@ -663,7 +677,7 @@ function syncProvider() {
              */
             function findObjectDependentSubscriptions(obj) {
                 var objDs = _.find(datasources, { objId: obj.id });
-                return objDs ? objDs.subscriptions : null;
+                return objDs ? objDs.listeners : null;
             }
 
             /**
@@ -675,7 +689,10 @@ function syncProvider() {
                 var objDs = _.find(datasources, { objId: obj.id });
                 if (objDs && objDs.subscriptions.length !== 0) {
                     logDebug('Sync -> Removing dependent subscription for record #' + obj.id + ' for subscription to ' + publication);
-                    _.forEach(objDs.subscriptions, function (sub) {
+                    // _.forEach(objDs.subscriptions, function (sub) {
+                    //     sub.destroy();
+                    // });
+                     _.forEach(objDs.listeners, function (sub) {
                         sub.destroy();
                     });
                     var p = datasources.indexOf(objDs);
@@ -694,43 +711,52 @@ function syncProvider() {
             function createObjectDependentSubscriptions(obj) {
                 logDebug('Sync -> creating ' + dependentSubscriptionDefinitions.length + ' object dependent subscription(s) for subscription ' + thisSub);
                 var subscriptions = [];
+                var listeners = [];
                 _.forEach(dependentSubscriptionDefinitions,
                     function (dependentSubDef) {
 
                         var subParams = dependentSubDef.paramsFn(obj, collectParentSubscriptionParams());
 
-                        var depSub = subscribe(dependentSubDef.publication)
-                            .setObjectClass(dependentSubDef.objectClass)
-                            .setSingle(dependentSubDef.single)
-                            .mapData(function (dependentSubObject, operation) {
-                                // map will be triggered in the following conditions:
-                                // - when the first time, the object is received, this dependent sync will be created and call map when it receives its data
-                                // - the next time the dependent syncs
+                        depSub = findSubScriptionInPool(dependentSubDef.publication, subParams);
+                        if (!depSub) {
+                            var depSub = subscribe(dependentSubDef.publication)
+                                .setObjectClass(dependentSubDef.objectClass)
+                                .setSingle(dependentSubDef.single)
+                                .mapData(function (dependentSubObject, operation) {
+                                    // map will be triggered in the following conditions:
+                                    // - when the first time, the object is received, this dependent sync will be created and call map when it receives its data
+                                    // - the next time the dependent syncs
 
-                                // if the main sync is ready, it means 
-                                // - only the dependent received update 
-                                // if th main sync is NOT ready, the mapping will happen anyway when running mapSubscriptionDataToObject
+                                    // if the main sync is ready, it means 
+                                    // - only the dependent received update 
+                                    // if th main sync is NOT ready, the mapping will happen anyway when running mapSubscriptionDataToObject
 
-                                // -------------------------------------------------
-                                // if (isReady() || force) { this does not work!!!  with this, it seems that mapping is not executed sometimes.
-                                // 
-                                // To dig in, mostlikely when the dependent subscription is created, mapFn will be called twice.
-                                // Try to prevent this... 
-                                // -------------------------------------------------
-                                var objectToBeMapped = getData(obj.id);
-                                if (objectToBeMapped) {
-                                    logDebug('Sync -> mapping data [' + operation + '] of dependent sub [' + dependentSubDef.publication + '] to record of sub [' + publication + ']');
-                                    // need to remove 3rd params...!!!
-                                    depSub.mapFn(dependentSubObject, objectToBeMapped, dependentSubObject.removed, operation);
-                                }
-                                //}
-                            })
-                            .setOnReady(function () {
-                                // if the main sync is NOT ready, it means it is in the process of being ready and will notify when it is
-                                if (dependentSubDef.notifyReady && isReady()) {
-                                    notifyMainSubscription(depSub);
-                                }
-                            });
+                                    // -------------------------------------------------
+                                    // if (isReady() || force) { this does not work!!!  with this, it seems that mapping is not executed sometimes.
+                                    // 
+                                    // To dig in, mostlikely when the dependent subscription is created, mapFn will be called twice.
+                                    // Try to prevent this... 
+                                    // -------------------------------------------------
+                                    _.forEach(depSub.listeners, function (listener) {
+                                        listener.mapFn(dependentSubObject, operation);
+                                    });
+                                    //}
+                                })
+                                .setOnReady(function () {
+                                    // if the main sync is NOT ready, it means it is in the process of being ready and will notify when it is
+                                    if (dependentSubDef.notifyReady && isReady()) {
+                                        notifyMainSubscription(depSub);
+                                    }
+                                });
+                            depSub.listeners = [];
+
+
+                        }
+
+                        var listener = createListener(obj, depSub, dependentSubDef);
+                        depSub.listeners.push(listener);
+                        listeners.push(listener);
+
                         depSub.mapFn = dependentSubDef.mapFn;
 
                         // the dependent subscription is linked to this particular object comming from a parent subscription
@@ -744,6 +770,7 @@ function syncProvider() {
                         }
 
                         // This subscription will ONLY start when parent object is updated and provides the proper data to start.
+
                         if (!_.isEmpty(subParams)) {
                             // this starts the subscription using the params computed by the function provided when the dependent subscription was defined
                             depSub.setParameters(subParams);
@@ -752,12 +779,40 @@ function syncProvider() {
                     });
                 datasources.push({
                     objId: obj.id,
-                    subscriptions: subscriptions
+                    subscriptions: subscriptions,
+                    listeners: listeners
                 });
-                return subscriptions;
+                return listeners;
             }
 
+            function findSubScriptionInPool() {
+                return null;
+            }
 
+            function createListener(obj, depSub, dependentSubDef) {
+                return {
+                    subscription: depSub,
+                    objectId: obj.id,
+                    parentSubscription: thisSub,
+                    definition: dependentSubDef,
+
+                    mapFn: function (dependentSubObject, operation) {
+                        var objectToBeMapped = getData(obj.id);
+                        if (objectToBeMapped) {
+                            logDebug('Sync -> mapping data [' + operation + '] of dependent sub [' + dependentSubDef.publication + '] to record of sub [' + publication + ']');
+                            // need to remove 3rd params...!!!
+                            this.definition.mapFn(dependentSubObject, objectToBeMapped, dependentSubObject.removed, operation);
+                        }
+                    },
+                    destroy: function () {
+                        _.pull(this.subscription.listeners, this);
+                        // if there is no listener on this subscription, it is no longer needed.
+                        if (this.subscription.listeners.length === 0) {
+                            this.subscription.destroy();
+                        }
+                    }
+                }
+            }
 
             function $notifyUpdateWithinDependentSubscription(idOfObjectImpactedByChange) {
                 var cachedObject = getRecordState({ id: idOfObjectImpactedByChange });

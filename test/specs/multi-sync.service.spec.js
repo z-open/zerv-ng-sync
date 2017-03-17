@@ -115,8 +115,27 @@ describe('Multi Sync Service: ', function () {
                 spec.sds.syncOn();
                 $rootScope.$digest();
             });
+
+            it('should create subscription in the backend ', function () {
+                expect(backend.exists(bizSubParams)).toBe(true);
+                expect(backend.exists(personSubParams)).toBe(true);
+            });
+
             it('should subscribe and receive inital data', function () {
                 expect(syncedData.length).toBe(2);
+            });
+
+            it('should unsubscribe when subscription is destroyed', function () {
+                spec.sds.destroy();
+                expect(backend.exists(bizSubParams)).toBe(false);
+                expect(backend.exists(personSubParams)).toBe(false);
+            });
+
+            xit('should unsubscribe when subscription is off', function () {
+                spec.sds.syncOff();
+                expect(backend.exists(bizSubParams)).toBe(false);
+                // should have released when it is the main subscription.....!!!!
+                expect(backend.exists(personSubParams)).toBe(false);
             });
 
             it('should subscribe and acknowledge to receive inital data', function () {
@@ -132,6 +151,27 @@ describe('Multi Sync Service: ', function () {
                 var biz2 = _.find(syncedData, spec.biz2)
                 expect(!!biz2).toBe(true);
                 expect(biz2.manager).toBeUndefined();
+            });
+        });
+
+        describe(', Syncing to delete an object with its dependent ', function () {
+            beforeEach(function () {
+                spec.sds.syncOn();
+                $rootScope.$digest();
+                spec.biz1.revision++;
+                backend.notifyDataDelete(bizSubParams, [spec.biz1]);
+            });
+
+            it('should delete  object', function () {
+                expect(syncedData.length).toBe(1);
+            });
+
+            it('should aloa remove its object dependent subscriptions', function () {
+                expect(backend.exists(personSubParams)).toBe(false);
+            });
+
+            it('should keep the main subscription on', function () {
+                expect(backend.exists(bizSubParams)).toBe(true);
             });
         });
 
@@ -183,7 +223,6 @@ describe('Multi Sync Service: ', function () {
             beforeEach(function () {
                 spec.sds.syncOn();
                 $rootScope.$digest();
-
             });
 
             it('should update main object with the field change', function () {

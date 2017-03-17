@@ -53,7 +53,7 @@ function mockSocketio() {
              */
             function send(event, data, acknowledge) {
                 var callback = events[event];
-                return callback?  callback(data, acknowledge):null;
+                return callback ? callback(data, acknowledge) : null;
             }
 
             /**
@@ -82,9 +82,9 @@ function mockSocketio() {
                     return fn(data);
                 }
             }
-            function logDebug(msg) {
+            function logDebug(msg, data) {
                 if (debug) {
-                    console.debug('SOCKETIO: ' + msg);
+                    console.debug('SOCKETIO: ' + msg, data);
                 }
             }
         }]
@@ -263,7 +263,7 @@ function mockSyncServer() {
                 // if there is no current digest cycle,
                 // start one to make sure all promises have completed before returning to the caller
                 $rootScope.$digest();
-                // when the digest is completed, the notification has been processed by the client, UI might have reacted too.
+                // when the digest completes, the notification has been processed by the client, UI might have reacted too.
             }
             return r;
 

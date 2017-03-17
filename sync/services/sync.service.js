@@ -692,16 +692,12 @@ function syncProvider() {
              *  @returns all the subscriptions linked to this object
              */
             function createObjectDependentSubscriptions(obj) {
-                logDebug('Sync -> creating object dependent subscription(s) of subscription ' + thisSub);
+                logDebug('Sync -> creating ' + dependentSubscriptionDefinitions.length + ' object dependent subscription(s) for subscription ' + thisSub);
                 var subscriptions = [];
                 _.forEach(dependentSubscriptionDefinitions,
                     function (dependentSubDef) {
 
                         var subParams = dependentSubDef.paramsFn(obj, collectParentSubscriptionParams());
-
-                        if (_.isEmpty(subParams)) {
-                            return;
-                        }
 
                         var depSub = subscribe(dependentSubDef.publication)
                             .setObjectClass(dependentSubDef.objectClass)
@@ -746,11 +742,13 @@ function syncProvider() {
                         if (dependentSubDef.mappings) {
                             depSub.map(dependentSubDef.mappings);
                         }
-                        // this starts the subscription using the params computed by the function provided when the dependent subscription was defined
 
-                        // !!!! should not start subscription if no parameters, but what about the parameter is set.
-
-                        subscriptions.push(depSub.setParameters(subParams));
+                        // This subscription will ONLY start when parent object is updated and provides the proper data to start.
+                        if (!_.isEmpty(subParams)) {
+                            // this starts the subscription using the params computed by the function provided when the dependent subscription was defined
+                            depSub.setParameters(subParams);
+                        }
+                        subscriptions.push(depSub);
                     });
                 datasources.push({
                     objId: obj.id,

@@ -48,7 +48,8 @@ describe('Multi Sync Service: ', function () {
         spec.biz1b = new Business({ id: 1, name: 'bizOne', revision: 1, managerId: 2 });
         spec.biz1c = new Business({ id: 1, name: 'bizOne', revision: 2 });
         spec.biz2 = new Business({ id: 2, name: 'biz2', revision: 4 });
-        spec.biz3 = new Business({ id: 3, name: 'biz3', revision: 5, managerId: 3 });
+        spec.biz2b = new Business({ id: 2, name: 'biz2', revision: 5, managerId: 2 });
+        spec.biz3 = new Business({ id: 3, name: 'biz3', revision: 3, managerId: 3 });
 
         spec.p1 = new Person({ id: 1, firstname: 'Tom', lastname: 'Great', revision: 1 });
         spec.p1b = new Person({ id: 1, firstname: 'Tom', lastname: 'Greater', revision: 2 });
@@ -194,7 +195,13 @@ describe('Multi Sync Service: ', function () {
             it('should update main object with the dependent subscription object change', function () {
                 backend.notifyDataUpdate(bizSubParams, [spec.biz1b]);
                 var rec = _.find(syncedData, { id: spec.biz1.id });
-                // does not work, because sync does set the params properly to the new value
+                expect(rec.manager.firstname).toBe(spec.p2.firstname);
+            });
+
+            it('should update main object with the new dependent subscription object', function () {
+                backend.notifyDataUpdate(bizSubParams, [spec.biz2b]);
+                var rec = _.find(syncedData, { id: spec.biz2.id });
+                expect(rec.manager).toBeDefined();
                 expect(rec.manager.firstname).toBe(spec.p2.firstname);
             });
 
@@ -202,7 +209,7 @@ describe('Multi Sync Service: ', function () {
                 backend.notifyDataUpdate(bizSubParams, [spec.biz1c]);
                 var rec = _.find(syncedData, { id: spec.biz1.id });
                 expect(rec.manager).toBeUndefined();
-                // the subscription to the person who was a manager is no longer needed
+                // the subscription to the person who was a manager is no longer needed. Subscription is no longer needed on the backend.
                 expect(backend.unsubscribe.calls.count()).toEqual(1);
 
                 var paramOfSecondCall = backend.unsubscribe.calls.argsFor(0)[0];
@@ -215,7 +222,7 @@ describe('Multi Sync Service: ', function () {
 
         });
 
-        it('should sync dependent object with an update and update main object', function () {
+        it('should update dependent object and update main object', function () {
             var promise = spec.sds.syncOn();
             $rootScope.$digest();
             expect(syncedData.length).toBe(2);

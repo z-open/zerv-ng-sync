@@ -43,7 +43,7 @@ function mockSocketio() {
              */
             function send(event, data, acknowledge) {
                 var callback = events[event];
-                return callback?  callback(data, acknowledge):null;
+                return callback ? callback(data, acknowledge) : null;
             }
 
             /**
@@ -72,9 +72,9 @@ function mockSocketio() {
                     return fn(data);
                 }
             }
-            function logDebug(msg) {
+            function logDebug(msg, data) {
                 if (debug) {
-                    console.debug('SOCKETIO: ' + msg);
+                    console.debug('SOCKETIO: ' + msg, data);
                 }
             }
         }

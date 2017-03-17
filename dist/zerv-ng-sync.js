@@ -717,13 +717,19 @@ function syncProvider() {
 
                 return $q.all(_.map(objectSubscriptions,
                     function (ds) {
-                        // if the ds is already ready, then the object is mapped with the datasource data
+
+                        var subParams = ds.definition.paramsFn(obj, collectParentSubscriptionParams());
+
+                        // if the object has no information to mapped to dependent subscription, the subscription data is no longer needed and can released.
+                        // ex: a buziness has a managerId.  When the managerId is set to null,  the data of the previous manager is no longer needed, so is its subscription.
+                        if (_.isEmpty(subParams)) {
+                            ds.syncOff();
+                            return $q.resolve();
+                        }
+
+                        // When the dependent ds is already ready, then the object is mapped with its data
                         return ds
-                            // !!!!!!!!!!!!!!!!!
-                            // !!!!! must set the parameters again as the update might have caused a different subscription.
-                            //     the parameter might also become null, then the subscription should stop.
-                            // !!!!!!!!!!!!!!!!!
-                            // not tested.setParameters(dependentSubDef.paramsFn(obj, collectParentSubscriptionParams()))
+                            .setParameters(subParams)
                             .waitForDataReady().then(function (data) {
                                 if (ds.isSingle()) {
                                     ds.mapFn(data, obj);
@@ -776,16 +782,12 @@ function syncProvider() {
              *  @returns all the subscriptions linked to this object
              */
             function createObjectDependentSubscriptions(obj) {
-                logDebug('Sync -> creating object dependent subscription(s) of subscription ' + thisSub);
+                logDebug('Sync -> creating ' + dependentSubscriptionDefinitions.length + ' object dependent subscription(s) for subscription ' + thisSub);
                 var subscriptions = [];
                 _.forEach(dependentSubscriptionDefinitions,
                     function (dependentSubDef) {
 
                         var subParams = dependentSubDef.paramsFn(obj, collectParentSubscriptionParams());
-
-                        if (_.isEmpty(subParams)) {
-                            return;
-                        }
 
                         var depSub = subscribe(dependentSubDef.publication)
                             .setObjectClass(dependentSubDef.objectClass)
@@ -824,16 +826,19 @@ function syncProvider() {
                         // the dependent subscription is linked to this particular object comming from a parent subscription
                         depSub.objectId = obj.id;
                         depSub.parentSubscription = thisSub;
+                        depSub.definition = dependentSubDef;
 
                         // the dependent subscription might have itself some mappings
                         if (dependentSubDef.mappings) {
                             depSub.map(dependentSubDef.mappings);
                         }
-                        // this starts the subscription using the params computed by the function provided when the dependent subscription was defined
 
-                        // !!!! should not start subscription if no parameters, but what about the parameter is set.
-
-                        subscriptions.push(depSub.setParameters(dependentSubDef.paramsFn(obj, collectParentSubscriptionParams())));
+                        // This subscription will ONLY start when parent object is updated and provides the proper data to start.
+                        if (!_.isEmpty(subParams)) {
+                            // this starts the subscription using the params computed by the function provided when the dependent subscription was defined
+                            depSub.setParameters(subParams);
+                        }
+                        subscriptions.push(depSub);
                     });
                 datasources.push({
                     objId: obj.id,

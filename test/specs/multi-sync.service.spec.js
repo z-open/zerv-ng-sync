@@ -50,6 +50,8 @@ describe('Multi Sync Service: ', function () {
         spec.biz2 = new Business({ id: 2, name: 'biz2', revision: 4 });
         spec.biz2b = new Business({ id: 2, name: 'biz2', revision: 5, managerId: 2 });
         spec.biz3 = new Business({ id: 3, name: 'biz3', revision: 3, managerId: 3 });
+        spec.biz3b = new Business({ id: 3, name: 'biz3', revision: 4, managerId: 1 });
+
 
         spec.p1 = new Person({ id: 1, firstname: 'Tom', lastname: 'Great', revision: 1 });
         spec.p1b = new Person({ id: 1, firstname: 'Tom', lastname: 'Greater', revision: 2 });
@@ -235,6 +237,12 @@ describe('Multi Sync Service: ', function () {
                 backend.notifyDataUpdate(bizSubParams, [spec.biz1b]);
                 var rec = _.find(syncedData, { id: spec.biz1.id });
                 expect(rec.manager.firstname).toBe(spec.p2.firstname);
+            });
+
+            it('should update main object resusing an object subscription', function () {
+                backend.notifyDataUpdate(bizSubParams, [spec.biz3b]);
+                var rec = _.find(syncedData, { id: spec.biz3.id });
+                expect(rec.manager.firstname).toBe(spec.p1.firstname);
             });
 
             it('should update main object with the new dependent subscription object', function () {

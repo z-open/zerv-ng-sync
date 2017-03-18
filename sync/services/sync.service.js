@@ -895,8 +895,8 @@ function syncProvider() {
                         depSub = findSubScriptionInPool(this.definition, params);
                         if (depSub) {
                             // let's reuse an existing sub
-                            depSub.listeners.push(listener);
-                            listener.subscription = depSub;
+                            depSub.listeners.push(this);
+                            this.subscription = depSub;
                         } else {
                             createObjectDependentSubscription(this, obj);
                         }

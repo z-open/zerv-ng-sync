@@ -297,7 +297,9 @@ function syncProvider() {
 
             function destroyDependentSubscriptions() {
                 var allSubscriptions = _.flatten(_.map(datasources, function (datasource) {
-                    return datasource.subscriptions;
+                    return _.map(datasource.listeners,function(listener){
+                        return listener.subscription;
+                    });
                 }));
                 var deps = [];
                 _.forEach(allSubscriptions, function (sub) {
@@ -625,10 +627,10 @@ function syncProvider() {
                         // When the dependent ds is already ready, then the object is mapped with its data
                         return objListener.subscription.waitForDataReady().then(function (data) {
                             if (objListener.subscription.isSingle()) {
-                                objListener.definition.mapFn(data, obj,false,'');
+                                objListener.definition.mapFn(data, obj, false, '');
                             } else {
                                 _.forEach(data, function (resultObj) {
-                                    objListener.definition.mapFn(resultObj, obj,false,'');
+                                    objListener.definition.mapFn(resultObj, obj, false, '');
                                 });
                             }
                         });
@@ -642,9 +644,26 @@ function syncProvider() {
             function prepareObjectDependentSubscriptions(obj) {
                 var listeners = findObjectDependentSubscriptions(obj);
                 if (!listeners) {
+                    logDebug('Sync -> creating ' + dependentSubscriptionDefinitions.length + ' object dependent subscription(s) for subscription ' + thisSub);
+
+                    thisSub.listeners = [];
+                    _.forEach(dependentSubscriptionDefinitions,
+                        function (dependentSubDef) {
+                            var listener = createListener(obj, null, dependentSubDef);
+                            thisSub.listeners.push(listener);
+                        }
+                    );
                     listeners = createObjectDependentSubscriptions(obj);
-                    // return $q.resolve();
+
                 }
+
+                // if the params have changed
+                // find existing subscription, add the listener to it
+                // or create one, add the listner
+                // if params are empty
+                // remove subscription in the listener,  the subscription might be released if there is no listeners
+
+
                 var dss = [];
                 // _.forEach(objectSubscriptions,
                 //     function (ds) {
@@ -687,16 +706,16 @@ function syncProvider() {
              */
             function removeObjectDependentSubscriptions(obj) {
                 var objDs = _.find(datasources, { objId: obj.id });
-                if (objDs && objDs.subscriptions.length !== 0) {
+                if (objDs && objDs.listeners.length !== 0) {
                     logDebug('Sync -> Removing dependent subscription for record #' + obj.id + ' for subscription to ' + publication);
                     // _.forEach(objDs.subscriptions, function (sub) {
                     //     sub.destroy();
                     // });
-                     _.forEach(objDs.listeners, function (sub) {
+                    _.forEach(objDs.listeners, function (sub) {
                         sub.destroy();
                     });
-                    var p = datasources.indexOf(objDs);
-                    datasources.slice(p, p + 1);
+                    // var p = datasources.indexOf(objDs);
+                    // datasources.slice(p, p + 1);
                 }
             }
 
@@ -753,17 +772,20 @@ function syncProvider() {
 
                         }
 
-                        var listener = createListener(obj, depSub, dependentSubDef);
+                        var listener = findListener(obj, dependentSubDef);
                         depSub.listeners.push(listener);
+                        listener.subscription = depSub;
                         listeners.push(listener);
 
-                        depSub.mapFn = dependentSubDef.mapFn;
+                    //    depSub.mapFn = dependentSubDef.mapFn;
 
                         // the dependent subscription is linked to this particular object comming from a parent subscription
-                        depSub.objectId = obj.id;
-                        depSub.parentSubscription = thisSub;
-                        depSub.definition = dependentSubDef;
+                     //   depSub.objectId = obj.id;
+                     //   depSub.parentSubscription = thisSub;
+                     //   depSub.definition = dependentSubDef;
 
+                     depSub.parentSubscription = thisSub; // !!! this sub might have multiple parents..... to remove
+                     
                         // the dependent subscription might have itself some mappings
                         if (dependentSubDef.mappings) {
                             depSub.map(dependentSubDef.mappings);
@@ -779,12 +801,14 @@ function syncProvider() {
                     });
                 datasources.push({
                     objId: obj.id,
-                    subscriptions: subscriptions,
+                 //   subscriptions: subscriptions,
                     listeners: listeners
                 });
                 return listeners;
             }
-
+            function findListener(obj, dependentSubDef) {
+                return _.find(thisSub.listeners, { objectId: obj.id, definition: dependentSubDef })
+            }
             function findSubScriptionInPool() {
                 return null;
             }

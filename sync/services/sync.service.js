@@ -203,6 +203,7 @@ function syncProvider() {
             var objectClass;
             var subscriptionId;
             var mapDataFn;
+            var pool = [];
 
             var thisSub = this;
             var dependentSubscriptionDefinitions = [];
@@ -297,12 +298,15 @@ function syncProvider() {
 
             function destroyDependentSubscriptions() {
                 var allSubscriptions = _.flatten(_.map(datasources, function (datasource) {
-                    return _.map(datasource.listeners,function(listener){
+                    return _.map(datasource.listeners, function (listener) {
                         return listener.subscription;
                     });
                 }));
                 var deps = [];
                 _.forEach(allSubscriptions, function (sub) {
+                    if (!sub) {
+                        return;
+                    }
                     deps.push(sub.getPublication());
                     sub.destroy();
                 });
@@ -653,18 +657,28 @@ function syncProvider() {
                             thisSub.listeners.push(listener);
                         }
                     );
-                    listeners = createObjectDependentSubscriptions(obj);
-
+                    datasources.push({
+                        objId: obj.id,
+                        listeners: thisSub.listeners
+                    });
+                    listeners = thisSub.listeners;
                 }
+                var connectedListeners = [];
 
-                // if the params have changed
-                // find existing subscription, add the listener to it
-                // or create one, add the listner
-                // if params are empty
-                // remove subscription in the listener,  the subscription might be released if there is no listeners
+                _.forEach(listeners, function (listener) {
+                    // does the object have a value for this listener?
+                    var subParams = listener.definition.paramsFn(obj, collectParentSubscriptionParams());
+                    // no value, then listener do not map data from any subscription
+                    if (_.isEmpty(subParams)) {
+                        listener.clear();
+                    } else {
+                        listener.setParams(obj, subParams);
+                        connectedListeners.push(listener);
+                    }
+                });
+                return connectedListeners;
 
-
-                var dss = [];
+                //var dss = [];
                 // _.forEach(objectSubscriptions,
                 //     function (ds) {
                 //         var subParams = ds.definition.paramsFn(obj, collectParentSubscriptionParams());
@@ -679,13 +693,13 @@ function syncProvider() {
                 //         }
                 //     });
                 //return dss;
-                _.forEach(listeners,
-                    function (listener) {
-                        if (listener.subscription.isSyncing()) {
-                            dss.push(listener);
-                        }
-                    });
-                return dss;
+                // _.forEach(listeners,
+                //     function (listener) {
+                //         if (listener.subscription.isSyncing()) {
+                //             dss.push(listener);
+                //         }
+                //     });
+                //return dss;
             }
 
             /**
@@ -718,6 +732,65 @@ function syncProvider() {
                     // datasources.slice(p, p + 1);
                 }
             }
+
+
+
+
+
+
+            /**
+              * create the dependent subscription for each object of the cache
+              * 
+              * TODO: no reuse at this time, we might subscribe multiple times to the same data
+              * 
+              *  @param <Object> the object of the cache that will be mapped with additional data from subscription when they arrived
+              *  @returns all the subscriptions linked to this object
+              */
+            function createObjectDependentSubscription(listener, obj) {
+
+                var dependentSubDef = listener.definition;
+                var subParams = dependentSubDef.paramsFn(obj, collectParentSubscriptionParams());
+
+                var depSub = subscribe(dependentSubDef.publication)
+                    .setObjectClass(dependentSubDef.objectClass)
+                    .setSingle(dependentSubDef.single)
+                    .mapData(function (dependentSubObject, operation) {
+                        _.forEach(depSub.listeners, function (listener) {
+                            listener.mapFn(dependentSubObject, operation);
+                        });
+                    })
+                    .setOnReady(function () {
+                        // if the main sync is NOT ready, it means it is in the process of being ready and will notify when it is
+                        if (dependentSubDef.notifyReady && isReady()) {
+                            notifyMainSubscription(depSub);
+                        }
+                    });
+                depSub.listeners = [listener];
+                listener.subscription = depSub;
+                pool.push(depSub);
+
+                depSub.parentSubscription = thisSub; // !!! this sub might have multiple parents..... to remove
+
+                // the dependent subscription might have itself some mappings
+                if (dependentSubDef.mappings) {
+                    depSub.map(dependentSubDef.mappings);
+                }
+
+                // This subscription will ONLY start when parent object is updated and provides the proper data to start.
+
+                if (!_.isEmpty(subParams)) {
+                    // this starts the subscription using the params computed by the function provided when the dependent subscription was defined
+                    depSub.setParameters(subParams);
+                }
+            }
+
+
+
+
+
+
+
+
 
             /**
              * create the dependent subscription for each object of the cache
@@ -768,8 +841,6 @@ function syncProvider() {
                                     }
                                 });
                             depSub.listeners = [];
-
-
                         }
 
                         var listener = findListener(obj, dependentSubDef);
@@ -777,15 +848,15 @@ function syncProvider() {
                         listener.subscription = depSub;
                         listeners.push(listener);
 
-                    //    depSub.mapFn = dependentSubDef.mapFn;
+                        //    depSub.mapFn = dependentSubDef.mapFn;
 
                         // the dependent subscription is linked to this particular object comming from a parent subscription
-                     //   depSub.objectId = obj.id;
-                     //   depSub.parentSubscription = thisSub;
-                     //   depSub.definition = dependentSubDef;
+                        //   depSub.objectId = obj.id;
+                        //   depSub.parentSubscription = thisSub;
+                        //   depSub.definition = dependentSubDef;
 
-                     depSub.parentSubscription = thisSub; // !!! this sub might have multiple parents..... to remove
-                     
+                        depSub.parentSubscription = thisSub; // !!! this sub might have multiple parents..... to remove
+
                         // the dependent subscription might have itself some mappings
                         if (dependentSubDef.mappings) {
                             depSub.map(dependentSubDef.mappings);
@@ -799,18 +870,14 @@ function syncProvider() {
                         }
                         subscriptions.push(depSub);
                     });
-                datasources.push({
-                    objId: obj.id,
-                 //   subscriptions: subscriptions,
-                    listeners: listeners
-                });
-                return listeners;
             }
-            function findListener(obj, dependentSubDef) {
-                return _.find(thisSub.listeners, { objectId: obj.id, definition: dependentSubDef })
-            }
-            function findSubScriptionInPool() {
-                return null;
+
+            function findSubScriptionInPool(definition, params) {
+                var depSub = _.find(pool, function (subscription) {
+                    // subscription should have a listener for the definition
+                    return _.isEqual(subscription.getParameters(), params);
+                })
+                return depSub;
             }
 
             function createListener(obj, depSub, dependentSubDef) {
@@ -819,6 +886,21 @@ function syncProvider() {
                     objectId: obj.id,
                     parentSubscription: thisSub,
                     definition: dependentSubDef,
+                    setParams: function setParams(obj, params) {
+                        // if nothing change, the listener is already connected to the right subscription
+                        if (_.isEqual(params, this.params)) {
+                            return
+                        }
+                        this.params = params;
+                        depSub = findSubScriptionInPool(this.definition, params);
+                        if (depSub) {
+                            // let's reuse an existing sub
+                            depSub.listeners.push(listener);
+                            listener.subscription = depSub;
+                        } else {
+                            createObjectDependentSubscription(this, obj);
+                        }
+                    },
 
                     mapFn: function (dependentSubObject, operation) {
                         var objectToBeMapped = getData(obj.id);
@@ -828,11 +910,20 @@ function syncProvider() {
                             this.definition.mapFn(dependentSubObject, objectToBeMapped, dependentSubObject.removed, operation);
                         }
                     },
+                    clear: function () {
+                        this.params = null;
+                        this.destroy();
+                    },
                     destroy: function () {
+                        // is this listener connected to a subscription
+                        if (!this.subscription) {
+                            return;
+                        }
                         _.pull(this.subscription.listeners, this);
                         // if there is no listener on this subscription, it is no longer needed.
                         if (this.subscription.listeners.length === 0) {
                             this.subscription.destroy();
+                            _.pull(pool, this.subscription);
                         }
                     }
                 }

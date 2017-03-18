@@ -2,7 +2,7 @@ describe('Multi Sync Service: ', function () {
     var $rootScope, $q;
     var backend;
     var spec;
-    var bizSubParams, personSubParams, person2SubParams, person3SubParams;
+    var bizSubParams, personSubParams, person2SubParams, person3SubParams, person4SubParams;
     var syncedData;
 
 
@@ -12,8 +12,8 @@ describe('Multi Sync Service: ', function () {
     beforeEach(module(function ($provide,
         $syncProvider, $socketioProvider, mockSyncServerProvider) {
         $syncProvider.setDebug(2);
-        mockSyncServerProvider.setDebug(true);
-        $socketioProvider.setDebug(true);
+        // mockSyncServerProvider.setDebug(true);
+        // $socketioProvider.setDebug(true);
     }));
 
 
@@ -51,12 +51,14 @@ describe('Multi Sync Service: ', function () {
         spec.biz2b = new Business({ id: 2, name: 'biz2', revision: 5, managerId: 2 });
         spec.biz3 = new Business({ id: 3, name: 'biz3', revision: 3, managerId: 3 });
         spec.biz3b = new Business({ id: 3, name: 'biz3', revision: 4, managerId: 1 });
+        spec.biz3c = new Business({ id: 3, name: 'biz3', revision: 5, managerId: 4 });
 
 
         spec.p1 = new Person({ id: 1, firstname: 'Tom', lastname: 'Great', revision: 1 });
         spec.p1b = new Person({ id: 1, firstname: 'Tom', lastname: 'Greater', revision: 2 });
         spec.p2 = new Person({ id: 2, firstname: 'John', lastname: 'Super', revision: 1 });
         spec.p3 = new Person({ id: 3, firstname: 'Mateo', lastname: 'Nexto', revision: 0 });
+        spec.p4 = new Person({ id: 4, firstname: 'Luke', lastname: 'Dr', revision: 0, directorId: spec.p1.id });
     });
 
 
@@ -88,11 +90,25 @@ describe('Multi Sync Service: ', function () {
             personSubParams = { publication: 'person.pub', params: { id: spec.p1.id } };
             person2SubParams = { publication: 'person.pub', params: { id: spec.p2.id } };
             person3SubParams = { publication: 'person.pub', params: { id: spec.p3.id } };
+            person4SubParams = { publication: 'person.pub', params: { id: spec.p4.id } };
             backend.publishArray(bizSubParams, [spec.biz1, spec.biz2]);
             backend.publishObject(personSubParams, spec.p1);
             backend.publishObject(person2SubParams, spec.p2);
+            backend.publishObject(person4SubParams, spec.p4);
 
             expect(backend.acknowledge).not.toHaveBeenCalled();
+
+            var mappings = [
+                {
+                    type: 'object',
+                    publication: 'person.pub',
+                    params: { id: 'directorId' },
+                    mapFn: function (director, person) {
+                        person.director = director;
+                    },
+                    options: { objectClass: Person }
+                }
+            ];
             spec.sds = spec.$sync
                 .subscribe('businesses.pub')
                 .setObjectClass(Business)
@@ -102,7 +118,10 @@ describe('Multi Sync Service: ', function () {
                 function (person, biz) {
                     biz.manager = person;
                 },
-                { objectClass: Person }
+                {
+                    objectClass: Person,
+                    mappings: mappings
+                }
                 );
             syncedData = spec.sds.getData();
         });
@@ -241,8 +260,18 @@ describe('Multi Sync Service: ', function () {
 
             it('should update main object resusing an object subscription', function () {
                 backend.notifyDataUpdate(bizSubParams, [spec.biz3b]);
-                var rec = _.find(syncedData, { id: spec.biz3.id });
-                expect(rec.manager.firstname).toBe(spec.p1.firstname);
+                var biz3 = _.find(syncedData, { id: spec.biz3.id });
+                expect(biz3.manager.firstname).toBe(spec.p1.firstname);
+                var biz1 = _.find(syncedData, { id: spec.biz1.id });
+                expect(biz3.manager).toBe(biz1.manager); //same instance
+            });
+
+            fit('should map main object with an object which is resusing an object subscription', function () {
+                backend.notifyDataUpdate(bizSubParams, [spec.biz3c]);
+                var biz3 = _.find(syncedData, { id: spec.biz3.id });
+                expect(biz3.manager.firstname).toBe(spec.p4.firstname);
+                var biz1 = _.find(syncedData, { id: spec.biz1.id });
+                expect(biz3.manager.director).toBe(biz1.manager); //same instance
             });
 
             it('should update main object with the new dependent subscription object', function () {
@@ -290,6 +319,7 @@ describe('Multi Sync Service: ', function () {
         this.lastname = obj.lastname;
         this.id = obj.id;
         this.revision = obj.revision;
+        this.directorId= obj.directorId;
     }
 
 

@@ -286,7 +286,7 @@ function syncProvider() {
                     return;
                 }
                 destroyed = true;
-                if (thisSub.parentSubscription) {
+                if (thisSub.$parentSubscription) {
                     logDebug('Destroying Sub Subscription to ' + thisSub);
                 } else {
                     logDebug('Destroying Subscription to ' + thisSub);
@@ -623,7 +623,10 @@ function syncProvider() {
                 }
 
                 var objPropertyMappers = updatePropertyMappers(obj);
-
+// !!!!!!!!!!!!!!!!!!!!
+// the following code should move to updateProjectMappers which would return all promises
+// setParams would have the waitForReady
+// 
                 return $q.all(_.map(objPropertyMappers,
                     function (propertyMapper) {
                         if (!propertyMapper.hasDataToMap()) {
@@ -641,6 +644,7 @@ function syncProvider() {
                         });
                     }))
                     .then(function () {
+                        // object is now mapped with all data supplied by the subscriptions.
                         return obj;
                     });
             }
@@ -651,7 +655,7 @@ function syncProvider() {
              * 
              */
             function updatePropertyMappers(obj) {
-                var propertyMappers = findObjectDependentSubscriptions(obj);
+                var propertyMappers = findPropertyMappers(obj);
                 if (!propertyMappers) {
                     propertyMappers = createPropertyMappers(obj);
                 }
@@ -671,6 +675,11 @@ function syncProvider() {
                 return propertyMappersConnectedToData;
             }
 
+            /**
+             * Each object might be mapped to some data supplied by a subscription
+             * All properties of an object that requires this mapping will have property mapper
+             * 
+             */
             function createPropertyMappers(obj) {
                 logDebug('Sync -> creating ' + dependentSubscriptionDefinitions.length + ' property mapper(s) for record #' + JSON.stringify(obj.id) + ' of subscription ' + thisSub);
 
@@ -693,7 +702,7 @@ function syncProvider() {
              *  @param <Object> the object of the cache that will be mapped with additional data from subscription when they arrived
              *  @returns all the subscriptions linked to this object
              */
-            function findObjectDependentSubscriptions(obj) {
+            function findPropertyMappers(obj) {
                 var objDs = _.find(datasources, { objId: obj.id });
                 return objDs ? objDs.propertyMappers : null;
             }
@@ -717,10 +726,6 @@ function syncProvider() {
                     // datasources.slice(p, p + 1);
                 }
             }
-
-
-
-
 
 
             /**
@@ -762,7 +767,7 @@ function syncProvider() {
                         }
                     });
 
-                depSub.parentSubscription = thisSub; 
+                depSub.$parentSubscription = thisSub;
 
                 // the dependent subscription might have itself some mappings
                 if (definition.mappings) {
@@ -783,12 +788,21 @@ function syncProvider() {
             }
 
             function $getPool() {
-                if (!thisSub.parentSubscription) {
+                if (!thisSub.$parentSubscription) {
                     return pool;
                 }
-                return thisSub.parentSubscription.$getPool();
+                return thisSub.$parentSubscription.$getPool();
             }
 
+            /**
+             * A property mapper is in charge to map an object in object
+             * 
+             * ex:
+             *   biz.managagerId
+             * 
+             * the property mapper will help set biz.manager by establishing a subscription to obtain the object.
+             * 
+             */
             function PropertyMapper(obj, dependentSubDef) {
 
                 this.subscription = null;
@@ -862,8 +876,8 @@ function syncProvider() {
             function notifyMainSubscription(dependentSubscription) {
                 var mainObjectId = collectMainObjectId(dependentSubscription);
                 var mainSub = thisSub;
-                while (mainSub.parentSubscription) {
-                    mainSub = mainSub.parentSubscription;
+                while (mainSub.$parentSubscription) {
+                    mainSub = mainSub.$parentSubscription;
                 }
                 logDebug('Sync -> Notifying main subscription ' + mainSub.getPublication() + ' that its dependent subscription ' + dependentSubscription.getPublication() + ' was updated.');
                 mainSub.$notifyUpdateWithinDependentSubscription(mainObjectId);
@@ -873,7 +887,7 @@ function syncProvider() {
                 var id;
                 while (dependentSubscription && dependentSubscription.objectId) {
                     id = dependentSubscription.objectId;
-                    dependentSubscription = dependentSubscription.parentSubscription;
+                    dependentSubscription = dependentSubscription.$parentSubscription;
                 }
                 return id;
             }
@@ -883,7 +897,7 @@ function syncProvider() {
                 var params = [];
                 while (sub) {
                     params.push({ publication: sub.getPublication(), params: sub.getParameters() });
-                    sub = sub.parentSubscription;
+                    sub = sub.$parentSubscription;
                 }
                 return params;
             }
@@ -1090,7 +1104,7 @@ function syncProvider() {
                 if (!publicationListenerOff) {
 
                     // if the subscription belongs to a parent one and the network is lost, the top parent subscription will release/destroy all dependent subscriptions and take care of re-registering itself and its dependents.
-                    if (!thisSub.parentSubscription) {
+                    if (!thisSub.$parentSubscription) {
                         listenForReconnectionToResync();
                     }
 

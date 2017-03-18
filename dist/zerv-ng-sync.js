@@ -293,6 +293,7 @@ function syncProvider() {
             var objectClass;
             var subscriptionId;
             var mapDataFn;
+            var pool = [];
 
             var thisSub = this;
             var dependentSubscriptionDefinitions = [];
@@ -348,7 +349,7 @@ function syncProvider() {
             this.mapArrayDs = mapArrayDs;
 
             this.$notifyUpdateWithinDependentSubscription = $notifyUpdateWithinDependentSubscription;
-
+            this.$getPool = $getPool;
 
             setSingle(false);
 
@@ -365,7 +366,7 @@ function syncProvider() {
             }
 
             function toString() {
-                return publication + ' ' + JSON.stringify(subParams);
+                return publication + '/' + JSON.stringify(subParams);
             }
             /**
              * destroy this subscription but also dependent subscriptions if any
@@ -375,8 +376,8 @@ function syncProvider() {
                     return;
                 }
                 destroyed = true;
-                if (thisSub.parentSubscription) {
-                    logDebug('Destroying Sub Subscription to ' + thisSub + ', parentSubscription to ' + thisSub.parentSubscription);
+                if (thisSub.$parentSubscription) {
+                    logDebug('Destroying Sub Subscription to ' + thisSub);
                 } else {
                     logDebug('Destroying Subscription to ' + thisSub);
                 }
@@ -387,10 +388,15 @@ function syncProvider() {
 
             function destroyDependentSubscriptions() {
                 var allSubscriptions = _.flatten(_.map(datasources, function (datasource) {
-                    return datasource.subscriptions;
+                    return _.map(datasource.propertyMappers, function (propertyMapper) {
+                        return propertyMapper.subscription;
+                    });
                 }));
                 var deps = [];
                 _.forEach(allSubscriptions, function (sub) {
+                    if (!sub) {
+                        return;
+                    }
                     deps.push(sub.getPublication());
                     sub.destroy();
                 });
@@ -591,20 +597,18 @@ function syncProvider() {
                 } else {
                     setMapping(mapDefinitions);
                 }
-
                 return thisSub;
 
                 function setMapping(def) {
-                    if (def.type === 'object') {
+                    var type = def.type ? def.type.toLowerCase() : null;
+                    if (type === 'object') {
                         thisSub.mapObjectDs(def.publication, def.params || def.paramsFn, def.mapFn, def.options);
-                    } else if (def.type === 'array') {
+                    } else if (type === 'array') {
                         thisSub.mapArrayDs(def.publication, def.params || def.paramsFn, def.mapFn, def.options);
-                    }
-                    if (def.type === 'data') {
+                    } else if (type === 'data') {
                         thisSub.mapData(def.mapFn);
                     }
                 }
-
             }
 
             /**
@@ -708,41 +712,78 @@ function syncProvider() {
                     return $q.resolve(obj);
                 }
 
-                var objectSubscriptions = findObjectDependentSubscriptions(obj);
-                if (!objectSubscriptions) {
-                    objectSubscriptions = createObjectDependentSubscriptions(obj);
-                    // return $q.resolve();
-                }
-
-
-                return $q.all(_.map(objectSubscriptions,
-                    function (ds) {
-
-                        var subParams = ds.definition.paramsFn(obj, collectParentSubscriptionParams());
-
-                        // if the object has no information to mapped to dependent subscription, the subscription data is no longer needed and can released.
-                        // ex: a buziness has a managerId.  When the managerId is set to null,  the data of the previous manager is no longer needed, so is its subscription.
-                        if (_.isEmpty(subParams)) {
-                            ds.syncOff();
-                            return $q.resolve();
+                var objPropertyMappers = updatePropertyMappers(obj);
+// !!!!!!!!!!!!!!!!!!!!
+// the following code should move to updateProjectMappers which would return all promises
+// setParams would have the waitForReady
+// 
+                return $q.all(_.map(objPropertyMappers,
+                    function (propertyMapper) {
+                        if (!propertyMapper.hasDataToMap()) {
+                            return;
                         }
-
                         // When the dependent ds is already ready, then the object is mapped with its data
-                        return ds
-                            .setParameters(subParams)
-                            .waitForDataReady().then(function (data) {
-                                if (ds.isSingle()) {
-                                    ds.mapFn(data, obj);
-                                } else {
-                                    _.forEach(data, function (resultObj) {
-                                        ds.mapFn(resultObj, obj);
-                                    });
-                                }
-                            });
+                        return propertyMapper.subscription.waitForDataReady().then(function (data) {
+                            if (propertyMapper.subscription.isSingle()) {
+                                propertyMapper.definition.mapFn(data, obj, false, '');
+                            } else {
+                                _.forEach(data, function (resultObj) {
+                                    propertyMapper.definition.mapFn(resultObj, obj, false, '');
+                                });
+                            }
+                        });
                     }))
                     .then(function () {
+                        // object is now mapped with all data supplied by the subscriptions.
                         return obj;
                     });
+            }
+
+            /**
+             * Each property of an object that requires mapping must be set to get data from the proper subscription
+             * 
+             * 
+             */
+            function updatePropertyMappers(obj) {
+                var propertyMappers = findPropertyMappers(obj);
+                if (!propertyMappers) {
+                    propertyMappers = createPropertyMappers(obj);
+                }
+                var propertyMappersConnectedToData = [];
+
+                _.forEach(propertyMappers, function (propertyMapper) {
+                    // does the object have a value for this propertyMapper?
+                    var subParams = propertyMapper.definition.paramsFn(obj, collectParentSubscriptionParams());
+                    // no value, then propertyMapper do not map data from any subscription
+                    if (_.isEmpty(subParams)) {
+                        propertyMapper.clear();
+                    } else {
+                        propertyMapper.setParams(obj, subParams);
+                        propertyMappersConnectedToData.push(propertyMapper);
+                    }
+                });
+                return propertyMappersConnectedToData;
+            }
+
+            /**
+             * Each object might be mapped to some data supplied by a subscription
+             * All properties of an object that requires this mapping will have property mapper
+             * 
+             */
+            function createPropertyMappers(obj) {
+                logDebug('Sync -> creating ' + dependentSubscriptionDefinitions.length + ' property mapper(s) for record #' + JSON.stringify(obj.id) + ' of subscription ' + thisSub);
+
+                var propertyMappers = [];
+                _.forEach(dependentSubscriptionDefinitions,
+                    function (dependentSubDef) {
+                        propertyMappers.push(new PropertyMapper(obj, dependentSubDef));
+                    }
+                );
+                datasources.push({
+                    objId: obj.id,
+                    propertyMappers: propertyMappers
+                });
+                return propertyMappers;
             }
 
             /**
@@ -751,9 +792,9 @@ function syncProvider() {
              *  @param <Object> the object of the cache that will be mapped with additional data from subscription when they arrived
              *  @returns all the subscriptions linked to this object
              */
-            function findObjectDependentSubscriptions(obj) {
+            function findPropertyMappers(obj) {
                 var objDs = _.find(datasources, { objId: obj.id });
-                return objDs ? objDs.subscriptions : null;
+                return objDs ? objDs.propertyMappers : null;
             }
 
             /**
@@ -761,92 +802,160 @@ function syncProvider() {
              * 
              *  @param <Object> the object of that was removed
              */
-            function removeObjectDependentSubscriptions(obj) {
+            function removePropertyMappers(obj) {
                 var objDs = _.find(datasources, { objId: obj.id });
-                if (objDs && objDs.subscriptions.length !== 0) {
-                    logDebug('Sync -> Removing dependent subscription for record #' + obj.id + ' for subscription to ' + publication);
-                    _.forEach(objDs.subscriptions, function (sub) {
+                if (objDs && objDs.propertyMappers.length !== 0) {
+                    logDebug('Sync -> Removing property mappers for record #' + obj.id + ' of subscription to ' + publication);
+                    // _.forEach(objDs.subscriptions, function (sub) {
+                    //     sub.destroy();
+                    // });
+                    _.forEach(objDs.propertyMappers, function (sub) {
                         sub.destroy();
                     });
-                    var p = datasources.indexOf(objDs);
-                    datasources.slice(p, p + 1);
+                    // var p = datasources.indexOf(objDs);
+                    // datasources.slice(p, p + 1);
                 }
             }
 
+
             /**
-             * create the dependent subscription for each object of the cache
-             * 
-             * TODO: no reuse at this time, we might subscribe multiple times to the same data
-             * 
-             *  @param <Object> the object of the cache that will be mapped with additional data from subscription when they arrived
-             *  @returns all the subscriptions linked to this object
-             */
-            function createObjectDependentSubscriptions(obj) {
-                logDebug('Sync -> creating ' + dependentSubscriptionDefinitions.length + ' object dependent subscription(s) for subscription ' + thisSub);
-                var subscriptions = [];
-                _.forEach(dependentSubscriptionDefinitions,
-                    function (dependentSubDef) {
+              * create the dependent subscription for each object of the cache
+              * 
+              * TODO: no reuse at this time, we might subscribe multiple times to the same data
+              * 
+              *  @param <Object> the object of the cache that will be mapped with additional data from subscription when they arrived
+              *  @returns all the subscriptions linked to this object
+              */
+            function createObjectDependentSubscription(definition, subParams) {
 
-                        var subParams = dependentSubDef.paramsFn(obj, collectParentSubscriptionParams());
+                var depSub = subscribe(definition.publication)
+                    .setObjectClass(definition.objectClass)
+                    .setSingle(definition.single)
+                    .mapData(function (dependentSubObject, operation) {
+                        // map will be triggered in the following conditions:
+                        // - when the first time, the object is received, this dependent sync will be created and call map when it receives its data
+                        // - the next time the dependent syncs
 
-                        var depSub = subscribe(dependentSubDef.publication)
-                            .setObjectClass(dependentSubDef.objectClass)
-                            .setSingle(dependentSubDef.single)
-                            .mapData(function (dependentSubObject, operation) {
-                                // map will be triggered in the following conditions:
-                                // - when the first time, the object is received, this dependent sync will be created and call map when it receives its data
-                                // - the next time the dependent syncs
+                        // if the main sync is ready, it means 
+                        // - only the dependent received update 
+                        // if th main sync is NOT ready, the mapping will happen anyway when running mapSubscriptionDataToObject
 
-                                // if the main sync is ready, it means 
-                                // - only the dependent received update 
-                                // if th main sync is NOT ready, the mapping will happen anyway when running mapSubscriptionDataToObject
-
-                                // -------------------------------------------------
-                                // if (isReady() || force) { this does not work!!!  with this, it seems that mapping is not executed sometimes.
-                                // 
-                                // To dig in, mostlikely when the dependent subscription is created, mapFn will be called twice.
-                                // Try to prevent this... 
-                                // -------------------------------------------------
-                                var objectToBeMapped = getData(obj.id);
-                                if (objectToBeMapped) {
-                                    logDebug('Sync -> mapping data [' + operation + '] of dependent sub [' + dependentSubDef.publication + '] to record of sub [' + publication + ']');
-                                    // need to remove 3rd params...!!!
-                                    depSub.mapFn(dependentSubObject, objectToBeMapped, dependentSubObject.removed, operation);
-                                }
-                                //}
-                            })
-                            .setOnReady(function () {
-                                // if the main sync is NOT ready, it means it is in the process of being ready and will notify when it is
-                                if (dependentSubDef.notifyReady && isReady()) {
-                                    notifyMainSubscription(depSub);
-                                }
-                            });
-                        depSub.mapFn = dependentSubDef.mapFn;
-
-                        // the dependent subscription is linked to this particular object comming from a parent subscription
-                        depSub.objectId = obj.id;
-                        depSub.parentSubscription = thisSub;
-                        depSub.definition = dependentSubDef;
-
-                        // the dependent subscription might have itself some mappings
-                        if (dependentSubDef.mappings) {
-                            depSub.map(dependentSubDef.mappings);
+                        // -------------------------------------------------
+                        // if (isReady() || force) { this does not work!!!  with this, it seems that mapping is not executed sometimes.
+                        // 
+                        // To dig in, mostlikely when the dependent subscription is created, mapFn will be called twice.
+                        // Try to prevent this... 
+                        // -------------------------------------------------
+                        _.forEach(depSub.propertyMappers, function (propertyMapper) {
+                            propertyMapper.mapFn(dependentSubObject, operation);
+                        });
+                    })
+                    .setOnReady(function () {
+                        // if the main sync is NOT ready, it means it is in the process of being ready and will notify when it is
+                        if (definition.notifyReady && isReady()) {
+                            notifyMainSubscription(depSub);
                         }
-
-                        // This subscription will ONLY start when parent object is updated and provides the proper data to start.
-                        if (!_.isEmpty(subParams)) {
-                            // this starts the subscription using the params computed by the function provided when the dependent subscription was defined
-                            depSub.setParameters(subParams);
-                        }
-                        subscriptions.push(depSub);
                     });
-                datasources.push({
-                    objId: obj.id,
-                    subscriptions: subscriptions
-                });
-                return subscriptions;
+
+                depSub.$parentSubscription = thisSub;
+
+                // the dependent subscription might have itself some mappings
+                if (definition.mappings) {
+                    depSub.map(definition.mappings);
+                }
+                // this starts the subscription using the params computed by the function provided when the dependent subscription was defined
+                depSub.setParameters(subParams);
+                return depSub;
+
             }
 
+            function findSubScriptionInPool(definition, params) {
+                var depSub = _.find($getPool(), function (subscription) {
+                    // subscription should have a propertyMapper for the definition
+                    return _.isEqual(subscription.getParameters(), params);
+                })
+                return depSub;
+            }
+
+            function $getPool() {
+                if (!thisSub.$parentSubscription) {
+                    return pool;
+                }
+                return thisSub.$parentSubscription.$getPool();
+            }
+
+            /**
+             * A property mapper is in charge to map an object in object
+             * 
+             * ex:
+             *   biz.managagerId
+             * 
+             * the property mapper will help set biz.manager by establishing a subscription to obtain the object.
+             * 
+             */
+            function PropertyMapper(obj, dependentSubDef) {
+
+                this.subscription = null;
+                this.objectId = obj.id;
+                this.parentSubscription = thisSub;
+                this.definition = dependentSubDef;
+                this.hasDataToMap = hasDataToMap;
+                this.setParams = setParams;
+                this.mapFn = mapFn;
+                this.clear = clear;
+                this.destroy = destroy;
+
+                function hasDataToMap() {
+                    return !_.isNil(this.subscription);
+                }
+
+                function setParams(obj, params) {
+                    // if nothing change, the propertyMapper is already connected to the right subscription
+                    if (_.isEqual(params, this.params)) {
+                        return
+                    }
+                    this.params = params;
+                    var depSub = findSubScriptionInPool(this.definition, params);
+                    if (depSub) {
+                        // let's reuse an existing sub
+                        depSub.propertyMappers.push(this);
+                        this.subscription = depSub;
+                    } else {
+                        depSub = createObjectDependentSubscription(this.definition, this.params);
+                        depSub.propertyMappers = [this];
+                        this.subscription = depSub;
+                        $getPool().push(depSub);
+                    }
+                    this.subscription = depSub;
+                }
+
+                function mapFn(dependentSubObject, operation) {
+                    var objectToBeMapped = getData(obj.id);
+                    if (objectToBeMapped) {
+                        logDebug('Sync -> mapping data [' + operation + '] of dependent sub [' + dependentSubDef.publication + '] to record of sub [' + publication + ']');
+                        // need to remove 3rd params...!!!
+                        this.definition.mapFn(dependentSubObject, objectToBeMapped, dependentSubObject.removed, operation);
+                    }
+                }
+                function clear() {
+                    this.params = null;
+                    this.destroy();
+                }
+
+
+                function destroy() {
+                    // is this propertyMapper connected to a subscription
+                    if (!this.subscription) {
+                        return;
+                    }
+                    _.pull(this.subscription.propertyMappers, this);
+                    // if there is no propertyMapper on this subscription, it is no longer needed.
+                    if (this.subscription.propertyMappers.length === 0) {
+                        this.subscription.destroy();
+                        _.pull(pool, this.subscription);
+                    }
+                }
+            }
 
 
             function $notifyUpdateWithinDependentSubscription(idOfObjectImpactedByChange) {
@@ -857,8 +966,8 @@ function syncProvider() {
             function notifyMainSubscription(dependentSubscription) {
                 var mainObjectId = collectMainObjectId(dependentSubscription);
                 var mainSub = thisSub;
-                while (mainSub.parentSubscription) {
-                    mainSub = mainSub.parentSubscription;
+                while (mainSub.$parentSubscription) {
+                    mainSub = mainSub.$parentSubscription;
                 }
                 logDebug('Sync -> Notifying main subscription ' + mainSub.getPublication() + ' that its dependent subscription ' + dependentSubscription.getPublication() + ' was updated.');
                 mainSub.$notifyUpdateWithinDependentSubscription(mainObjectId);
@@ -868,7 +977,7 @@ function syncProvider() {
                 var id;
                 while (dependentSubscription && dependentSubscription.objectId) {
                     id = dependentSubscription.objectId;
-                    dependentSubscription = dependentSubscription.parentSubscription;
+                    dependentSubscription = dependentSubscription.$parentSubscription;
                 }
                 return id;
             }
@@ -878,7 +987,7 @@ function syncProvider() {
                 var params = [];
                 while (sub) {
                     params.push({ publication: sub.getPublication(), params: sub.getParameters() });
-                    sub = sub.parentSubscription;
+                    sub = sub.$parentSubscription;
                 }
                 return params;
             }
@@ -1085,7 +1194,7 @@ function syncProvider() {
                 if (!publicationListenerOff) {
 
                     // if the subscription belongs to a parent one and the network is lost, the top parent subscription will release/destroy all dependent subscriptions and take care of re-registering itself and its dependents.
-                    if (!thisSub.parentSubscription) {
+                    if (!thisSub.$parentSubscription) {
                         listenForReconnectionToResync();
                     }
 
@@ -1226,16 +1335,9 @@ function syncProvider() {
             function clearArrayCache() {
                 var promises = [];
                 _.forEach(cache, function (obj) {
-                    removeObjectDependentSubscriptions(obj);
+                    removePropertyMappers(obj);
                     obj.removed = true;
                     promises.push(mapDataToOject(obj));
-
-                    //   var recordState = getRecordState(obj);
-                    //     if (recordState) {
-                    //         removeObjectDependentSubscriptions(obj);
-                    //         recordState.removed = true;
-                    //         promises.push(mapDataToOject(recordState));
-                    //     }
                 });
                 return $q.all(promises).finally(function () {
                     recordStates = {};
@@ -1244,7 +1346,7 @@ function syncProvider() {
             }
 
             function clearObjectCache() {
-                removeObjectDependentSubscriptions(cache);
+                removePropertyMappers(cache);
                 cache.removed = true;
                 recordStates = {};
                 return mapDataToOject(cache);
@@ -1366,7 +1468,7 @@ function syncProvider() {
 
 
             function addRecord(record, force) {
-                logDebug('Sync -> Inserted New record #' + JSON.stringify(record.id) + (force ? ' directly' : ' via sync') + ' for subscription to ' + publication); // JSON.stringify(record));
+                logDebug('Sync -> Inserted New record #' + JSON.stringify(record.id) + (force ? ' directly' : ' via sync') + ' for subscription to ' + thisSub); // JSON.stringify(record));
                 getRevision(record); // just make sure we can get a revision before we handle this record
 
                 clearClientStamp(record);
@@ -1390,7 +1492,7 @@ function syncProvider() {
                 // has Sync received a record whose version was originated locally?
                 var obj = isSingleObjectCache ? cache : previous;
                 if (isLocalChange(obj, record)) {
-                    logDebug('Sync -> Updated own record #' + JSON.stringify(record.id) + ' for subscription to ' + publication); // JSON.stringify(record));
+                    logDebug('Sync -> Updated own record #' + JSON.stringify(record.id) + ' for subscription to ' + thisSub); // JSON.stringify(record));
                     obj.revision = record.revision;
                     obj.timestamp = record.timestamp;
                     obj.timestamp.clientStamp = true; // this allows new revision that don't change the timestamp (ex server update not initiated on client to be merged. otherwise client would believe it made the change)
@@ -1400,7 +1502,7 @@ function syncProvider() {
 
                 clearClientStamp(record);
 
-                logDebug('Sync -> Updated record #' + JSON.stringify(record.id) + (force ? ' directly' : ' via sync') + ' for subscription to ' + publication); // JSON.stringify(record));
+                logDebug('Sync -> Updated record #' + JSON.stringify(record.id) + (force ? ' directly' : ' via sync') + ' for subscription to ' + thisSub); // JSON.stringify(record));
                 obj = formatRecord ? formatRecord(record) : record;
 
                 return mapAllDataToObject(obj, 'update').then(function () {
@@ -1415,7 +1517,7 @@ function syncProvider() {
                 var previous = getRecordState(record);
 
                 if (force || !previous || getRevision(record) > getRevision(previous)) {
-                    logDebug('Sync -> Removed #' + JSON.stringify(record.id) + (force ? ' directly' : ' via sync') + ' for subscription to ' + publication);
+                    logDebug('Sync -> Removed #' + JSON.stringify(record.id) + (force ? ' directly' : ' via sync') + ' for subscription to ' + thisSub);
                     // We could have for the same record consecutively fetching in this order:
                     // delete id:4, rev 10, then add id:4, rev 9.... by keeping track of what was deleted, we will not add the record since it was deleted with a most recent timestamp.
                     record.removed = true; // So we only flag as removed, later on the garbage collector will get rid of it.       
@@ -1425,7 +1527,7 @@ function syncProvider() {
                     // if there is no previous record we do not need to removed any thing from our storage.     
                     if (previous) {
                         updateDataStorage(record);
-                        removeObjectDependentSubscriptions(record);
+                        removePropertyMappers(record);
                         syncListener.notify('remove', record);
                         dispose(record);
                         return mapDataToOject(previous, true);

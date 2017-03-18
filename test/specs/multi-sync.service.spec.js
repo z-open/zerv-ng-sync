@@ -266,7 +266,7 @@ describe('Multi Sync Service: ', function () {
                 expect(biz3.manager).toBe(biz1.manager); //same instance
             });
 
-            fit('should map main object with an object which is resusing an object subscription', function () {
+            it('should map main object with an object which is resusing an object subscription', function () {
                 backend.notifyDataUpdate(bizSubParams, [spec.biz3c]);
                 var biz3 = _.find(syncedData, { id: spec.biz3.id });
                 expect(biz3.manager.firstname).toBe(spec.p4.firstname);

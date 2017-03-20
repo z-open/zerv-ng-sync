@@ -10,9 +10,9 @@ describe('Basic Sync Service: ', function () {
 
     beforeEach(module(function ($provide,
         $syncProvider, $socketioProvider, mockSyncServerProvider) {
-        $syncProvider.setDebug(2);
-        mockSyncServerProvider.setDebug(true);
-        $socketioProvider.setDebug(true);
+        $syncProvider.setDebug(0);
+        mockSyncServerProvider.setDebug(false);
+        $socketioProvider.setDebug(false);
     }));
 
 
@@ -478,7 +478,6 @@ describe('Basic Sync Service: ', function () {
 
         it('should receive an object', function (done) {
             spec.sds.waitForDataReady().then(function (data) {
-                console.log('class:' + Object.getPrototypeOf(data));
                 expect(data instanceof Person).toBe(true);
                 done();
             });

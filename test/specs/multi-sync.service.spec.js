@@ -11,7 +11,7 @@ describe('Multi Sync Service: ', function () {
 
     beforeEach(module(function ($provide,
         $syncProvider, $socketioProvider, mockSyncServerProvider) {
-        $syncProvider.setDebug(2);
+        $syncProvider.setDebug(0);
         // mockSyncServerProvider.setDebug(true);
         // $socketioProvider.setDebug(true);
     }));

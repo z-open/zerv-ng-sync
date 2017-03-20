@@ -23,7 +23,7 @@ angular
     .module('sync')
     .provider('$sync', syncProvider);
 
-function syncProvider() {
+function syncProvider($syncMappingProvider) {
     var totalSub = 0;
 
     var debug;
@@ -31,6 +31,7 @@ function syncProvider() {
 
     this.setDebug = function (value) {
         debug = value;
+        $syncMappingProvider.setDebug(value);
     };
 
     /**
@@ -203,7 +204,6 @@ function syncProvider() {
             var objectClass;
             var subscriptionId;
             var mapDataFn;
-            var pool = [];
 
             var thisSub = this;
             thisSub.$dependentSubscriptionDefinitions = [];
@@ -258,9 +258,7 @@ function syncProvider() {
             this.mapArrayDs = mapArrayDs;
 
             this.$notifyUpdateWithinDependentSubscription = $notifyUpdateWithinDependentSubscription;
-            this.$getPool = $getPool;
-            this.$datasources = [];
-            this.createObjectDependentSubscription = createObjectDependentSubscription;
+            this.$createDependentSubscription = $createDependentSubscription;
 
             setSingle(false);
 
@@ -372,7 +370,7 @@ function syncProvider() {
              * 
              */
             function mapObjectDs(publication, paramsFn, mapFn, options) {
-                $syncMapping.addSyncAObjectDefinition(thisSub, publication, paramsFn, mapFn, options);
+                $syncMapping.addSyncObjectDefinition(thisSub, publication, paramsFn, mapFn, options);
                 return thisSub;
             }
 
@@ -535,62 +533,10 @@ function syncProvider() {
             }
 
 
-            /**
-              * create the dependent subscription for each object of the cache
-              * 
-              * TODO: no reuse at this time, we might subscribe multiple times to the same data
-              * 
-              *  @param <Object> the object of the cache that will be mapped with additional data from subscription when they arrived
-              *  @returns all the subscriptions linked to this object
-              */
-            function createObjectDependentSubscription(definition, subParams) {
-                var depSub = subscribe(definition.publication)
-                    .setObjectClass(definition.objectClass)
-                    .setSingle(definition.single)
-                    .mapData(function (dependentSubObject, operation) {
-                        // map will be triggered in the following conditions:
-                        // - when the first time, the object is received, this dependent sync will be created and call map when it receives its data
-                        // - the next time the dependent syncs
-
-                        // if the main sync is ready, it means 
-                        // - only the dependent received update 
-                        // if th main sync is NOT ready, the mapping will happen anyway when running mapSubscriptionDataToObject
-
-                        // -------------------------------------------------
-                        // if (isReady() || force) { this does not work!!!  with this, it seems that mapping is not executed sometimes.
-                        // 
-                        // To dig in, mostlikely when the dependent subscription is created, mapFn will be called twice.
-                        // Try to prevent this... 
-                        // -------------------------------------------------
-                        _.forEach(depSub.propertyMappers, function (propertyMapper) {
-                            propertyMapper.mapFn(dependentSubObject, operation);
-                        });
-                    })
-                    .setOnReady(function () {
-                        // if the main sync is NOT ready, it means it is in the process of being ready and will notify when it is
-                        if (definition.notifyReady && isReady()) {
-                            notifyMainSubscription(depSub);
-                        }
-                    });
-
+            function $createDependentSubscription(publication) {
+                var depSub = subscribe(publication);
                 depSub.$parentSubscription = thisSub;
-
-                // the dependent subscription might have itself some mappings
-                if (definition.mappings) {
-                    depSub.map(definition.mappings);
-                }
-                // this starts the subscription using the params computed by the function provided when the dependent subscription was defined
-                depSub.setParameters(subParams);
                 return depSub;
-
-            }
-
-
-            function $getPool() {
-                if (!thisSub.$parentSubscription) {
-                    return pool;
-                }
-                return thisSub.$parentSubscription.$getPool();
             }
 
 
@@ -598,27 +544,6 @@ function syncProvider() {
                 var cachedObject = getRecordState({ id: idOfObjectImpactedByChange });
                 syncListener.notify('ready', getData(), [cachedObject]);
             }
-
-            function notifyMainSubscription(dependentSubscription) {
-                var mainObjectId = collectMainObjectId(dependentSubscription);
-                var mainSub = thisSub;
-                while (mainSub.$parentSubscription) {
-                    mainSub = mainSub.$parentSubscription;
-                }
-                logDebug('Sync -> Notifying main subscription ' + mainSub.getPublication() + ' that its dependent subscription ' + dependentSubscription.getPublication() + ' was updated.');
-                mainSub.$notifyUpdateWithinDependentSubscription(mainObjectId);
-            }
-
-            function collectMainObjectId(dependentSubscription) {
-                var id;
-                while (dependentSubscription && dependentSubscription.objectId) {
-                    id = dependentSubscription.objectId;
-                    dependentSubscription = dependentSubscription.$parentSubscription;
-                }
-                return id;
-            }
-
-
 
             /**
              * this function starts the syncing.

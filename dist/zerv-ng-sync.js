@@ -88,6 +88,29 @@ function syncGarbageCollector() {
 (function() {
 "use strict";
 
+angular
+    .module('sync')
+    .factory('$syncMapping', syncGarbageCollector);
+
+
+function syncGarbageCollector() {
+
+
+    var service = {
+    
+    };
+
+    return service;
+
+    //////////
+
+    
+}
+}());
+
+(function() {
+"use strict";
+
 /**
  * 
  * Service that allows an array of data remain in sync with backend.

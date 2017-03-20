@@ -372,16 +372,7 @@ function syncProvider() {
              * 
              */
             function mapObjectDs(publication, paramsFn, mapFn, options) {
-                options = _.assign({}, options);
-                thisSub.$dependentSubscriptionDefinitions.push({
-                    publication: publication,
-                    paramsFn: getParamsFn(paramsFn),
-                    mapFn: mapFn,
-                    single: true,
-                    objectClass: options.objectClass,
-                    mappings: options.mappings,
-                    notifyReady: options.notifyReady
-                });
+                $syncMapping.addSyncAObjectDefinition(thisSub, publication, paramsFn, mapFn, options);
                 return thisSub;
             }
 
@@ -414,17 +405,7 @@ function syncProvider() {
              * 
              */
             function mapArrayDs(publication, paramsFn, mapFn, options) {
-                options = _.assign({}, options);
-                thisSub.$dependentSubscriptionDefinitions.push({
-                    publication: publication,
-                    paramsFn: getParamsFn(paramsFn),
-                    mapFn: mapFn,
-                    single: false,
-                    objectClass: options.objectClass,
-                    mappings: options.mappings,
-                    notifyReady: options.notifyReady
-
-                });
+                $syncMapping.addSyncArrayDefinition(thisSub, publication, paramsFn, mapFn, options);
                 return thisSub;
             }
 
@@ -503,46 +484,6 @@ function syncProvider() {
                 }
             }
 
-            /**
-             * 
-             *  provide the function that will returns the params to set the dependent subscription parameters
-             * 
-             *  @param <function> or <Map>
-             *         ex of function: function(obj) {
-             *              return {id:obj.ownerId};
-             *         }
-             *         ex of map: {id:'ownerI'} 
-             *         in both example above, if ownerId was null the dependent subscription would not start.
-             * 
-             *  @returns <function> that will define the parameters based on the parent object subscription
-             */
-            function getParamsFn(fnOrMap) {
-                var fn;
-                if (_.isFunction(fnOrMap)) {
-                    fn = fnOrMap;
-                } else {
-                    fn = function (obj) {
-                        var mappingParams = {};
-                        for (var key in fnOrMap) {
-                            var v = _.get(obj, fnOrMap[key]);
-                            if (!_.isNil(v)) {
-                                mappingParams[key] = v;
-                            }
-                        }
-                        return mappingParams;
-                    };
-                }
-
-                return function () {
-                    var mappingParams = fn.apply(this, arguments);
-                    // if there is no param, there is no mapping to do, most likely, there is no need for the dependent subscription
-                    // ex a person.driverLicenceId.... if that person does not have this information, there would be no need to try to subscribe
-                    if (!mappingParams || !Object.keys(mappingParams).length) {
-                        return null;
-                    }
-                    return mappingParams;
-                }
-            }
 
             /**
              * map static data or subscription based data to the provided object
@@ -556,7 +497,7 @@ function syncProvider() {
              * @returns <Promise> returns a promise that is resolved when the object is completely mapped
              */
             function mapAllDataToObject(obj, operation) {
-                return mapSubscriptionDataToObject(obj)
+                return $syncMapping.mapObjectPropertiesToSubscriptionData(thisSub, obj)
                     .then(function (obj, operation) {
                         return mapDataToOject(obj, operation);
                     })
@@ -593,31 +534,6 @@ function syncProvider() {
                 return $q.resolve(obj);
             }
 
-            /**
-             * wait for the subscriptions to pull their data then update the object
-             * 
-             * @returns <Promise> Resolve when it completes
-             */
-            function mapSubscriptionDataToObject(obj) {
-
-                if (thisSub.$dependentSubscriptionDefinitions.length === 0) {
-                    return $q.resolve(obj);
-                }
-
-                // Each property of an object that requires mapping must be set to get data from the proper subscription
-                var propertyMappers = $syncMapping.findPropertyMappers(thisSub, obj);
-                if (!propertyMappers) {
-                    propertyMappers = $syncMapping.createPropertyMappers(thisSub, obj);
-                }
-                return $q.all(_.map(propertyMappers,
-                    function (propertyMapper) {
-                        return propertyMapper.update(obj);
-                    }))
-                    .then(function () {
-                        // object is now mapped with all data supplied by the subscriptions.
-                        return obj;
-                    });
-            }
 
             /**
               * create the dependent subscription for each object of the cache

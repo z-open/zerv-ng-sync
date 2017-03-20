@@ -59,6 +59,67 @@ describe('Multi Sync Service: ', function () {
         spec.p2 = new Person({ id: 2, firstname: 'John', lastname: 'Super', revision: 1 });
         spec.p3 = new Person({ id: 3, firstname: 'Mateo', lastname: 'Nexto', revision: 0 });
         spec.p4 = new Person({ id: 4, firstname: 'Luke', lastname: 'Dr', revision: 0, directorId: spec.p1.id });
+
+
+        spec.loc1 = { id: 11, revision: 1, name: 'USA', businessId: spec.biz1.id, adminId: spec.p2.id };
+        spec.loc2 = { id: 21, revision: 1, name: 'JAPAN', businessId: spec.biz1.id, adminId: spec.p3.id };
+
+        bizSubParams = { publication: 'businesses.pub', params: {} };
+        personSubParams = { publication: 'person.pub', params: { id: spec.p1.id } };
+        person2SubParams = { publication: 'person.pub', params: { id: spec.p2.id } };
+        person3SubParams = { publication: 'person.pub', params: { id: spec.p3.id } };
+        person4SubParams = { publication: 'person.pub', params: { id: spec.p4.id } };
+
+        biz1LocationsSubParams = { publication: 'locations.pub', params: { businessId: spec.biz1.id } };
+        biz2LocationsSubParams = { publication: 'locations.pub', params: { businessId: spec.biz2.id } };
+        biz3LocationsSubParams = { publication: 'locations.pub', params: { businessId: spec.biz3.id } };
+
+        backend.publishArray(bizSubParams, [spec.biz1, spec.biz2]);
+        backend.publishObject(personSubParams, spec.p1);
+        backend.publishObject(person2SubParams, spec.p2);
+        backend.publishObject(person3SubParams, spec.p3);
+        backend.publishObject(person4SubParams, spec.p4);
+
+        backend.publishArray(biz1LocationsSubParams, [spec.loc1, spec.loc2]);
+        backend.publishArray(biz2LocationsSubParams, []);
+        backend.publishArray(biz3LocationsSubParams, []);
+
+        spec.directorMappingToPerson =
+            {
+                type: 'object',
+                publication: 'person.pub',
+                params: { id: 'directorId' },
+                mapFn: function (director, person) {
+                    person.director = director;
+                },
+                options: { objectClass: Person }
+            }
+            ;
+
+        spec.adminMappingToLocation = [
+            {
+                type: 'object',
+                publication: 'person.pub',
+                params: { id: 'adminId' },
+                mapFn: function (person, location) {
+                    location.admin = person;
+                },
+                options: { objectClass: Person }
+            }
+        ];
+
+        spec.locationsMappingToBiz =
+            {
+                type: 'array',
+                publication: 'locations.pub',
+                params: { businessId: 'id' },
+                mapFn: function (location, biz) {
+                    biz.locations.push(location);
+                },
+                options: {
+                    mappings: spec.adminMappingToLocation
+                }
+            };
     });
 
 
@@ -84,31 +145,12 @@ describe('Multi Sync Service: ', function () {
         jasmine.clock().uninstall();
     });
 
-    describe('Subscribing to one subscription mapping subscription ', function () {
+
+    describe('Subscribing to one subscription mapping a sync object ', function () {
         beforeEach(function setupSpies() {
-            bizSubParams = { publication: 'businesses.pub', params: {} };
-            personSubParams = { publication: 'person.pub', params: { id: spec.p1.id } };
-            person2SubParams = { publication: 'person.pub', params: { id: spec.p2.id } };
-            person3SubParams = { publication: 'person.pub', params: { id: spec.p3.id } };
-            person4SubParams = { publication: 'person.pub', params: { id: spec.p4.id } };
-            backend.publishArray(bizSubParams, [spec.biz1, spec.biz2]);
-            backend.publishObject(personSubParams, spec.p1);
-            backend.publishObject(person2SubParams, spec.p2);
-            backend.publishObject(person4SubParams, spec.p4);
 
             expect(backend.acknowledge).not.toHaveBeenCalled();
 
-            var mappings = [
-                {
-                    type: 'object',
-                    publication: 'person.pub',
-                    params: { id: 'directorId' },
-                    mapFn: function (director, person) {
-                        person.director = director;
-                    },
-                    options: { objectClass: Person }
-                }
-            ];
             spec.sds = spec.$sync
                 .subscribe('businesses.pub')
                 .setObjectClass(Business)
@@ -120,10 +162,10 @@ describe('Multi Sync Service: ', function () {
                 },
                 {
                     objectClass: Person,
-                    mappings: mappings
-                }
-                );
+                    mappings: spec.directorMappingToPerson
+                });
             syncedData = spec.sds.getData();
+
         });
         it('should not subscribe before sync is on', function () {
             expect(backend.acknowledge).not.toHaveBeenCalled();
@@ -164,7 +206,7 @@ describe('Multi Sync Service: ', function () {
                 expect(backend.acknowledge).toHaveBeenCalled();
             });
 
-            it('should map secondary objects to the main ones', function () {
+            it('should map all secondary objects to the main ones', function () {
                 var biz1 = _.find(syncedData, spec.biz1);
                 expect(!!biz1).toBe(true);
                 expect(biz1.manager).toBeDefined();
@@ -173,6 +215,7 @@ describe('Multi Sync Service: ', function () {
                 expect(!!biz2).toBe(true);
                 expect(biz2.manager).toBeUndefined();
             });
+
         });
 
         describe(', Syncing to delete an object with its dependent ', function () {
@@ -312,6 +355,41 @@ describe('Multi Sync Service: ', function () {
         });
     });
 
+    describe('Subscribing to one subscription mapping to a sync array ', function () {
+        beforeEach(function setupSpies() {
+
+            expect(backend.acknowledge).not.toHaveBeenCalled();
+
+            spec.sds = spec.$sync
+                .subscribe('businesses.pub')
+                .setObjectClass(Business)
+                .map(spec.locationsMappingToBiz);
+            syncedData = spec.sds.getData();
+
+            spec.sds.syncOn();
+            $rootScope.$digest();
+        });
+
+        it('should map location array to the businesses', function () {
+            var biz1 = _.find(syncedData, spec.biz1);
+            expect(biz1.locations).toBeDefined();
+            expect(biz1.locations.length).toBe(2);
+            expect(biz1.locations[0].id).toBe(spec.loc1.id);
+            expect(biz1.locations[1].id).toBe(spec.loc2.id);
+        });
+
+        it('should map admin person to location in the array', function () {
+            var biz1 = _.find(syncedData, spec.biz1);
+            expect(biz1.locations[0].admin).toBeDefined();
+            expect(biz1.locations[0].admin.id).toBe(spec.p2.id);
+
+            expect(biz1.locations[1].admin).toBeDefined();
+            expect(biz1.locations[1].admin.id).toBe(spec.p3.id);
+        });
+    });
+
+
+
     //////////////////////////////////////////////
 
     function Person(obj) {
@@ -319,7 +397,7 @@ describe('Multi Sync Service: ', function () {
         this.lastname = obj.lastname;
         this.id = obj.id;
         this.revision = obj.revision;
-        this.directorId= obj.directorId;
+        this.directorId = obj.directorId;
     }
 
 
@@ -328,6 +406,7 @@ describe('Multi Sync Service: ', function () {
         this.id = obj.id;
         this.managerId = obj.managerId;
         this.revision = obj.revision;
+        this.locations = [];
     }
 
 });

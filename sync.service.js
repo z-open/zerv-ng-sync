@@ -622,19 +622,65 @@ function syncProvider() {
                     return $q.resolve(obj);
                 }
 
-                // Each property of an object that requires mapping must be set to get data from the proper subscription
-                var propertyMappers = findPropertyMappers(obj);
-                if (!propertyMappers) {
-                    propertyMappers = createPropertyMappers(obj);
-                }
-                return $q.all(_.map(propertyMappers,
+                return updatePropertyMappers(obj)
+                    .then(function () {
+                        // object is now mapped with all data supplied by the subscriptions.
+                        return obj;
+                    });
+
+                // !!!!!!!!!!!!!!!!!!!!
+                // the following code should move to updateProjectMappers which would return all promises
+                // setParams would have the waitForReady
+                // 
+                return $q.all(_.map(objPropertyMappers,
                     function (propertyMapper) {
-                        return propertyMapper.update(obj);
+                        if (!propertyMapper.hasDataToMap()) {
+                            return;
+                        }
+                        // When the dependent ds is already ready, then the object is mapped with its data
+                        return propertyMapper.subscription.waitForDataReady().then(function (data) {
+                            if (propertyMapper.subscription.isSingle()) {
+                                propertyMapper.definition.mapFn(data, obj, false, '');
+                            } else {
+                                _.forEach(data, function (resultObj) {
+                                    propertyMapper.definition.mapFn(resultObj, obj, false, '');
+                                });
+                            }
+                        });
                     }))
                     .then(function () {
                         // object is now mapped with all data supplied by the subscriptions.
                         return obj;
                     });
+            }
+
+            /**
+             * Each property of an object that requires mapping must be set to get data from the proper subscription
+             * 
+             * 
+             */
+            function updatePropertyMappers(obj) {
+                var propertyMappers = findPropertyMappers(obj);
+                if (!propertyMappers) {
+                    propertyMappers = createPropertyMappers(obj);
+                }
+                // var propertyMappersConnectedToData = [];
+                // _.forEach(propertyMappers, function (propertyMapper) {
+                //     // does the object have a value for this propertyMapper?
+                //     var subParams = propertyMapper.definition.paramsFn(obj, collectParentSubscriptionParams());
+                //     // no value, then propertyMapper do not map data from any subscription
+                //     if (_.isEmpty(subParams)) {
+                //         propertyMapper.clear();
+                //     } else {
+                //         propertyMapper.setParams(obj, subParams);
+                //         propertyMappersConnectedToData.push(propertyMapper);
+                //     }
+                // });
+                // return propertyMappersConnectedToData;
+
+                return $q.all(propertyMappers, function (propertyMapper) {
+                    return propertyMapper.update(obj);
+                });
             }
 
             /**
@@ -780,31 +826,36 @@ function syncProvider() {
                 this.clear = clear;
                 this.destroy = destroy;
 
+                var thisPropertyMapper = this;
+
                 function hasDataToMap() {
                     return !_.isNil(this.subscription);
                 }
 
                 function update(obj) {
-                    var propertyMapper = this;
+                    // if (!hasDataToMap()) {
+                    //     return;
+                    // }
                     // does the object have a value for this propertyMapper?
-                    var subParams = propertyMapper.definition.paramsFn(obj, collectParentSubscriptionParams());
+                    var subParams = thisPropertyMapper.definition.paramsFn(obj, collectParentSubscriptionParams());
                     // no value, then propertyMapper do not map data from any subscription
                     if (_.isEmpty(subParams)) {
-                        propertyMapper.clear();
-                        return false;
-                    } else {
-                        propertyMapper.setParams(obj, subParams);
-
-                        return propertyMapper.subscription.waitForDataReady().then(function (data) {
-                            if (propertyMapper.subscription.isSingle()) {
-                                propertyMapper.definition.mapFn(data, obj, false, '');
-                            } else {
-                                _.forEach(data, function (resultObj) {
-                                    propertyMapper.definition.mapFn(resultObj, obj, false, '');
-                                });
-                            }
-                        });
+                        clear();
+                        return $q.resolve();
                     }
+                    setParams(obj, subParams);
+                    // When the dependent ds is already ready, then the object is mapped with its data
+                    return thisPropertyMapper.subscription.waitForDataReady().then(function (data) {
+                        if (thisPropertyMapper.subscription.isSingle()) {
+                            thisPropertyMapper.definition.mapFn(data, obj, false, '');
+                        } else {
+                            _.forEach(data, function (resultObj) {
+                                thisPropertyMapper.definition.mapFn(resultObj, obj, false, '');
+                            });
+                        }
+                    });
+
+
                 }
 
                 function setParams(obj, params) {

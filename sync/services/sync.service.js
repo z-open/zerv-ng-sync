@@ -700,7 +700,7 @@ function syncProvider($syncMappingProvider) {
                     if (reconnectOff) {
                         reconnectOff();
                         reconnectOff = null;
-                    }
+                    }                    
                 }
                 return thisSub;
             }

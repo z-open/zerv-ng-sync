@@ -25,6 +25,8 @@ module.exports = function (config) {
             'libraries/angular-socketio/dist/angular-socketio.js',
             'sync/sync.module.js',
             'sync/**/*.*.js',
+            'test/helpers/**/*.module.js',
+            'test/helpers/**/*.*.js',
             'test/specs/**/*.*.js'
         ],
 

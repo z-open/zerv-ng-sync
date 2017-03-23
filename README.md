@@ -18,7 +18,9 @@ Sync does not work if objects do not have BOTH id and revision field!!!!
 
 ### Example: Syncing an array
 
-    sds = $sync.subscribe('people.sync').syncOn();
+    sds = $sync
+          .subscribe('people.sync')
+          .syncOn();
     data = sds.getData();
            
     $scope.$watchCollection(data,function() {
@@ -31,9 +33,10 @@ SyncOn starts the syncing.
 
 ### Example: Syncing a record
 
-    sds = $sync.subscribe('person.sync')
+    sds = $sync
+          .subscribe('person.sync')
           .setSingle(true)
-          .setParameters({id:20})
+          .setParameters({id:20});
     data = sds.getData();
             
 The data contains an object that remains in sync.
@@ -156,11 +159,90 @@ if the schema is defined properly, person object will have all its contents in s
 
 TODO: provide specifics.
 
+### Unit testing
 
-### To improve
+For service or component involving Syncing, the mockSyncServer can simulate the server side.
+This service is available in the sync.test module. This module is provide in dist/zerv-ng-sync-mock.js.
+The library must be set up in your test runner beforehand in addition of dist/zerv-ng-sync.js library.
+
+    describe('syncTest', function () {
+
+        var $rootScope,$sync,backend,spec;
+        beforeEach(module('sync.test'));
+
+        beforeEach(module(function (
+            $syncProvider) {
+            $syncProvider.setDebug(1); // to output debug information if needed
+        }));
+
+        beforeEach(inject(function (_$rootScope_, _$sync_, _mockSyncServer_) {
+            backend = _mockSyncServer_;
+            $rootScope = _$rootScope_;
+        }
+        
+        beforeEach(function setupData() {
+            spec.r1 = { id: 1, description: 'person1', revision: 0 };
+            spec.r1b = { id: 1, description: 'personOne', revision: 1 };
+            spec.r2 = { id: 2, description: 'person2', revision: 4 };
+            spec.r3 = { id: 3, description: 'person3', revision: 5 };
+            spec.subParams = { publication: 'myPub', params: {} };
+
+            backend.setData(spec.subParams, [spec.r1,spec.r2]);
+            spec.sds = spec.$sync.subscribe('myPub').setParams({});
+            // Calling digest will run the syncing process to get the data from the backend.
+            $rootScope.$digest();
+        });
+
+        it('should have the data received',function(done){  
+                   expect(sds.getData().length).toBe(2);
+        })
+
+        it('should return an array via the resolved promise',function(done){
+               spec.sds.waitForDataReady(function(data){
+                   expect(sds.getData().length).toBe(2);
+                   done();
+               });
+        })
+
+        it('should add an object to the array',function(){
+            backend.notifyDataCreation(spec.subParams, [spec.r3]);
+            expect(spec.sds.getData().length).toBe(3);
+        })
+        
+        it('should update an array in sync',function(){
+            backend.notifyDataUpdate(spec.subParams, [spec.r1b]);
+            expect(spec.sds.getData()[0].description).toBe(spec.r1b.description);
+        })
+
+        it('should remove an object from the array',function(){
+            spec.r1.revision++;
+            backend.notifyDataDelete(spec.subParams, [spec.r1]);
+            expect(spec.sds.getData().length).toBe(1);
+        })
+
+        it('should remove the subscription to the server on subscription destruction',function(){
+            expect(backend.exists(spec.subParams).toBe(true);
+            spec.sds.destroy();
+            expect(backend.exists(spec.subParams).toBe(false);
+        })
+
+        it('should provide the number of active subscriptions on the front end',function(){
+            expect($sync.getCurrentSubscriptionCount()).toBe(1);
+        })
+    });
+
+    The notify functions do run internally a digest cycle.
+
+
+### Future Enhancements
 
 Multisync creates a subscription for each record which would lead to performance impact on the back end and front end
 
-- front end could resuse dependent subscription is the setParameters is the same to prevent creating new subscription to the server and release the subscription if no record needs it.Ï
+- front end could resuse dependent subscription is the setParameters is the same to prevent creating new subscription to the server and release the subscription if no record needs it.
 - backend could cache data, so if multiple subscriptions request same data from in a short time there is no access to the db.
 Cache size could depends on time (life expectancy or memory size or fixed size)
+
+In addition,
+
+- notify creation, update and removals of multiple objects at once (back end change)
+- Buffer data notifications on the backend to decrease number of pushes thru the socket 

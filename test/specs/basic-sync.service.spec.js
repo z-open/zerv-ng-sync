@@ -1,22 +1,26 @@
-describe('Sync Service: ', function () {
-    var $rootScope, $timeout, $q;
+describe('Basic Sync Service: ', function () {
+    var $rootScope, $q;
     var backend;
     var spec;
+    var subParams = { publication: 'myPub', params: {} };
 
 
-    beforeEach(module('sync')); // still depends on commont...until we create a bower/npm
+    beforeEach(module('sync'));
+    beforeEach(module('sync.test'));
 
-    beforeEach(module(function ($provide, $socketioProvider, $syncProvider) {
-        backend = new MockBackend();
-        $provide.value('$socketio', new MockSocketio());
-        $syncProvider.setDebug(2);
-        $socketioProvider.setDebug(true);
+    beforeEach(module(function ($provide,
+        $syncProvider, $socketioProvider, mockSyncServerProvider) {
+        $syncProvider.setDebug(0);
+        mockSyncServerProvider.setDebug(false);
+        $socketioProvider.setDebug(false);
     }));
 
-    beforeEach(inject(function (_$rootScope_, _$sync_, _$q_, _$timeout_, _$syncGarbageCollector_, _$socketio_) {
+
+    beforeEach(inject(function (_$rootScope_, mockSyncServer, _$sync_, _$q_, _$syncGarbageCollector_, _$socketio_) {
         $rootScope = _$rootScope_;
         $q = _$q_;
-        $timeout = _$timeout_;
+
+        backend = mockSyncServer;
 
         var syncCallbacks = {
             onUpdate: function () { },
@@ -81,6 +85,7 @@ describe('Sync Service: ', function () {
     });
 
     it('should subscribe and acknowledge to receive empty list', function (done) {
+        backend.setData(subParams, []);
         expect(backend.acknowledge).not.toHaveBeenCalled();
         spec.sds = spec.$sync.subscribe('myPub');
         expect(spec.sds.isSyncing()).toBe(false);
@@ -97,9 +102,28 @@ describe('Sync Service: ', function () {
         $rootScope.$digest();
     });
 
+    it('should subscribe and run the waitForDataReady callback', function (done) {
+        backend.setData(subParams, [spec.r1, spec.r2]);
+        spec.sds = spec.$sync.subscribe('myPub');
+        spec.sds.waitForDataReady(function (data, sds) {
+            expect(data.length).toBe(2);
+            expect(sds).toBe(spec.sds);
+            done();
+        });
+        $rootScope.$digest();
+    });
 
+    it('should subscribe and run the waitForSubscriptionReady callback', function (done) {
+        backend.setData(subParams, [spec.r1, spec.r2]);
+        spec.sds = spec.$sync.subscribe('myPub');
+        spec.sds.waitForSubscriptionReady(function (sds) {
+            expect(sds).toBe(spec.sds);
+            done();
+        });
+        $rootScope.$digest();
+    });
     it('should subscribe and acknowledge to receive inital data', function (done) {
-        backend.setData([spec.r1, spec.r2]);
+        backend.setData(subParams, [spec.r1, spec.r2]);
         expect(backend.acknowledge).not.toHaveBeenCalled();
         spec.sds = spec.$sync.subscribe('myPub');
         expect(spec.sds.isSyncing()).toBe(false);
@@ -117,7 +141,7 @@ describe('Sync Service: ', function () {
 
     describe('Syncinc actitivity', function () {
         beforeEach(function () {
-            backend.setData([spec.r1, spec.r2]);
+            backend.setData(subParams, [spec.r1, spec.r2]);
             spec.sds = spec.$sync.subscribe('myPub');
         });
 
@@ -151,7 +175,18 @@ describe('Sync Service: ', function () {
         });
     });
 
-    it('should unsubscribe when subscription is destroyed', function (done) {
+    it('should release subscription in mockSyncServer', function () {
+        expect(backend.exists(subParams)).toBe(false);
+        backend.setData(subParams, []);
+        expect(backend.exists(subParams)).toBe(true);
+        spec.sds = spec.$sync.subscribe('myPub').syncOn();
+        $rootScope.$digest();
+        spec.sds.destroy();
+        expect(backend.exists(subParams)).toBe(false);
+    });
+
+    it('should unsubscribe when subscription is destroyed', function () {
+        backend.setData(subParams, []);
         spec.sds = spec.$sync.subscribe('myPub');
         spec.sds.waitForDataReady();
         $rootScope.$digest();
@@ -160,10 +195,10 @@ describe('Sync Service: ', function () {
         spec.sds.destroy();
         expect(spec.sds.isSyncing()).toBe(false);
         expect(backend.unsubscribe).toHaveBeenCalled();
-        done();
     });
 
     it('should unsubscribe when attached scope is destroyed', function (done) {
+        backend.setData(subParams, []);
         var scope = $rootScope.$new();
         spec.sds = spec.$sync.subscribe('myPub');
         spec.sds.attach(scope);
@@ -178,6 +213,7 @@ describe('Sync Service: ', function () {
     });
 
     it('should unsubscribe when provided scope is destroyed', function (done) {
+        backend.setData(subParams, []);
         var scope = $rootScope.$new();
         spec.sds = spec.$sync.subscribe('myPub', scope);
         spec.sds.waitForDataReady();
@@ -200,6 +236,7 @@ describe('Sync Service: ', function () {
     // });
 
     it('should not allow changing to set the object class after starting syncing', function () {
+        backend.setData(subParams, []);
         spec.sds = spec.$sync.subscribe('myPub');
         spec.sds.waitForDataReady();
         spec.sds.setObjectClass(Person);
@@ -208,12 +245,12 @@ describe('Sync Service: ', function () {
 
     describe('Data Array sync', function () {
         beforeEach(function () {
-            backend.setData([spec.r1, spec.r2]);
+            backend.setData(subParams, [spec.r1, spec.r2]);
             spec.sds = spec.$sync.subscribe('myPub');
         });
 
         it('should receive an array', function (done) {
-            spec.sds.waitForDataReady().then(function (data) {
+            spec.sds.waitForDataReady(function (data) {
                 expect(_.isArray(data)).toBe(true);
                 done();
             });
@@ -223,7 +260,7 @@ describe('Sync Service: ', function () {
         it('should NOT allow syncing data without revision property', function (done) {
             spec.sds.waitForDataReady().then(function (data) {
                 try {
-                    backend.notifyDataChanges([spec.recordWithNoRevision]);
+                    backend.notifyDataCreation(subParams, [spec.recordWithNoRevision]);
                 } catch (err) {
 
                     expect(err.message).toBe('Sync requires a revision or timestamp property in received record');
@@ -237,7 +274,7 @@ describe('Sync Service: ', function () {
         it('should add a record to the array when receiving an add operation', function (done) {
             spec.sds.waitForDataReady().then(function (data) {
                 expect(data.length).toBe(2);
-                backend.notifyDataChanges([spec.r3])
+                backend.notifyDataCreation(subParams, [spec.r3])
                     .then(function () {
                         expect(data.length).toBe(3);
                         expect(!!_.find(data, { id: spec.r3.id })).toBe(true);
@@ -251,7 +288,7 @@ describe('Sync Service: ', function () {
             spec.sds.waitForDataReady().then(function (data) {
                 expect(data.length).toBe(2);
                 var rec = _.find(data, { id: spec.r1.id });
-                backend.notifyDataChanges([spec.r1b])
+                backend.notifyDataUpdate(subParams, [spec.r1b])
                     .then(function () {
                         expect(data.length).toBe(2);
                         expect(rec).toBeDefined();
@@ -265,7 +302,7 @@ describe('Sync Service: ', function () {
         it('should remove a record from array when receiving a removal operation', function (done) {
             spec.sds.waitForDataReady().then(function (data) {
                 expect(data.length).toBe(2);
-                backend.notifyDataRemovals([{ id: spec.r2.id, revision: spec.r2.revision + 1 }]);
+                backend.notifyDataDelete(subParams, [{ id: spec.r2.id, revision: spec.r2.revision + 1 }]);
                 expect(data.length).toBe(1);
                 expect(_.find(data, { id: spec.r2.id })).not.toBeDefined();
                 done();
@@ -277,7 +314,7 @@ describe('Sync Service: ', function () {
 
     describe('Data Array sync with composite key', function () {
         beforeEach(function () {
-            backend.setData([spec.rc1, spec.rc2]);
+            backend.setData(subParams, [spec.rc1, spec.rc2]);
             spec.sds = spec.$sync.subscribe('myPub');
         });
 
@@ -294,7 +331,7 @@ describe('Sync Service: ', function () {
         it('should add a record to the array when receiving an add operation', function (done) {
             spec.sds.waitForDataReady().then(function (data) {
                 expect(data.length).toBe(2);
-                backend.notifyDataChanges([spec.rc3])
+                backend.notifyDataCreation(subParams, [spec.rc3])
                     .then(function () {
                         expect(data.length).toBe(3);
                         expect(!!findRecord(data, spec.rc3.id)).toBe(true);
@@ -308,7 +345,7 @@ describe('Sync Service: ', function () {
             spec.sds.waitForDataReady().then(function (data) {
                 expect(data.length).toBe(2);
                 var rec = _.find(data, { id: spec.rc1.id });
-                backend.notifyDataChanges([spec.rc1b])
+                backend.notifyDataUpdate(subParams, [spec.rc1b])
                     .then(function () {
                         expect(data.length).toBe(2);
                         expect(rec).toBeDefined();
@@ -322,7 +359,7 @@ describe('Sync Service: ', function () {
         it('should remove a record from array when receiving a removal operation', function (done) {
             spec.sds.waitForDataReady().then(function (data) {
                 expect(data.length).toBe(2);
-                backend.notifyDataRemovals([{ id: spec.rc2.id, revision: spec.rc2.revision + 1 }]);
+                backend.notifyDataDelete(subParams, [{ id: spec.rc2.id, revision: spec.rc2.revision + 1 }]);
                 expect(data.length).toBe(1);
                 expect(findRecord(data, spec.r2.id)).not.toBeDefined();
                 done();
@@ -339,7 +376,7 @@ describe('Sync Service: ', function () {
     }
     describe('Single record sync', function () {
         beforeEach(function () {
-            backend.setData([spec.r1]);
+            backend.setData(subParams, [spec.r1]);
             spec.sds = spec.$sync.subscribe('myPub')
                 .setSingle(true);
             $rootScope.$digest();
@@ -356,7 +393,7 @@ describe('Sync Service: ', function () {
         it('should update existing record in the array when receiving an update operation', function (done) {
             spec.sds.waitForDataReady().then(function (data) {
                 expect(data.description).toBe(spec.r1.description);
-                backend.notifyDataChanges([spec.r1b])
+                backend.notifyDataUpdate(subParams, [spec.r1b])
                     .then(function () {
                         expect(data.description).toBe(spec.r1b.description);
                         done();
@@ -367,7 +404,7 @@ describe('Sync Service: ', function () {
 
         it('should remove a record from array when receiving a removal operation', function (done) {
             spec.sds.waitForDataReady().then(function (data) {
-                backend.notifyDataRemovals([{ id: spec.r1.id, revision: spec.r1.revision + 1 }]);
+                backend.notifyDataDelete(subParams, [{ id: spec.r1.id, revision: spec.r1.revision + 1 }]);
                 expect(data.id).toBeUndefined();
                 done();
             });
@@ -378,7 +415,7 @@ describe('Sync Service: ', function () {
 
     describe('Object Array sync', function () {
         beforeEach(function () {
-            backend.setData([spec.p2, spec.p1]);
+            backend.setData(subParams, [spec.p2, spec.p1]);
             spec.sds = spec.$sync.subscribe('myPub')
                 .setObjectClass(Person);
         });
@@ -397,7 +434,7 @@ describe('Sync Service: ', function () {
             spec.sds.waitForDataReady().then(function (data) {
                 var object = _.find(data, { id: spec.p1.id });
                 expect(data.length).toBe(2);
-                backend.notifyDataChanges([spec.p1b])
+                backend.notifyDataUpdate(subParams, [spec.p1b])
                     .then(function () {
                         expect(data.length).toBe(2);
                         expect(object).toBeDefined();
@@ -419,7 +456,7 @@ describe('Sync Service: ', function () {
 
                 expect(object.revision).toBe(1);
 
-                backend.notifyDataChanges([_.assign({}, object, { revision: 2, lastname: 'should never get thru' })])
+                backend.notifyDataUpdate(subParams, [_.assign({}, object, { revision: 2, lastname: 'should never get thru' })])
                     .then(function () {
                         expect(object.lastname).toBe(spec.p1b.lastname);
                         expect(object.timestamp.clientStamp).toBe(true); // true means the object was updated locally
@@ -433,7 +470,7 @@ describe('Sync Service: ', function () {
 
     describe('Single Object sync', function () {
         beforeEach(function () {
-            backend.setData([spec.p1]);
+            backend.setData(subParams, [spec.p1]);
             spec.sds = spec.$sync.subscribe('myPub')
                 .setSingle(true)
                 .setObjectClass(Person);
@@ -441,7 +478,6 @@ describe('Sync Service: ', function () {
 
         it('should receive an object', function (done) {
             spec.sds.waitForDataReady().then(function (data) {
-                console.log('class:' + Object.getPrototypeOf(data));
                 expect(data instanceof Person).toBe(true);
                 done();
             });
@@ -451,7 +487,7 @@ describe('Sync Service: ', function () {
         it('should update existing object when receiving an update operation', function (done) {
             spec.sds.waitForDataReady().then(function (data) {
                 expect(data.getFullname()).toBe(spec.p1.getFullname());
-                backend.notifyDataChanges([spec.p1b])
+                backend.notifyDataUpdate(subParams, [spec.p1b])
                     .then(function () {
                         expect(data.getFullname()).toBe(spec.p1b.getFullname());
                         done();
@@ -469,7 +505,7 @@ describe('Sync Service: ', function () {
 
                 expect(data.revision).toBe(1);
 
-                backend.notifyDataChanges([_.assign({}, data, { revision: 2, lastname: 'should never get thru' })])
+                backend.notifyDataUpdate(subParams, [_.assign({}, data, { revision: 2, lastname: 'should never get thru' })])
                     .then(function () {
                         expect(data.lastname).toBe(spec.p1b.lastname);
                         expect(data.timestamp.clientStamp).toBe(true); // true means the object was updated locally
@@ -482,7 +518,7 @@ describe('Sync Service: ', function () {
 
         it('should empty the single object  when receiving a removal operation', function (done) {
             spec.sds.waitForDataReady().then(function (data) {
-                backend.notifyDataRemovals([{ id: spec.p1.id, revision: spec.p1.revision + 1 }]);
+                backend.notifyDataDelete(subParams, [{ id: spec.p1.id, revision: spec.p1.revision + 1 }]);
                 expect(data.id).toBeUndefined();
                 done();
             });
@@ -492,7 +528,7 @@ describe('Sync Service: ', function () {
         it('should NOT empty the object when receiving an OLD removal operation', function (done) {
             spec.sds.waitForDataReady().then(function (data) {
                 //debugger;
-                backend.notifyDataRemovals([{ id: spec.p1.id, revision: spec.p1.revision }]);
+                backend.notifyDataDelete(subParams, [{ id: spec.p1.id, revision: spec.p1.revision }]);
                 expect(data.id).toBeDefined();
                 done();
             });
@@ -501,9 +537,9 @@ describe('Sync Service: ', function () {
 
         it('should NOT add any object when receiving an OLD removal operation', function (done) {
             spec.sds.waitForDataReady().then(function (data) {
-                backend.notifyDataRemovals([{ id: spec.p1.id, revision: spec.p1.revision + 1 }]);
+                backend.notifyDataDelete(subParams, [{ id: spec.p1.id, revision: spec.p1.revision + 1 }]);
                 expect(data.id).toBeUndefined();
-                backend.notifyDataRemovals([{ id: spec.p1.id, revision: spec.p1.revision }]);
+                backend.notifyDataDelete(subParams, [{ id: spec.p1.id, revision: spec.p1.revision }]);
                 expect(data.id).toBeUndefined();
                 done();
             });
@@ -516,7 +552,7 @@ describe('Sync Service: ', function () {
 
         describe('onUpdate callback', function () {
             beforeEach(function () {
-                backend.setData([spec.r1, spec.r2]);
+                backend.setData(subParams, [spec.r1, spec.r2]);
                 spec.sds = spec.$sync.subscribe('myPub');
                 spec.sds.onUpdate(spec.syncCallbacks.onUpdate);
             });
@@ -531,7 +567,7 @@ describe('Sync Service: ', function () {
 
             it('should get called on receiving updated data', function (done) {
                 spec.sds.waitForDataReady().then(function () {
-                    backend.notifyDataChanges([spec.r1b])
+                    backend.notifyDataUpdate(subParams, [spec.r1b])
                         .then(function () {
                             expect(spec.syncCallbacks.onUpdate).toHaveBeenCalled();
                             done();
@@ -544,7 +580,7 @@ describe('Sync Service: ', function () {
 
         describe('onRemove callback', function () {
             beforeEach(function () {
-                backend.setData([spec.r1, spec.r2]);
+                backend.setData(subParams, [spec.r1, spec.r2]);
                 spec.sds = spec.$sync.subscribe('myPub');
                 spec.sds.onRemove(spec.syncCallbacks.onRemove);
             });
@@ -559,7 +595,7 @@ describe('Sync Service: ', function () {
 
             it('should get called on receiving data removal', function (done) {
                 spec.sds.waitForDataReady().then(function () {
-                    backend.notifyDataRemovals([{ id: spec.r1.id, revision: spec.r1.revision + 1 }]);
+                    backend.notifyDataDelete(subParams, [{ id: spec.r1.id, revision: spec.r1.revision + 1 }]);
                     expect(spec.syncCallbacks.onRemove).toHaveBeenCalled();
                     done();
                 })
@@ -569,7 +605,7 @@ describe('Sync Service: ', function () {
 
         describe('onAdd callback', function () {
             beforeEach(function () {
-                backend.setData([spec.r1, spec.r2]);
+                backend.setData(subParams, [spec.r1, spec.r2]);
                 spec.sds = spec.$sync.subscribe('myPub');
                 spec.sds.onAdd(spec.syncCallbacks.onAdd);
             });
@@ -584,7 +620,7 @@ describe('Sync Service: ', function () {
 
             it('should get called on receiving data removal', function (done) {
                 spec.sds.waitForDataReady().then(function () {
-                    backend.notifyDataChanges([spec.r1b]);
+                    backend.notifyDataUpdate(subParams, [spec.r1b]);
                     expect(spec.syncCallbacks.onAdd).toHaveBeenCalled();
                     done();
                 })
@@ -594,7 +630,7 @@ describe('Sync Service: ', function () {
 
         describe('onReady callback', function () {
             beforeEach(function () {
-                backend.setData([spec.r1]);
+                backend.setData(subParams, [spec.r1]);
                 spec.sds = spec.$sync.subscribe('myPub');
                 spec.sds.onReady(spec.syncCallbacks.onReady);
             });
@@ -609,7 +645,7 @@ describe('Sync Service: ', function () {
 
             it('should get called on receiving new data ', function (done) {
                 spec.sds.waitForDataReady().then(function () {
-                    backend.notifyDataChanges([spec.r2]);
+                    backend.notifyDataCreation(subParams, [spec.r2]);
                     expect(spec.syncCallbacks.onReady).toHaveBeenCalled();
                     done();
                 })
@@ -617,7 +653,7 @@ describe('Sync Service: ', function () {
             });
             it('should get called on receiving data update ', function (done) {
                 spec.sds.waitForDataReady().then(function () {
-                    backend.notifyDataChanges([spec.r1b]);
+                    backend.notifyDataUpdate(subParams, [spec.r1b]);
                     expect(spec.syncCallbacks.onReady).toHaveBeenCalled();
                     done();
                 })
@@ -625,7 +661,7 @@ describe('Sync Service: ', function () {
             });
             it('should get called on receiving data removal ', function (done) {
                 spec.sds.waitForDataReady().then(function () {
-                    backend.notifyDataRemovals([spec.r1]);
+                    backend.notifyDataDelete(subParams, [spec.r1]);
                     expect(spec.syncCallbacks.onReady).toHaveBeenCalled();
                     done();
                 })
@@ -638,7 +674,7 @@ describe('Sync Service: ', function () {
         describe('setReady callback', function () {
 
             it('should get called with an array parameter on receiving data at initialization', function (done) {
-                backend.setData([spec.r1, spec.r2]);
+                backend.setData(subParams, [spec.r1, spec.r2]);
                 spec.sds = spec.$sync.subscribe('myPub')
                     .setOnReady(function (data) {
                         expect(_.isArray(data)).toBe(true);
@@ -653,7 +689,7 @@ describe('Sync Service: ', function () {
             it('should get called with an array parameter on receiving data on each sync', function (done) {
                 var synchronizedData;
                 var n = 2;
-                backend.setData([spec.r1, spec.r2]);
+                backend.setData(subParams, [spec.r1, spec.r2]);
                 spec.sds = spec.$sync.subscribe('myPub')
                     .setOnReady(function (data) {
                         expect(_.isArray(data)).toBe(true);
@@ -667,15 +703,15 @@ describe('Sync Service: ', function () {
                 spec.sds.waitForDataReady().then(function (data) {
                     synchronizedData = data;
                     n--;
-                    backend.notifyDataChanges([spec.r3]);
+                    backend.notifyDataUpdate(subParams, [spec.r3]);
                     n--;
-                    backend.notifyDataChanges([spec.r3]);
+                    backend.notifyDataUpdate(subParams, [spec.r3]);
                 });
                 $rootScope.$digest();
             });
 
             it('should get called with an object parameter on receiving data at initialization', function (done) {
-                backend.setData([spec.p1]);
+                backend.setData(subParams, [spec.p1]);
                 spec.sds = spec.$sync.subscribe('myPub')
                     .setSingle(true)
                     .setObjectClass(Person)
@@ -693,7 +729,7 @@ describe('Sync Service: ', function () {
             it('should get called with the same object parameter on each sync', function (done) {
                 var synchronizedData;
                 var n = 1;
-                backend.setData([spec.p1]);
+                backend.setData(subParams, [spec.p1]);
                 spec.sds = spec.$sync.subscribe('myPub')
                     .setSingle(true)
                     .setObjectClass(Person)
@@ -709,7 +745,7 @@ describe('Sync Service: ', function () {
                 spec.sds.waitForDataReady().then(function (data) {
                     synchronizedData = data;
                     n--;
-                    backend.notifyDataChanges([spec.p1b]);
+                    backend.notifyDataUpdate(subParams, [spec.p1b]);
                 });
                 $rootScope.$digest();
             });
@@ -720,14 +756,14 @@ describe('Sync Service: ', function () {
     describe('Garbage collector', function () {
 
         beforeEach(function () {
-            backend.setData([spec.r1, spec.r2]);
+            backend.setData(subParams, [spec.r1, spec.r2]);
             spec.sds = spec.$sync.subscribe('myPub');
         });
 
         it('should dispose removed record after receiving a removal operation', function (done) {
             spec.sds.waitForDataReady().then(function (data) {
                 expect(spec.garbageCollector.dispose).not.toHaveBeenCalled();
-                backend.notifyDataRemovals([{ id: spec.r2.id, revision: spec.r2.revision + 1 }]);
+                backend.notifyDataDelete(subParams, [{ id: spec.r2.id, revision: spec.r2.revision + 1 }]);
                 expect(spec.garbageCollector.dispose).toHaveBeenCalled();
                 done();
             });
@@ -736,7 +772,7 @@ describe('Sync Service: ', function () {
 
         it('should collect disposed record after some time', function (done) {
             spec.sds.waitForDataReady().then(function (data) {
-                backend.notifyDataRemovals([{ id: spec.r2.id, revision: spec.r2.revision + 1 }]);
+                backend.notifyDataDelete(subParams, [{ id: spec.r2.id, revision: spec.r2.revision + 1 }]);
                 expect(spec.garbageCollector.run).not.toHaveBeenCalled();
                 expect(spec.sds.isExistingStateFor(spec.r2)).toBe(true);
                 // this is the time it takes before the spec.garbageCollector runs;
@@ -751,7 +787,7 @@ describe('Sync Service: ', function () {
 
 
     it('should force a resubscription after network loss', function (done) {
-        backend.setData([spec.r1, spec.r2]);
+        backend.setData(subParams, [spec.r1, spec.r2]);
         var $scope = $rootScope.$new(true);
         spec.sds = spec.$sync.subscribe('myPub', $scope);
         spec.sds.setParameters();
@@ -760,11 +796,19 @@ describe('Sync Service: ', function () {
         spec.sds.waitForDataReady().then(function (data) {
             // initial subscription call
             expect(spec.$socketio.fetch.calls.count()).toEqual(1);
+            backend.setData(subParams, [spec.r3]);
+            spec.sds.onReady(function () {
+                //expect(spec.sds.getData().length).toEqual(2);
+                done();
+            });
             $scope.$broadcast('user_connected');
             expect(spec.$socketio.fetch.calls.count()).toEqual(2);
             // 2nd subscription for reconnect
             expect(spec.$socketio.fetch.calls.mostRecent().args[0]).toEqual('sync.subscribe');
-            done();
+
+            // spec.sds.waitForDataReady().then(function () {
+
+            // });
         });
         $scope.$digest();
     });
@@ -782,11 +826,6 @@ describe('Sync Service: ', function () {
     });
 
 
-    //         make sure notif and sync works in the app...
-    // make sure that callbacks are unregistered
-    // then test with params...$q
-
-    // maybe make sure subscribe received subId before sending sync-now...but involved working on server..
 
     //////////////////////////////////////////////
     function definePersonClass() {
@@ -807,113 +846,4 @@ describe('Sync Service: ', function () {
 
 
 
-    function MockBackend() {
-        var db = {};
-        var isSubscribedOnBackend = false;
-
-        var self = this;
-        this.onPublicationNotficationCallback = null;
-        this.setData = setData;
-        this.notifyDataChanges = notifyDataChanges;
-        this.notifyDataRemovals = notifyDataRemovals;
-        this.subscribe = subscribe;
-        this.unsubscribe = unsubscribe;
-        this.acknowledge = acknowledge;
-
-        function setData(data) {
-            copyAll(data).forEach(function (record) {
-                db[spec.$sync.getIdValue(record)] = record;
-            });
-        }
-
-        function copyAll(array) {
-            var r = [];
-            array.forEach(function (i) {
-                r.push(angular.copy(i));
-            })
-            return r;
-        }
-
-        function notifyDataChanges(data) {
-            data = copyAll(data);
-            data.forEach(function (record) {
-                db[spec.$sync.getIdValue(record)] = record;
-            })
-            if (isSubscribedOnBackend) {
-                return self.onPublicationNotficationCallback({
-                    name: 'myPub',
-                    subscriptionId: 'sub#1',
-                    records: data,
-                    diff: true
-                }, self.acknowledge);
-            }
-        }
-
-        function notifyDataRemovals(data) {
-            data = copyAll(data);
-            data.forEach(function (record) {
-                record.remove = true;
-                delete db[spec.$sync.getIdValue(record)];
-            });
-            if (isSubscribedOnBackend) {
-                self.onPublicationNotficationCallback({
-                    name: 'myPub',
-                    subscriptionId: 'sub#1',
-                    records: data,
-                    diff: true
-                }, self.acknowledge);
-            }
-        }
-
-        function subscribe(data) {
-            //console.log("fetch: " + operation, data);
-            return $q.resolve('sub#1').then(function (subId) {
-                isSubscribedOnBackend = true;
-                self.onPublicationNotficationCallback({
-                    name: 'myPub',
-                    records: Object.keys(db).length ? _.values(db) : []
-                }, self.acknowledge);
-                return subId;
-            })
-        }
-
-        function unsubscribe(data) {
-            console.log("Unsubscribed: " + JSON.stringify(data));
-            isSubscribedOnBackend = false;
-            return $q.resolve();
-        }
-
-        function acknowledge(ack) {
-            console.log('Client acknowledge receiving data');
-        }
-    }
-
-    function MockSocketio() {
-        var self = this;
-        this.network = true;
-
-        this.on = function (event, callback) {
-            // if (!self.network) {
-            //     return $q.defer().promise;
-            // }
-            console.log("ON: " + event);
-            if (event === 'SYNC_NOW') {
-                backend.onPublicationNotficationCallback = callback;
-            }
-        }
-        this.fetch = function (operation, data) {
-            if (!self.network) {
-                // never returns..
-                return $q.defer().promise;
-            }
-
-            if (operation === 'sync.subscribe') {
-                return backend.subscribe(data);
-            }
-            if (operation === 'sync.unsubscribe') {
-                return backend.unsubscribe(data);
-            }
-        }
-
-    }
 });

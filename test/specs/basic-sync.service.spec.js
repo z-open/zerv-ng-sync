@@ -13,6 +13,13 @@ describe('Basic Sync Service: ', function () {
         $syncProvider.setDebug(0);
         mockSyncServerProvider.setDebug(false);
         $socketioProvider.setDebug(false);
+
+        var sessionUser = {
+            sessionId: 'mySessionId'
+        };
+         $provide.factory('currentService', function () {
+            return sessionUser; 
+        });
     }));
 
 

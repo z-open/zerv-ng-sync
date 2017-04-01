@@ -813,6 +813,7 @@ function syncProvider($syncMappingProvider) {
             this.getData = getData;
             this.setParameters = setParameters;
             this.getParameters = getParameters;
+            this.refresh = refresh;
 
             this.forceChanges = forceChanges;
 
@@ -905,6 +906,15 @@ function syncProvider($syncMappingProvider) {
                 return thisSub;
             }
 
+            /** 
+             * Refresh the subscription and get the data again
+             * 
+             * @returns {Promise} that resolves when data is ready
+             */
+            function refresh() {
+                setForce(true);
+                return waitForDataReady();
+            }
             /**
              * The following object will be built upon each record received from the backend
              * 
@@ -1165,7 +1175,7 @@ function syncProvider($syncMappingProvider) {
              * Wait for the subscription to establish initial retrieval of data and returns this subscription in a promise
              * 
              * @param {function} optional function that will be called with this subscription object when the data is ready 
-             * @returns a promise that waits for the initial fetch to complete then wait for the initial fetch to complete then returns this subscription.
+             * @returns {Promise} that waits for the initial fetch to complete then wait for the initial fetch to complete then returns this subscription.
              */
             function waitForSubscriptionReady(callback) {
                 return startSyncing().then(function () {
@@ -1180,7 +1190,7 @@ function syncProvider($syncMappingProvider) {
              * Wait for the subscription to establish initial retrieval of data and returns the data in a promise
              * 
              * @param {function} optional function that will be called with the synced data and this subscription object when the data is ready 
-             * @returns a promise that waits for the initial fetch to complete then returns the data
+             * @returns {Promise} that waits for the initial fetch to complete then returns the data
              */
             function waitForDataReady(callback) {
                 return startSyncing().then(function (data) {
@@ -1676,9 +1686,9 @@ function syncProvider($syncMappingProvider) {
                 return !!getRecordState(record);
             }
 
-            function isLocalChange(previous, update) {
-                return previous.timestamp && update.timestamp &&
-                    update.timestamp.sessionId === sessionUser.sessionId && previous.timestamp.isLocalUpdate;
+            function isLocalChange(currentInCache, update) {
+                return currentInCache.timestamp && update.timestamp &&
+                    update.timestamp.sessionId === sessionUser.sessionId && currentInCache.timestamp.sessionId === sessionUser.sessionId && currentInCache.timestamp.$isLocalUpdate;
             }
 
             function saveRecordState(record) {
@@ -1723,6 +1733,12 @@ function syncProvider($syncMappingProvider) {
             function merge(destination, source) {
                 clearObject(destination);
                 _.assign(destination, source);
+
+                // the object is attached to the subscription which maintain it;
+                if (!destination.timestamp) {
+                    destination.timestamp = {};
+                }
+                destination.timestamp.$sync = thisSub;
             }
 
             function clearObject(object) {

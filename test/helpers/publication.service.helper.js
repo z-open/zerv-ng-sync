@@ -43,12 +43,14 @@ function publicationService($sync) {
         if (pub) {
             if (pub.subscriptionIds.indexOf(subId) !== -1) {
                 _.pull(pub.subscriptionIds, subId);
-                if (pub.subscriptionIds.length === 0) {
-                    _.remove(publications, pub);
-                }
+                // if (pub.subscriptionIds.length === 0) {
+                //   _.remove(publications, pub);
+                // }
             }
         }
     }
+
+
 
     function copyAll(array) {
         var r = [];
@@ -66,6 +68,10 @@ function publicationService($sync) {
         this.name = name;
         this.params = params || {};
         this.subscriptionIds = [];
+    }
+
+    Publication.prototype.hasSubscriptions = function () {
+        return this.subscriptionIds.length > 0;
     }
 
     Publication.prototype.reset = function (data) {

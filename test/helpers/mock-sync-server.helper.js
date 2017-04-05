@@ -214,7 +214,8 @@ function mockSyncServer() {
         }
 
         function exists(subParams) {
-            return _.isObject(publicationsWithSubscriptions.find(subParams.publication, subParams.params));
+            var pub = publicationsWithSubscriptions.find(subParams.publication, subParams.params);
+            return _.isObject(pub) && pub.hasSubscriptions();
         }
 
         function acknowledge(ack) {

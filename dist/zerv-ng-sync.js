@@ -1734,7 +1734,7 @@ function syncProvider($syncMappingProvider) {
                 clearObject(destination);
                 _.assign(destination, source);
 
-                // the object is attached to the subscription which maintain it;
+                // the object is attached to the subscription which maintains it;
                 if (!destination.timestamp) {
                     destination.timestamp = {};
                 }

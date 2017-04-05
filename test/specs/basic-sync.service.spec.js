@@ -17,8 +17,8 @@ describe('Basic Sync Service: ', function () {
         var sessionUser = {
             sessionId: 'mySessionId'
         };
-         $provide.factory('currentService', function () {
-            return sessionUser; 
+        $provide.factory('currentService', function () {
+            return sessionUser;
         });
     }));
 
@@ -185,8 +185,8 @@ describe('Basic Sync Service: ', function () {
     it('should release subscription in mockSyncServer', function () {
         expect(backend.exists(subParams)).toBe(false);
         backend.setData(subParams, []);
-        expect(backend.exists(subParams)).toBe(true);
         spec.sds = spec.$sync.subscribe('myPub').syncOn();
+        expect(backend.exists(subParams)).toBe(true);
         $rootScope.$digest();
         spec.sds.destroy();
         expect(backend.exists(subParams)).toBe(false);

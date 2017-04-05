@@ -210,7 +210,7 @@ describe('Multi Sync Service: ', function () {
                 var biz1 = _.find(syncedData, spec.biz1);
                 expect(!!biz1).toBe(true);
                 expect(biz1.manager).toBeDefined();
-                expect(biz1.manager).toEqual(spec.p1);
+                expect(biz1.manager.id).toEqual(spec.p1.id);
                 var biz2 = _.find(syncedData, spec.biz2)
                 expect(!!biz2).toBe(true);
                 expect(biz2.manager).toBeUndefined();
@@ -255,7 +255,7 @@ describe('Multi Sync Service: ', function () {
 
             it('should set the dependent object within the main object', function () {
                 var rec = _.find(syncedData, { id: spec.biz3.id });
-                expect(rec.manager).toEqual(spec.p3);
+                expect(rec.manager.id).toEqual(spec.p3.id);
             });
 
             it('should release the main and all dependents subscriptions  on turning sync off', function () {

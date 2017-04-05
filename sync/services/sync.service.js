@@ -1055,6 +1055,8 @@ function syncProvider($syncMappingProvider) {
                 if (isLocalChange(obj, record)) {
                     logDebug('Sync -> Updated own record #' + JSON.stringify(record.id) + ' for subscription to ' + thisSub);
                     _.assign(obj.timestamp, record.timestamp);
+                    obj.revision = record.revision;
+                    previous.revision = record.revision;
                     return $q.resolve(obj);
                 }
 

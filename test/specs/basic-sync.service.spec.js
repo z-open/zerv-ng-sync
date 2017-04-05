@@ -14,16 +14,13 @@ describe('Basic Sync Service: ', function () {
         mockSyncServerProvider.setDebug(false);
         $socketioProvider.setDebug(false);
 
-        var sessionUser = {
-            sessionId: 'mySessionId'
-        };
         $provide.factory('currentService', function () {
-            return sessionUser;
+            return {};
         });
     }));
 
 
-    beforeEach(inject(function (_$rootScope_, mockSyncServer, _$sync_, _$q_, _$syncGarbageCollector_, _$socketio_) {
+    beforeEach(inject(function (_$rootScope_, mockSyncServer, _$sync_, _$q_, _$syncGarbageCollector_, _$socketio_, sessionUser) {
         $rootScope = _$rootScope_;
         $q = _$q_;
 
@@ -40,10 +37,9 @@ describe('Basic Sync Service: ', function () {
             syncCallbacks: syncCallbacks,
             garbageCollector: _$syncGarbageCollector_,
             $sync: _$sync_,
-            $socketio: _$socketio_
+            $socketio: _$socketio_,
+            sessionUser: sessionUser
         }
-
-
 
         jasmine.clock().install();
         jasmine.clock().mockDate();
@@ -66,6 +62,8 @@ describe('Basic Sync Service: ', function () {
         spec.p1 = new Person({ id: 1, firstname: 'Tom', lastname: 'Great', revision: 1 });
         spec.p1b = new Person({ id: 1, firstname: 'Tom', lastname: 'Greater', revision: 2 });
         spec.p2 = new Person({ id: 2, firstname: 'John', lastname: 'Super', revision: 1 });
+
+        spec.sessionUser.sessionId = 'mySessionId';
     });
 
 
@@ -458,7 +456,7 @@ describe('Basic Sync Service: ', function () {
                 expect(data.length).toBe(2);
 
                 // modify local version of an object in the array to pretend something was inputed
-                object.timestamp = { clientStamp: 'XXXX' };
+                object.timestamp = { sessionId: spec.sessionUser.sessionId, $isLocalUpdate: true };
                 object.lastname = spec.p1b.lastname;
 
                 expect(object.revision).toBe(1);
@@ -466,7 +464,7 @@ describe('Basic Sync Service: ', function () {
                 backend.notifyDataUpdate(subParams, [_.assign({}, object, { revision: 2, lastname: 'should never get thru' })])
                     .then(function () {
                         expect(object.lastname).toBe(spec.p1b.lastname);
-                        expect(object.timestamp.clientStamp).toBe(true); // true means the object was updated locally
+                        expect(object.timestamp.$isLocalUpdate).toBe(true); // true means the object was updated locally
                         expect(object.revision).toBe(2);
                         done();
                     });
@@ -507,7 +505,7 @@ describe('Basic Sync Service: ', function () {
             spec.sds.waitForDataReady().then(function (data) {
                 expect(data.getFullname()).toBe(spec.p1.getFullname());
                 // modify local version to pretend something was inputed
-                data.timestamp = { clientStamp: 'XXXX' };
+                data.timestamp = { sessionId: spec.sessionUser.sessionId, $isLocalUpdate: true };
                 data.lastname = spec.p1b.lastname;
 
                 expect(data.revision).toBe(1);
@@ -515,7 +513,7 @@ describe('Basic Sync Service: ', function () {
                 backend.notifyDataUpdate(subParams, [_.assign({}, data, { revision: 2, lastname: 'should never get thru' })])
                     .then(function () {
                         expect(data.lastname).toBe(spec.p1b.lastname);
-                        expect(data.timestamp.clientStamp).toBe(true); // true means the object was updated locally
+                        expect(data.timestamp.$isLocalUpdate).toBe(true); // true means the object was updated locally
                         expect(data.revision).toBe(2);
                         done();
                     });

@@ -1219,6 +1219,9 @@ function syncProvider($syncMappingProvider) {
 
                 updateDataStorage = function (record) {
                     try {
+                        if (record.timestamp) {
+                            record.timestamp.$sync = thisSub;
+                        }
                         updateFn(record);
                     } catch (e) {
                         e.message = 'Received Invalid object from publication [' + publication + ']: ' + JSON.stringify(record) + '. DETAILS: ' + e.message;
@@ -1724,12 +1727,14 @@ function syncProvider($syncMappingProvider) {
                     if (!record.removed) {
                         cache.push(record);
                     }
+                    existing = record;
                 } else {
                     merge(existing, record);
                     if (record.removed) {
                         cache.splice(cache.indexOf(existing), 1);
                     }
                 }
+
             }
 
             function merge(destination, source) {
@@ -1740,7 +1745,7 @@ function syncProvider($syncMappingProvider) {
                 if (!destination.timestamp) {
                     destination.timestamp = {};
                 }
-                destination.timestamp.$sync = thisSub;
+
             }
 
             function clearObject(object) {

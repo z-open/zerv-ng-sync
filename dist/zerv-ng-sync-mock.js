@@ -27,14 +27,16 @@ function mockSocketio() {
             var self = this;
             this.network = true;
             var events = {},
-                fetches = {};
+                calls = {};
 
 
             this.onFetch = onFetch;
+            this.onPost = onPost;
             this.send = send;
 
             this.on = on;
             this.fetch = fetch;
+            this.post = post;
 
             return this;
 
@@ -43,9 +45,13 @@ function mockSocketio() {
              */
             function onFetch(operation, callback) {
                 logDebug('registering fetch operation [' + operation + '] callback.');
-                fetches[operation] = callback;
+                calls[operation] = callback;
             }
 
+            function onPost(operation, callback) {
+                logDebug('registering post operation [' + operation + '] callback.');
+                calls[operation] = callback;
+            }
             /** 
              *  Send data thru the socket to the client from the server side
              *  This will trigger the event callback on the client side
@@ -72,16 +78,27 @@ function mockSocketio() {
              *  Server will react to the fetch via the callback registered with onFetch
              */
             function fetch(operation, data) {
+                return call(operation, data);
+            }
+            function post(operation, data) {
+                return call(operation, data);
+            }
+
+
+            function call(operation, data) {
                 if (!self.network) {
                     // never returns..
                     return $q.defer().promise;
                 }
-                var fn = fetches[operation];
+                var fn = calls[operation];
                 if (fn) {
-                    logDebug('Fetching ' + operation + ' - ', data);
+                    logDebug('Calling ' + operation + ' - ', data);
                     return fn(data);
                 }
+                throw new Error('Call to undefined operation. Define ' + operation + ' with onFetch or onPost function of $socketio (mockSocketio).');
             }
+
+
             function logDebug(msg, data) {
                 if (debug) {
                     console.debug('SOCKETIO: ' + msg, data);
@@ -309,7 +326,8 @@ function mockSyncServer() {
         }
 
         function exists(subParams) {
-            return _.isObject(publicationsWithSubscriptions.find(subParams.publication, subParams.params));
+            var pub = publicationsWithSubscriptions.find(subParams.publication, subParams.params);
+            return _.isObject(pub) && pub.hasSubscriptions();
         }
 
         function acknowledge(ack) {
@@ -377,12 +395,14 @@ function publicationService($sync) {
         if (pub) {
             if (pub.subscriptionIds.indexOf(subId) !== -1) {
                 _.pull(pub.subscriptionIds, subId);
-                if (pub.subscriptionIds.length === 0) {
-                    _.remove(publications, pub);
-                }
+                // if (pub.subscriptionIds.length === 0) {
+                //   _.remove(publications, pub);
+                // }
             }
         }
     }
+
+
 
     function copyAll(array) {
         var r = [];
@@ -400,6 +420,10 @@ function publicationService($sync) {
         this.name = name;
         this.params = params || {};
         this.subscriptionIds = [];
+    }
+
+    Publication.prototype.hasSubscriptions = function () {
+        return this.subscriptionIds.length > 0;
     }
 
     Publication.prototype.reset = function (data) {

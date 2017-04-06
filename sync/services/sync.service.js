@@ -44,7 +44,7 @@ function syncProvider($syncMappingProvider) {
         latencyInMilliSecs = seconds;
     };
 
-    this.$get = function sync($rootScope, $q, $socketio, $syncGarbageCollector, $syncMapping) {
+    this.$get = function sync($rootScope, $q, $socketio, $syncGarbageCollector, $syncMapping, sessionUser) {
 
         var publicationListeners = {},
             lastPublicationListenerUid = 0;
@@ -231,6 +231,7 @@ function syncProvider($syncMappingProvider) {
             this.getData = getData;
             this.setParameters = setParameters;
             this.getParameters = getParameters;
+            this.refresh = refresh;
 
             this.forceChanges = forceChanges;
 
@@ -323,6 +324,15 @@ function syncProvider($syncMappingProvider) {
                 return thisSub;
             }
 
+            /** 
+             * Refresh the subscription and get the data again
+             * 
+             * @returns {Promise} that resolves when data is ready
+             */
+            function refresh() {
+                setForce(true);
+                return waitForDataReady();
+            }
             /**
              * The following object will be built upon each record received from the backend
              * 
@@ -583,7 +593,7 @@ function syncProvider($syncMappingProvider) {
              * Wait for the subscription to establish initial retrieval of data and returns this subscription in a promise
              * 
              * @param {function} optional function that will be called with this subscription object when the data is ready 
-             * @returns a promise that waits for the initial fetch to complete then wait for the initial fetch to complete then returns this subscription.
+             * @returns {Promise} that waits for the initial fetch to complete then wait for the initial fetch to complete then returns this subscription.
              */
             function waitForSubscriptionReady(callback) {
                 return startSyncing().then(function () {
@@ -598,7 +608,7 @@ function syncProvider($syncMappingProvider) {
              * Wait for the subscription to establish initial retrieval of data and returns the data in a promise
              * 
              * @param {function} optional function that will be called with the synced data and this subscription object when the data is ready 
-             * @returns a promise that waits for the initial fetch to complete then returns the data
+             * @returns {Promise} that waits for the initial fetch to complete then returns the data
              */
             function waitForDataReady(callback) {
                 return startSyncing().then(function (data) {
@@ -627,6 +637,9 @@ function syncProvider($syncMappingProvider) {
 
                 updateDataStorage = function (record) {
                     try {
+                        if (record.timestamp) {
+                            record.timestamp.$sync = thisSub;
+                        }
                         updateFn(record);
                     } catch (e) {
                         e.message = 'Received Invalid object from publication [' + publication + ']: ' + JSON.stringify(record) + '. DETAILS: ' + e.message;
@@ -700,7 +713,7 @@ function syncProvider($syncMappingProvider) {
                     if (reconnectOff) {
                         reconnectOff();
                         reconnectOff = null;
-                    }                    
+                    }
                 }
                 return thisSub;
             }
@@ -1024,8 +1037,6 @@ function syncProvider($syncMappingProvider) {
                 logDebug('Sync -> Inserted New record #' + JSON.stringify(record.id) + (force ? ' directly' : ' via sync') + ' for subscription to ' + thisSub); // JSON.stringify(record));
                 getRevision(record); // just make sure we can get a revision before we handle this record
 
-                clearClientStamp(record);
-
                 var obj = formatRecord ? formatRecord(record) : record;
 
                 return mapAllDataToObject(obj, 'add').then(function () {
@@ -1045,17 +1056,14 @@ function syncProvider($syncMappingProvider) {
                 // has Sync received a record whose version was originated locally?
                 var obj = isSingleObjectCache ? cache : previous;
                 if (isLocalChange(obj, record)) {
-                    logDebug('Sync -> Updated own record #' + JSON.stringify(record.id) + ' for subscription to ' + thisSub); // JSON.stringify(record));
+                    logDebug('Sync -> Updated own record #' + JSON.stringify(record.id) + ' for subscription to ' + thisSub);
+                    _.assign(obj.timestamp, record.timestamp);
                     obj.revision = record.revision;
-                    obj.timestamp = record.timestamp;
-                    obj.timestamp.clientStamp = true; // this allows new revision that don't change the timestamp (ex server update not initiated on client to be merged. otherwise client would believe it made the change)
-                    syncListener.notify('update', obj);
+                    previous.revision = record.revision;
                     return $q.resolve(obj);
                 }
 
-                clearClientStamp(record);
-
-                logDebug('Sync -> Updated record #' + JSON.stringify(record.id) + (force ? ' directly' : ' via sync') + ' for subscription to ' + thisSub); // JSON.stringify(record));
+                logDebug('Sync -> Updated record #' + JSON.stringify(record.id) + (force ? ' directly' : ' via sync') + ' for subscription to ' + thisSub);
                 obj = formatRecord ? formatRecord(record) : record;
 
                 return mapAllDataToObject(obj, 'update').then(function () {
@@ -1074,8 +1082,6 @@ function syncProvider($syncMappingProvider) {
                     // We could have for the same record consecutively fetching in this order:
                     // delete id:4, rev 10, then add id:4, rev 9.... by keeping track of what was deleted, we will not add the record since it was deleted with a most recent timestamp.
                     record.removed = true; // So we only flag as removed, later on the garbage collector will get rid of it.       
-
-                    clearClientStamp(record);
 
                     // if there is no previous record we do not need to removed any thing from our storage.     
                     if (previous) {
@@ -1103,25 +1109,9 @@ function syncProvider($syncMappingProvider) {
                 return !!getRecordState(record);
             }
 
-
-            // this will evolve... as this introduce a new field in the object (timestamp.clientStamp)
-            // maybe we should have 
-            // an object property 
-            // timestamp { revision:, clientStamp:...} or $$sync
-            function isLocalChange(previous, update) {
-                return (update.timestamp
-                    && previous.timestamp
-                    && update.timestamp.clientStamp
-                    && update.timestamp.clientStamp === previous.timestamp.clientStamp
-                    && getRevision(update) === getRevision(previous) + 1
-                );
-            }
-
-            // clear timestamp, since this record was not originated locally
-            function clearClientStamp(record) {
-                if (record.timestamp) {
-                    record.timestamp.clientStamp = null;
-                }
+            function isLocalChange(currentInCache, update) {
+                return currentInCache.timestamp && update.timestamp &&
+                    update.timestamp.sessionId === sessionUser.sessionId && currentInCache.timestamp.sessionId === sessionUser.sessionId && currentInCache.timestamp.$isLocalUpdate;
             }
 
             function saveRecordState(record) {
@@ -1155,17 +1145,25 @@ function syncProvider($syncMappingProvider) {
                     if (!record.removed) {
                         cache.push(record);
                     }
+                    existing = record;
                 } else {
                     merge(existing, record);
                     if (record.removed) {
                         cache.splice(cache.indexOf(existing), 1);
                     }
                 }
+
             }
 
             function merge(destination, source) {
                 clearObject(destination);
                 _.assign(destination, source);
+
+                // the object is attached to the subscription which maintains it;
+                if (!destination.timestamp) {
+                    destination.timestamp = {};
+                }
+
             }
 
             function clearObject(object) {

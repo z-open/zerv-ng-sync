@@ -12,7 +12,7 @@ function mockSocketio() {
 
 
     this.$get =
-        function ($rootScope, $q) {
+        function ($rootScope, $pq) {
 
             var self = this;
             this.network = true;
@@ -57,7 +57,7 @@ function mockSocketio() {
              */
             function on(event, callback) {
                 // if (!self.network) {
-                //     return $q.defer().promise;
+                //     return $pq.defer().promise;
                 // }
                 logDebug('registering ON event [' + event + '] callback.');
                 events[event] = callback;
@@ -78,7 +78,7 @@ function mockSocketio() {
             function call(operation, data) {
                 if (!self.network) {
                     // never returns..
-                    return $q.defer().promise;
+                    return $pq.defer().promise;
                 }
                 var fn = calls[operation];
                 if (fn) {

@@ -8,6 +8,79 @@ angular
 (function() {
 "use strict";
 
+/**
+ * 
+ * Service that allows an array of data remain in sync with backend.
+ * 
+ * 
+ * ex:
+ * when there is a notification, noticationService notifies that there is something new...then the dataset get the data and notifies all its callback.
+ * 
+ * NOTE: 
+ *  
+ * 
+ * Pre-Requiste:
+ * -------------
+ * Sync requires objects have BOTH id and revision fields/properties.
+ * 
+ * When the backend writes any data to the db that are supposed to be syncronized:
+ * It must make sure each add, update, removal of record is timestamped.
+ * It must notify the datastream (with notifyChange or notifyRemoval) with some params so that backend knows that it has to push back the data back to the subscribers (ex: the taskCreation would notify with its planId)
+ * 
+ * 
+ */
+angular
+    .module('sync')
+    .provider('$pq', pgProvider);
+
+function pgProvider() {
+    var bluebird;
+    this.useBluebird = function () {
+        bluebird = true;
+    };
+
+    this.$get = ["$q", function pq($q) {
+        if (!bluebird || (bluebird && Promise && !Promise.bind)) {
+            return $q;
+        }
+        console.log('Bluebird');
+        return {
+            defer: function () {
+                var pResolve, pReject;
+                var p = new Promise(function (resolve, reject) {
+                    pResolve = resolve;
+                    pReject = reject;
+                });
+                return {
+                    resolve: function (data) {
+                        return pResolve(data);
+                    },
+                    reject: function (data) {
+                        return pReject(data);
+                    },
+                    promise: p
+                };
+            },
+
+            resolve: function (data) {
+                return Promise.resolve(data);
+            },
+
+            reject: function (data) {
+                return Promise.reject(data);
+            },
+
+            all: function (promises) {
+                return Promise.all(promises);
+            }
+        };
+    }];
+}
+}());
+
+(function() {
+"use strict";
+
 angular
     .module('sync')
     .factory('$syncGarbageCollector', syncGarbageCollector);
@@ -121,7 +194,7 @@ function syncMappingProvider() {
         debug = value;
     };
 
-    this.$get = ["$q", function syncMapping($q) {
+    this.$get = ["$pq", function syncMapping($pq) {
 
         var service = {
             addSyncObjectDefinition: addSyncObjectDefinition,
@@ -247,7 +320,7 @@ function syncMappingProvider() {
         function mapObjectPropertiesToSubscriptionData(subscription, obj) {
 
             if (subscription.$dependentSubscriptionDefinitions.length === 0) {
-                return $q.resolve(obj);
+                return $pq.resolve(obj);
             }
 
             // Each property of an object that requires mapping must be set to get data from the proper subscription
@@ -255,7 +328,7 @@ function syncMappingProvider() {
             if (!propertyMappers) {
                 propertyMappers = createPropertyMappers(subscription, obj);
             }
-            return $q.all(_.map(propertyMappers,
+            return $pq.all(_.map(propertyMappers,
                 function (propertyMapper) {
                     return propertyMapper.update(obj);
                 }))
@@ -626,7 +699,7 @@ function syncProvider($syncMappingProvider) {
         latencyInMilliSecs = seconds;
     };
 
-    this.$get = ["$rootScope", "$q", "$socketio", "$syncGarbageCollector", "$syncMapping", "sessionUser", function sync($rootScope, $q, $socketio, $syncGarbageCollector, $syncMapping, sessionUser) {
+    this.$get = ["$rootScope", "$pq", "$socketio", "$syncGarbageCollector", "$syncMapping", "sessionUser", function sync($rootScope, $pq, $socketio, $syncGarbageCollector, $syncMapping, sessionUser) {
 
         var publicationListeners = {},
             lastPublicationListenerUid = 0;
@@ -658,7 +731,7 @@ function syncProvider($syncMappingProvider) {
          * to get the data from the dataSet, just dataSet.getData()
          */
         function resolveSubscription(publicationName, params, objectClass) {
-            var deferred = $q.defer();
+            var deferred = $pq.defer();
             var sDs = subscribe(publicationName).setObjectClass(objectClass);
 
             // give a little time for subscription to fetch the data...otherwise give up so that we don't get stuck in a resolve waiting forever.
@@ -732,7 +805,7 @@ function syncProvider($syncMappingProvider) {
                     fn('SYNCED'); // let know the backend the client was able to sync.
 
                     // returns a promise to know when the subscriptions have completed syncing    
-                    return $q.all(processed);
+                    return $pq.all(processed);
                 });
         };
 
@@ -1093,7 +1166,7 @@ function syncProvider($syncMappingProvider) {
                     })
                     .catch(function (err) {
                         logError('Error when mapping received object.', err);
-                        $q.reject(err);
+                        $pq.reject(err);
                     });
 
             }
@@ -1121,7 +1194,7 @@ function syncProvider($syncMappingProvider) {
                             });
                     }
                 }
-                return $q.resolve(obj);
+                return $pq.resolve(obj);
             }
 
 
@@ -1151,7 +1224,7 @@ function syncProvider($syncMappingProvider) {
             function setParameters(fetchingParams, options) {
                 if (isSyncingOn && angular.equals(fetchingParams || {}, subParams)) {
                     // if the params have not changed, just returns with current data.
-                    return thisSub; //$q.resolve(getData());
+                    return thisSub; //$pq.resolve(getData());
                 }
                 syncOff();
                 if (!isSingleObjectCache) {
@@ -1325,7 +1398,7 @@ function syncProvider($syncMappingProvider) {
                 if (isSyncingOn) {
                     return deferredInitialization.promise;
                 }
-                deferredInitialization = $q.defer();
+                deferredInitialization = $pq.defer();
                 isInitialPushCompleted = false;
                 logInfo('Sync ' + publication + ' on. Params:' + JSON.stringify(subParams));
                 isSyncingOn = true;
@@ -1448,7 +1521,7 @@ function syncProvider($syncMappingProvider) {
                     )
                 }
                 // unit test will know when the apply is completed when the promise resolve;
-                return $q.resolve();
+                return $pq.resolve();
             }
 
 
@@ -1487,7 +1560,7 @@ function syncProvider($syncMappingProvider) {
                     obj.removed = true;
                     promises.push(mapDataToOject(obj));
                 });
-                return $q.all(promises).finally(function () {
+                return $pq.all(promises).finally(function () {
                     recordStates = {};
                     cache.length = 0;
                 });
@@ -1564,7 +1637,7 @@ function syncProvider($syncMappingProvider) {
                                 }));
                             }
                         });
-                        return $q.all(promises).then(function () {
+                        return $pq.all(promises).then(function () {
                             return newDataArray;
                         });
                     })
@@ -1576,7 +1649,7 @@ function syncProvider($syncMappingProvider) {
                 return {
                     then:function(cb) { 
                         return cb();}
-                };//$q.resolve();
+                };//$pq.resolve();
             }
 
             function notifyDataReady(newDataArray) {
@@ -1647,7 +1720,7 @@ function syncProvider($syncMappingProvider) {
             function updateRecord(record, force) {
                 var previous = getRecordState(record);
                 if (!force & getRevision(record) <= getRevision(previous)) {
-                    return $q.resolve();
+                    return $pq.resolve();
                 }
 
                 // has Sync received a record whose version was originated locally?
@@ -1657,7 +1730,7 @@ function syncProvider($syncMappingProvider) {
                     _.assign(obj.timestamp, record.timestamp);
                     obj.revision = record.revision;
                     previous.revision = record.revision;
-                    return $q.resolve(obj);
+                    return $pq.resolve(obj);
                 }
 
                 logDebug('Sync -> Updated record #' + JSON.stringify(record.id) + (force ? ' directly' : ' via sync') + ' for subscription to ' + thisSub);
@@ -1689,7 +1762,7 @@ function syncProvider($syncMappingProvider) {
                         return mapDataToOject(previous, true);
                     }
                 }
-                return $q.resolve(record);
+                return $pq.resolve(record);
             }
 
             function dispose(record) {

@@ -44,7 +44,7 @@ function syncProvider($syncMappingProvider) {
         latencyInMilliSecs = seconds;
     };
 
-    this.$get = function sync($rootScope, $q, $socketio, $syncGarbageCollector, $syncMapping, sessionUser) {
+    this.$get = function sync($rootScope, $pq, $socketio, $syncGarbageCollector, $syncMapping, sessionUser) {
 
         var publicationListeners = {},
             lastPublicationListenerUid = 0;
@@ -76,7 +76,7 @@ function syncProvider($syncMappingProvider) {
          * to get the data from the dataSet, just dataSet.getData()
          */
         function resolveSubscription(publicationName, params, objectClass) {
-            var deferred = $q.defer();
+            var deferred = $pq.defer();
             var sDs = subscribe(publicationName).setObjectClass(objectClass);
 
             // give a little time for subscription to fetch the data...otherwise give up so that we don't get stuck in a resolve waiting forever.
@@ -150,7 +150,7 @@ function syncProvider($syncMappingProvider) {
                     fn('SYNCED'); // let know the backend the client was able to sync.
 
                     // returns a promise to know when the subscriptions have completed syncing    
-                    return $q.all(processed);
+                    return $pq.all(processed);
                 });
         };
 
@@ -511,7 +511,7 @@ function syncProvider($syncMappingProvider) {
                     })
                     .catch(function (err) {
                         logError('Error when mapping received object.', err);
-                        $q.reject(err);
+                        $pq.reject(err);
                     });
 
             }
@@ -539,7 +539,7 @@ function syncProvider($syncMappingProvider) {
                             });
                     }
                 }
-                return $q.resolve(obj);
+                return $pq.resolve(obj);
             }
 
 
@@ -569,7 +569,7 @@ function syncProvider($syncMappingProvider) {
             function setParameters(fetchingParams, options) {
                 if (isSyncingOn && angular.equals(fetchingParams || {}, subParams)) {
                     // if the params have not changed, just returns with current data.
-                    return thisSub; //$q.resolve(getData());
+                    return thisSub; //$pq.resolve(getData());
                 }
                 syncOff();
                 if (!isSingleObjectCache) {
@@ -743,7 +743,7 @@ function syncProvider($syncMappingProvider) {
                 if (isSyncingOn) {
                     return deferredInitialization.promise;
                 }
-                deferredInitialization = $q.defer();
+                deferredInitialization = $pq.defer();
                 isInitialPushCompleted = false;
                 logInfo('Sync ' + publication + ' on. Params:' + JSON.stringify(subParams));
                 isSyncingOn = true;
@@ -866,7 +866,7 @@ function syncProvider($syncMappingProvider) {
                     )
                 }
                 // unit test will know when the apply is completed when the promise resolve;
-                return $q.resolve();
+                return $pq.resolve();
             }
 
 
@@ -905,7 +905,7 @@ function syncProvider($syncMappingProvider) {
                     obj.removed = true;
                     promises.push(mapDataToOject(obj));
                 });
-                return $q.all(promises).finally(function () {
+                return $pq.all(promises).finally(function () {
                     recordStates = {};
                     cache.length = 0;
                 });
@@ -982,7 +982,7 @@ function syncProvider($syncMappingProvider) {
                                 }));
                             }
                         });
-                        return $q.all(promises).then(function () {
+                        return $pq.all(promises).then(function () {
                             return newDataArray;
                         });
                     })
@@ -994,7 +994,7 @@ function syncProvider($syncMappingProvider) {
                 return {
                     then:function(cb) { 
                         return cb();}
-                };//$q.resolve();
+                };//$pq.resolve();
             }
 
             function notifyDataReady(newDataArray) {
@@ -1065,7 +1065,7 @@ function syncProvider($syncMappingProvider) {
             function updateRecord(record, force) {
                 var previous = getRecordState(record);
                 if (!force & getRevision(record) <= getRevision(previous)) {
-                    return $q.resolve();
+                    return $pq.resolve();
                 }
 
                 // has Sync received a record whose version was originated locally?
@@ -1075,7 +1075,7 @@ function syncProvider($syncMappingProvider) {
                     _.assign(obj.timestamp, record.timestamp);
                     obj.revision = record.revision;
                     previous.revision = record.revision;
-                    return $q.resolve(obj);
+                    return $pq.resolve(obj);
                 }
 
                 logDebug('Sync -> Updated record #' + JSON.stringify(record.id) + (force ? ' directly' : ' via sync') + ' for subscription to ' + thisSub);
@@ -1107,7 +1107,7 @@ function syncProvider($syncMappingProvider) {
                         return mapDataToOject(previous, true);
                     }
                 }
-                return $q.resolve(record);
+                return $pq.resolve(record);
             }
 
             function dispose(record) {

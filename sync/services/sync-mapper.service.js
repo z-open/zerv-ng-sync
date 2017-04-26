@@ -31,7 +31,7 @@ function syncMappingProvider() {
         debug = value;
     };
 
-    this.$get = function syncMapping($q) {
+    this.$get = function syncMapping($pq) {
 
         var service = {
             addSyncObjectDefinition: addSyncObjectDefinition,
@@ -157,7 +157,7 @@ function syncMappingProvider() {
         function mapObjectPropertiesToSubscriptionData(subscription, obj) {
 
             if (subscription.$dependentSubscriptionDefinitions.length === 0) {
-                return $q.resolve(obj);
+                return $pq.resolve(obj);
             }
 
             // Each property of an object that requires mapping must be set to get data from the proper subscription
@@ -165,7 +165,7 @@ function syncMappingProvider() {
             if (!propertyMappers) {
                 propertyMappers = createPropertyMappers(subscription, obj);
             }
-            return $q.all(_.map(propertyMappers,
+            return $pq.all(_.map(propertyMappers,
                 function (propertyMapper) {
                     return propertyMapper.update(obj);
                 }))

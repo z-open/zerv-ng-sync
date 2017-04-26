@@ -22,7 +22,7 @@ function mockSocketio() {
 
 
     this.$get =
-        ["$rootScope", "$q", function ($rootScope, $q) {
+        ["$rootScope", "$pq", function ($rootScope, $pq) {
 
             var self = this;
             this.network = true;
@@ -67,7 +67,7 @@ function mockSocketio() {
              */
             function on(event, callback) {
                 // if (!self.network) {
-                //     return $q.defer().promise;
+                //     return $pq.defer().promise;
                 // }
                 logDebug('registering ON event [' + event + '] callback.');
                 events[event] = callback;
@@ -88,7 +88,7 @@ function mockSocketio() {
             function call(operation, data) {
                 if (!self.network) {
                     // never returns..
-                    return $q.defer().promise;
+                    return $pq.defer().promise;
                 }
                 var fn = calls[operation];
                 if (fn) {
@@ -124,7 +124,7 @@ function mockSyncServer() {
     };
 
 
-    this.$get = ["$rootScope", "$q", "$socketio", "$sync", "publicationService", function sync($rootScope, $q, $socketio, $sync, publicationService) {
+    this.$get = ["$rootScope", "$pq", "$socketio", "$sync", "publicationService", function sync($rootScope, $pq, $socketio, $sync, publicationService) {
 
         var publicationsWithSubscriptions = publicationService;
         var subCount = 0;
@@ -267,7 +267,7 @@ function mockSyncServer() {
         }
 
         function notifySubscriptions(publication, data) {
-            var r = $q.all(_.map(publication.subscriptionIds, function (id) {
+            var r = $pq.all(_.map(publication.subscriptionIds, function (id) {
                 return onPublicationNotficationCallback({
                     name: publication.name,
                     subscriptionId: id,
@@ -307,7 +307,7 @@ function mockSyncServer() {
                 publication.subscriptionIds.push(subId);
             }
 
-            return $q.resolve(subId).then(function (subId) {
+            return $pq.resolve(subId).then(function (subId) {
                 publication.subId = subId;
                 onPublicationNotficationCallback({
                     name: publication.name,
@@ -322,7 +322,7 @@ function mockSyncServer() {
         function unsubscribe(subParams) {
             var publication = publicationsWithSubscriptions.release(subParams.id, subParams.publication, subParams.params);
             logDebug("Unsubscribed: " + JSON.stringify(subParams));
-            return $q.resolve();
+            return $pq.resolve();
         }
 
         function exists(subParams) {

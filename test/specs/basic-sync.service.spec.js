@@ -9,11 +9,11 @@ describe('Basic Sync Service: ', function () {
     beforeEach(module('sync.test'));
 
     beforeEach(module(function ($provide,
-        $syncProvider, $socketioProvider, mockSyncServerProvider) {
-        $syncProvider.setDebug(0);
-        mockSyncServerProvider.setDebug(false);
-        $socketioProvider.setDebug(false);
-
+        $syncProvider, $socketioProvider, mockSyncServerProvider, $pqProvider) {
+        // $pqProvider.useBluebird();
+        $syncProvider.setDebug(2);
+        mockSyncServerProvider.setDebug(true);
+        $socketioProvider.setDebug(true);
         $provide.factory('currentService', function () {
             return {};
         });
@@ -180,14 +180,22 @@ describe('Basic Sync Service: ', function () {
         });
     });
 
-    it('should release subscription in mockSyncServer', function () {
+    it('should release subscription in mockSyncServer', function (done) {
+        // works in chrome with bluebird but not in phantomJs
+
         expect(backend.exists(subParams)).toBe(false);
         backend.setData(subParams, []);
         spec.sds = spec.$sync.subscribe('myPub').syncOn();
         expect(backend.exists(subParams)).toBe(true);
+
+        spec.sds.waitForDataReady().then(function () {
+            spec.sds.destroy();
+            expect(backend.exists(subParams)).toBe(false);
+            done();
+        });
+
         $rootScope.$digest();
-        spec.sds.destroy();
-        expect(backend.exists(subParams)).toBe(false);
+
     });
 
     it('should unsubscribe when subscription is destroyed', function () {

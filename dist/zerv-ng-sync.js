@@ -1543,36 +1543,51 @@ function syncProvider($syncMappingProvider) {
              * 
              */
             function applyChanges(records, force) {
-                var newDataArray = [];
-                var promises = [];
                 thisSub.ready = false;
-                records.forEach(function (record) {
-                    //                   logInfo('Datasync [' + dataStreamName + '] received:' +JSON.stringify(record));//+ JSON.stringify(record.id));
-                    if (record.remove) {
-                        promises.push(removeRecord(record, force));
-                    } else if (getRecordState(record)) {
-                        // if the record is already present in the cache...so it is mightbe an update..
-                        promises.push(updateRecord(record, force).then(function (newData) {
-                            newDataArray.push(newData);
-                        }));
-                    } else {
-                        // if the record is already present in the cache...so it is mightbe an update..
-                        promises.push(addRecord(record, force).then(function (newData) {
-                            newDataArray.push(newData);
-                        }));
-                    }
-                });
-
-                // TODO: Investigate could be a scenario where those promises never resolve or fail?????
-                return $q.all(promises).then(function () {
-                    thisSub.ready = true;
-                    if (isSingleObjectCache) {
-                        syncListener.notify('ready', getData());
-                    } else {
-                        syncListener.notify('ready', getData(), newDataArray);
-                    }
-                });
+                return waitForExternalDatasourcesReady()
+                    .then(function () {
+                        var newDataArray = [];
+                        var promises = [];
+                        records.forEach(function (record) {
+                            //                   logInfo('Datasync [' + dataStreamName + '] received:' +JSON.stringify(record));//+ JSON.stringify(record.id));
+                            if (record.remove) {
+                                promises.push(removeRecord(record, force));
+                            } else if (getRecordState(record)) {
+                                // if the record is already present in the cache...so it is mightbe an update..
+                                promises.push(updateRecord(record, force).then(function (newData) {
+                                    newDataArray.push(newData);
+                                }));
+                            } else {
+                                // if the record is already present in the cache...so it is mightbe an update..
+                                promises.push(addRecord(record, force).then(function (newData) {
+                                    newDataArray.push(newData);
+                                }));
+                            }
+                        });
+                        return $q.all(promises).then(function () {
+                            return newDataArray;
+                        });
+                    })
+                    // TODO: Investigate could be a scenario where those promises never resolve or fail?????
+                    .then(notifyDataReady);
             }
+
+            function waitForExternalDatasourcesReady() {
+                return {
+                    then:function(cb) { 
+                        return cb();}
+                };//$q.resolve();
+            }
+
+            function notifyDataReady(newDataArray) {
+                thisSub.ready = true;
+                if (isSingleObjectCache) {
+                    syncListener.notify('ready', getData());
+                } else {
+                    syncListener.notify('ready', getData(), newDataArray);
+                }
+            }
+
 
             /**
              * Although most cases are handled using onReady, this tells you the current data state.

@@ -270,15 +270,14 @@ describe('Basic Sync Service: ', function () {
             $rootScope.$digest();
         });
 
-        it('should NOT allow syncing data without revision property', function (done) {
+        fit('should NOT allow syncing data without revision property', function (done) {
             spec.sds.waitForDataReady().then(function (data) {
-                try {
-                    backend.notifyDataCreation(subParams, [spec.recordWithNoRevision]);
-                } catch (err) {
 
-                    expect(err.message).toBe('Sync requires a revision or timestamp property in received record');
-                    done();
-                }
+                backend.notifyDataCreation(subParams, [spec.recordWithNoRevision]).
+                    then(function (err) {
+                        expect(err.message).toBe('Sync requires a revision or timestamp property in received record');
+                        done();
+                    })
             });
             $rootScope.$digest();
         });
@@ -316,9 +315,11 @@ describe('Basic Sync Service: ', function () {
             spec.sds.waitForDataReady().then(function (data) {
                 expect(data.length).toBe(2);
                 backend.notifyDataDelete(subParams, [{ id: spec.r2.id, revision: spec.r2.revision + 1 }]);
-                expect(data.length).toBe(1);
-                expect(_.find(data, { id: spec.r2.id })).not.toBeDefined();
-                done();
+                $rootScope.$evalAsync(function () {
+                    expect(data.length).toBe(1);
+                    expect(_.find(data, { id: spec.r2.id })).not.toBeDefined();
+                    done();
+                });
             });
             $rootScope.$digest();
         });
@@ -372,10 +373,12 @@ describe('Basic Sync Service: ', function () {
         it('should remove a record from array when receiving a removal operation', function (done) {
             spec.sds.waitForDataReady().then(function (data) {
                 expect(data.length).toBe(2);
-                backend.notifyDataDelete(subParams, [{ id: spec.rc2.id, revision: spec.rc2.revision + 1 }]);
-                expect(data.length).toBe(1);
-                expect(findRecord(data, spec.r2.id)).not.toBeDefined();
-                done();
+                var p = backend.notifyDataDelete(subParams, [{ id: spec.rc2.id, revision: spec.rc2.revision + 1 }]);
+                p.then(function () {
+                    expect(data.length).toBe(1);
+                    expect(findRecord(data, spec.r2.id)).not.toBeDefined();
+                    done();
+                });
             });
             $rootScope.$digest();
         });
@@ -417,9 +420,11 @@ describe('Basic Sync Service: ', function () {
 
         it('should remove a record from array when receiving a removal operation', function (done) {
             spec.sds.waitForDataReady().then(function (data) {
-                backend.notifyDataDelete(subParams, [{ id: spec.r1.id, revision: spec.r1.revision + 1 }]);
-                expect(data.id).toBeUndefined();
-                done();
+                var p = backend.notifyDataDelete(subParams, [{ id: spec.r1.id, revision: spec.r1.revision + 1 }]);
+                p.then(function () {
+                    expect(data.id).toBeUndefined();
+                    done();
+                });
             });
             $rootScope.$digest();
         });
@@ -531,9 +536,11 @@ describe('Basic Sync Service: ', function () {
 
         it('should empty the single object  when receiving a removal operation', function (done) {
             spec.sds.waitForDataReady().then(function (data) {
-                backend.notifyDataDelete(subParams, [{ id: spec.p1.id, revision: spec.p1.revision + 1 }]);
-                expect(data.id).toBeUndefined();
-                done();
+                var p = backend.notifyDataDelete(subParams, [{ id: spec.p1.id, revision: spec.p1.revision + 1 }]);
+                p.then(function () {
+                    expect(data.id).toBeUndefined();
+                    done();
+                });
             });
             $rootScope.$digest();
         });
@@ -550,11 +557,13 @@ describe('Basic Sync Service: ', function () {
 
         it('should NOT add any object when receiving an OLD removal operation', function (done) {
             spec.sds.waitForDataReady().then(function (data) {
-                backend.notifyDataDelete(subParams, [{ id: spec.p1.id, revision: spec.p1.revision + 1 }]);
-                expect(data.id).toBeUndefined();
-                backend.notifyDataDelete(subParams, [{ id: spec.p1.id, revision: spec.p1.revision }]);
-                expect(data.id).toBeUndefined();
-                done();
+                backend.notifyDataDelete(subParams, [{ id: spec.p1.id, revision: spec.p1.revision + 1 }])
+                    .then(function () {
+                        expect(data.id).toBeUndefined();
+                        var p = backend.notifyDataDelete(subParams, [{ id: spec.p1.id, revision: spec.p1.revision }]);
+                        expect(data.id).toBeUndefined();
+                        done();
+                    });
             });
             $rootScope.$digest();
         });
@@ -608,9 +617,11 @@ describe('Basic Sync Service: ', function () {
 
             it('should get called on receiving data removal', function (done) {
                 spec.sds.waitForDataReady().then(function () {
-                    backend.notifyDataDelete(subParams, [{ id: spec.r1.id, revision: spec.r1.revision + 1 }]);
-                    expect(spec.syncCallbacks.onRemove).toHaveBeenCalled();
-                    done();
+                    var p = backend.notifyDataDelete(subParams, [{ id: spec.r1.id, revision: spec.r1.revision + 1 }]);
+                    p.then(function () {
+                        expect(spec.syncCallbacks.onRemove).toHaveBeenCalled();
+                        done();
+                    });
                 })
                 $rootScope.$digest();
             });
@@ -776,23 +787,27 @@ describe('Basic Sync Service: ', function () {
         it('should dispose removed record after receiving a removal operation', function (done) {
             spec.sds.waitForDataReady().then(function (data) {
                 expect(spec.garbageCollector.dispose).not.toHaveBeenCalled();
-                backend.notifyDataDelete(subParams, [{ id: spec.r2.id, revision: spec.r2.revision + 1 }]);
-                expect(spec.garbageCollector.dispose).toHaveBeenCalled();
-                done();
+                var p = backend.notifyDataDelete(subParams, [{ id: spec.r2.id, revision: spec.r2.revision + 1 }]);
+                p.then(function () {
+                    expect(spec.garbageCollector.dispose).toHaveBeenCalled();
+                    done();
+                });
             });
             $rootScope.$digest();
         });
 
         it('should collect disposed record after some time', function (done) {
             spec.sds.waitForDataReady().then(function (data) {
-                backend.notifyDataDelete(subParams, [{ id: spec.r2.id, revision: spec.r2.revision + 1 }]);
+                var p = backend.notifyDataDelete(subParams, [{ id: spec.r2.id, revision: spec.r2.revision + 1 }]);
                 expect(spec.garbageCollector.run).not.toHaveBeenCalled();
                 expect(spec.sds.isExistingStateFor(spec.r2)).toBe(true);
                 // this is the time it takes before the spec.garbageCollector runs;
-                jasmine.clock().tick(spec.garbageCollector.getSeconds() * 1000 + 100);
-                expect(spec.garbageCollector.run).toHaveBeenCalled();
-                expect(spec.sds.isExistingStateFor(spec.r2)).toBe(false);
-                done();
+                p.then(function () {
+                    jasmine.clock().tick(spec.garbageCollector.getSeconds() * 1000 + 100);
+                    expect(spec.garbageCollector.run).toHaveBeenCalled();
+                    expect(spec.sds.isExistingStateFor(spec.r2)).toBe(false);
+                    done();
+                });
             });
             $rootScope.$digest();
         })

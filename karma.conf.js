@@ -18,7 +18,7 @@ module.exports = function (config) {
         files: [
             // necessary to make karma work with angular 1.5
             './node_modules/phantomjs-polyfill/bind-polyfill.js',
-            'libraries/bluebird/js/browser/bluebird.core.js',
+           // 'libraries/bluebird/js/browser/bluebird.core.js',
             'libraries/angular/angular.js',
             'libraries/angular-mocks/angular-mocks.js',
             'libraries/lodash/dist/lodash.js',

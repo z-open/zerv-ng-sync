@@ -964,27 +964,33 @@ function syncProvider($syncMappingProvider) {
                 thisSub.ready = false;
                 return waitForExternalDatasourcesReady()
                     .then(function () {
-                        var newDataArray = [];
-                        var promises = [];
-                        records.forEach(function (record) {
-                            //                   logInfo('Datasync [' + dataStreamName + '] received:' +JSON.stringify(record));//+ JSON.stringify(record.id));
-                            if (record.remove) {
-                                promises.push(removeRecord(record, force));
-                            } else if (getRecordState(record)) {
-                                // if the record is already present in the cache...so it is mightbe an update..
-                                promises.push(updateRecord(record, force).then(function (newData) {
-                                    newDataArray.push(newData);
-                                }));
-                            } else {
-                                // if the record is already present in the cache...so it is mightbe an update..
-                                promises.push(addRecord(record, force).then(function (newData) {
-                                    newDataArray.push(newData);
-                                }));
-                            }
-                        });
-                        return $pq.all(promises).then(function () {
-                            return newDataArray;
-                        });
+                        try {
+                            var newDataArray = [];
+                            var promises = [];
+                            records.forEach(function (record) {
+                                //                   logInfo('Datasync [' + dataStreamName + '] received:' +JSON.stringify(record));//+ JSON.stringify(record.id));
+                                if (record.remove) {
+                                    promises.push(removeRecord(record, force));
+                                } else if (getRecordState(record)) {
+                                    // if the record is already present in the cache...so it is mightbe an update..
+                                    promises.push(updateRecord(record, force).then(function (newData) {
+                                        newDataArray.push(newData);
+                                    }));
+                                } else {
+                                    // if the record is already present in the cache...so it is mightbe an update..
+                                    promises.push(addRecord(record, force).then(function (newData) {
+                                        newDataArray.push(newData);
+                                    }));
+                                }
+                            });
+                            return $pq.all(promises).then(function () {
+                                return newDataArray;
+                            });
+                        }
+                        catch (err) {
+                            // angular does not reject automatically!! not sure why.
+                            return $pq.reject(err);
+                        }
                     })
                     // TODO: Investigate could be a scenario where those promises never resolve or fail?????
                     .then(notifyDataReady);
@@ -992,8 +998,9 @@ function syncProvider($syncMappingProvider) {
 
             function waitForExternalDatasourcesReady() {
                 return {
-                    then:function(cb) { 
-                        return cb();}
+                    then: function (cb) {
+                        return cb();
+                    }
                 };//$pq.resolve();
             }
 

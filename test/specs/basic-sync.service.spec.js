@@ -270,11 +270,11 @@ describe('Basic Sync Service: ', function () {
             $rootScope.$digest();
         });
 
-        fit('should NOT allow syncing data without revision property', function (done) {
+        it('should NOT allow syncing data without revision property', function (done) {
             spec.sds.waitForDataReady().then(function (data) {
 
                 backend.notifyDataCreation(subParams, [spec.recordWithNoRevision]).
-                    then(function (err) {
+                    catch(function (err) {
                         expect(err.message).toBe('Sync requires a revision or timestamp property in received record');
                         done();
                     })

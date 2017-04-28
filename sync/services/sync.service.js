@@ -26,12 +26,15 @@ angular
 function syncProvider($syncMappingProvider) {
     var totalSub = 0;
 
-    var debug;
+    var debug, benchmark = true;
     var latencyInMilliSecs = 0;
 
     this.setDebug = function (value) {
         debug = value;
         $syncMappingProvider.setDebug(value);
+    };
+    this.setBenchmark = function (value) {
+        benchmark = value;
     };
 
     /**
@@ -198,7 +201,7 @@ function syncProvider($syncMappingProvider) {
 
         function Subscription(publication, scope) {
             var timestampField, isSyncingOn = false, destroyed,
-                isSingleObjectCache, updateDataStorage, cache, isInitialPushCompleted, deferredInitialization;
+                isSingleObjectCache, updateDataStorage, cache, isInitialPushCompleted, initialStartTime, deferredInitialization;
             var onReadyOff, formatRecord;
             var reconnectOff, publicationListenerOff, destroyOff;
             var objectClass;
@@ -744,6 +747,7 @@ function syncProvider($syncMappingProvider) {
                     return deferredInitialization.promise;
                 }
                 deferredInitialization = $pq.defer();
+                initialStartTime = Date.now();
                 isInitialPushCompleted = false;
                 logInfo('Sync ' + publication + ' on. Params:' + JSON.stringify(subParams));
                 isSyncingOn = true;
@@ -847,6 +851,10 @@ function syncProvider($syncMappingProvider) {
                 // cannot only listen to subscriptionId yet...because the registration might have answer provided its id yet...but started broadcasting changes...@TODO can be improved...
                 if (subscriptionId === batch.subscriptionId || (!subscriptionId && checkDataSetParamsIfMatchingBatchParams(batch.params))) {
                     var applyPromise;
+
+                    const startTime = Date.now();
+                    const size = benchmark && debug ? JSON.stringify(batch.records).length : null;
+
                     if (!batch.diff && isDataCached()) {
                         // Clear the cache to rebuild it if all data was received.
                         applyPromise = clearCache()
@@ -860,6 +868,13 @@ function syncProvider($syncMappingProvider) {
                         function () {
                             if (!isInitialPushCompleted) {
                                 isInitialPushCompleted = true;
+
+                                if (benchmark && debug) {
+                                    const timeToReceive = Date.now() - initialStartTime;
+                                    const timeToProcess = Date.now() - startTime;
+                                    logInfo('Initial sync total time for ' + publication + ': ' + (timeToReceive + timeToProcess) + 'ms - Data Received in: ' + timeToReceive + 'ms, applied in: ' + timeToProcess + 'ms - Estimated size: ' + formatSize(size) + ' - Records: ' + batch.records.length + ' - Avg size/time: ' + formatSize(size / (batch.records.length || 1)) + '/' + roundNumber(timeToProcess / (batch.records.length || 1), 2) + 'ms');
+                                }
+
                                 deferredInitialization.resolve(getData());
                             }
                         }
@@ -1262,6 +1277,18 @@ function syncProvider($syncMappingProvider) {
         if (debug >= 2) {
             console.debug('SYNC(debug): ' + msg);
         }
+    }
+
+    function formatSize(size) {
+        return size > 1000000 ? roundNumber(size / 1000000, 3) + 'Mgb' : size > 1000 ? roundNumber(size / 1000, 3) + 'Kb' : roundNumber(size) + 'b';
+    }
+
+    function roundNumber(num, n) {
+        if (!n) {
+            return Math.round(num);
+        }
+        const d = Math.pow(10, n);
+        return Math.round(num * d) / d;
     }
 
     function logError(msg, e) {

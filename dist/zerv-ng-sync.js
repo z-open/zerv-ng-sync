@@ -1507,8 +1507,8 @@ function syncProvider($syncMappingProvider) {
                 if (subscriptionId === batch.subscriptionId || (!subscriptionId && checkDataSetParamsIfMatchingBatchParams(batch.params))) {
                     var applyPromise;
 
-                    const startTime = Date.now();
-                    const size = benchmark && debug ? JSON.stringify(batch.records).length : null;
+                    var startTime = Date.now();
+                    var size = benchmark && debug ? JSON.stringify(batch.records).length : null;
 
                     if (!batch.diff && isDataCached()) {
                         // Clear the cache to rebuild it if all data was received.
@@ -1525,8 +1525,8 @@ function syncProvider($syncMappingProvider) {
                                 isInitialPushCompleted = true;
 
                                 if (benchmark && debug) {
-                                    const timeToReceive = Date.now() - initialStartTime;
-                                    const timeToProcess = Date.now() - startTime;
+                                    var timeToReceive = Date.now() - initialStartTime;
+                                    var timeToProcess = Date.now() - startTime;
                                     logInfo('Initial sync total time for ' + publication + ': ' + (timeToReceive + timeToProcess) + 'ms - Data Received in: ' + timeToReceive + 'ms, applied in: ' + timeToProcess + 'ms - Estimated size: ' + formatSize(size) + ' - Records: ' + batch.records.length + ' - Avg size/time: ' + formatSize(size / (batch.records.length || 1)) + '/' + roundNumber(timeToProcess / (batch.records.length || 1), 2) + 'ms');
                                 }
 
@@ -1942,7 +1942,7 @@ function syncProvider($syncMappingProvider) {
         if (!n) {
             return Math.round(num);
         }
-        const d = Math.pow(10, n);
+        var d = Math.pow(10, n);
         return Math.round(num * d) / d;
     }
 

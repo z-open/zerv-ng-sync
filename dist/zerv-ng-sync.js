@@ -1902,7 +1902,7 @@ function syncProvider($syncMappingProvider) {
                     listeners = events[event] = {};
                 }
                 var id = count++;
-                listeners[id++] = callback;
+                listeners[id] = callback;
                 return function () {
                     delete listeners[id];
                 }

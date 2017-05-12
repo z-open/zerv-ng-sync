@@ -26,12 +26,15 @@ angular
 function syncProvider($syncMappingProvider) {
     var totalSub = 0;
 
-    var debug;
+    var debug, benchmark = true;
     var latencyInMilliSecs = 0;
 
     this.setDebug = function (value) {
         debug = value;
         $syncMappingProvider.setDebug(value);
+    };
+    this.setBenchmark = function (value) {
+        benchmark = value;
     };
 
     /**
@@ -44,7 +47,7 @@ function syncProvider($syncMappingProvider) {
         latencyInMilliSecs = seconds;
     };
 
-    this.$get = function sync($rootScope, $q, $socketio, $syncGarbageCollector, $syncMapping, sessionUser) {
+    this.$get = function sync($rootScope, $pq, $socketio, $syncGarbageCollector, $syncMapping, sessionUser) {
 
         var publicationListeners = {},
             lastPublicationListenerUid = 0;
@@ -76,7 +79,7 @@ function syncProvider($syncMappingProvider) {
          * to get the data from the dataSet, just dataSet.getData()
          */
         function resolveSubscription(publicationName, params, objectClass) {
-            var deferred = $q.defer();
+            var deferred = $pq.defer();
             var sDs = subscribe(publicationName).setObjectClass(objectClass);
 
             // give a little time for subscription to fetch the data...otherwise give up so that we don't get stuck in a resolve waiting forever.
@@ -150,7 +153,7 @@ function syncProvider($syncMappingProvider) {
                     fn('SYNCED'); // let know the backend the client was able to sync.
 
                     // returns a promise to know when the subscriptions have completed syncing    
-                    return $q.all(processed);
+                    return $pq.all(processed);
                 });
         };
 
@@ -198,7 +201,7 @@ function syncProvider($syncMappingProvider) {
 
         function Subscription(publication, scope) {
             var timestampField, isSyncingOn = false, destroyed,
-                isSingleObjectCache, updateDataStorage, cache, isInitialPushCompleted, deferredInitialization;
+                isSingleObjectCache, updateDataStorage, cache, isInitialPushCompleted, initialStartTime, deferredInitialization;
             var onReadyOff, formatRecord;
             var reconnectOff, publicationListenerOff, destroyOff;
             var objectClass;
@@ -511,7 +514,7 @@ function syncProvider($syncMappingProvider) {
                     })
                     .catch(function (err) {
                         logError('Error when mapping received object.', err);
-                        $q.reject(err);
+                        $pq.reject(err);
                     });
 
             }
@@ -539,7 +542,7 @@ function syncProvider($syncMappingProvider) {
                             });
                     }
                 }
-                return $q.resolve(obj);
+                return $pq.resolve(obj);
             }
 
 
@@ -569,7 +572,7 @@ function syncProvider($syncMappingProvider) {
             function setParameters(fetchingParams, options) {
                 if (isSyncingOn && angular.equals(fetchingParams || {}, subParams)) {
                     // if the params have not changed, just returns with current data.
-                    return thisSub; //$q.resolve(getData());
+                    return thisSub; //$pq.resolve(getData());
                 }
                 syncOff();
                 if (!isSingleObjectCache) {
@@ -743,7 +746,8 @@ function syncProvider($syncMappingProvider) {
                 if (isSyncingOn) {
                     return deferredInitialization.promise;
                 }
-                deferredInitialization = $q.defer();
+                deferredInitialization = $pq.defer();
+                initialStartTime = Date.now();
                 isInitialPushCompleted = false;
                 logInfo('Sync ' + publication + ' on. Params:' + JSON.stringify(subParams));
                 isSyncingOn = true;
@@ -847,6 +851,10 @@ function syncProvider($syncMappingProvider) {
                 // cannot only listen to subscriptionId yet...because the registration might have answer provided its id yet...but started broadcasting changes...@TODO can be improved...
                 if (subscriptionId === batch.subscriptionId || (!subscriptionId && checkDataSetParamsIfMatchingBatchParams(batch.params))) {
                     var applyPromise;
+
+                    var startTime = Date.now();
+                    var size = benchmark && debug ? JSON.stringify(batch.records).length : null;
+
                     if (!batch.diff && isDataCached()) {
                         // Clear the cache to rebuild it if all data was received.
                         applyPromise = clearCache()
@@ -860,13 +868,20 @@ function syncProvider($syncMappingProvider) {
                         function () {
                             if (!isInitialPushCompleted) {
                                 isInitialPushCompleted = true;
+
+                                if (benchmark && debug) {
+                                    var timeToReceive = Date.now() - initialStartTime;
+                                    var timeToProcess = Date.now() - startTime;
+                                    logInfo('Initial sync total time for ' + publication + ': ' + (timeToReceive + timeToProcess) + 'ms - Data Received in: ' + timeToReceive + 'ms, applied in: ' + timeToProcess + 'ms - Estimated size: ' + formatSize(size) + ' - Records: ' + batch.records.length + ' - Avg size/time: ' + formatSize(size / (batch.records.length || 1)) + '/' + roundNumber(timeToProcess / (batch.records.length || 1), 2) + 'ms');
+                                }
+
                                 deferredInitialization.resolve(getData());
                             }
                         }
                     )
                 }
                 // unit test will know when the apply is completed when the promise resolve;
-                return $q.resolve();
+                return $pq.resolve();
             }
 
 
@@ -905,7 +920,7 @@ function syncProvider($syncMappingProvider) {
                     obj.removed = true;
                     promises.push(mapDataToOject(obj));
                 });
-                return $q.all(promises).finally(function () {
+                return $pq.all(promises).finally(function () {
                     recordStates = {};
                     cache.length = 0;
                 });
@@ -961,36 +976,58 @@ function syncProvider($syncMappingProvider) {
              * 
              */
             function applyChanges(records, force) {
-                var newDataArray = [];
-                var promises = [];
                 thisSub.ready = false;
-                records.forEach(function (record) {
-                    //                   logInfo('Datasync [' + dataStreamName + '] received:' +JSON.stringify(record));//+ JSON.stringify(record.id));
-                    if (record.remove) {
-                        promises.push(removeRecord(record, force));
-                    } else if (getRecordState(record)) {
-                        // if the record is already present in the cache...so it is mightbe an update..
-                        promises.push(updateRecord(record, force).then(function (newData) {
-                            newDataArray.push(newData);
-                        }));
-                    } else {
-                        // if the record is already present in the cache...so it is mightbe an update..
-                        promises.push(addRecord(record, force).then(function (newData) {
-                            newDataArray.push(newData);
-                        }));
-                    }
-                });
-
-                // TODO: Investigate could be a scenario where those promises never resolve or fail?????
-                return $q.all(promises).then(function () {
-                    thisSub.ready = true;
-                    if (isSingleObjectCache) {
-                        syncListener.notify('ready', getData());
-                    } else {
-                        syncListener.notify('ready', getData(), newDataArray);
-                    }
-                });
+                return waitForExternalDatasourcesReady()
+                    .then(function () {
+                        try {
+                            var newDataArray = [];
+                            var promises = [];
+                            records.forEach(function (record) {
+                                //                   logInfo('Datasync [' + dataStreamName + '] received:' +JSON.stringify(record));//+ JSON.stringify(record.id));
+                                if (record.remove) {
+                                    promises.push(removeRecord(record, force));
+                                } else if (getRecordState(record)) {
+                                    // if the record is already present in the cache...so it is mightbe an update..
+                                    promises.push(updateRecord(record, force).then(function (newData) {
+                                        newDataArray.push(newData);
+                                    }));
+                                } else {
+                                    // if the record is already present in the cache...so it is mightbe an update..
+                                    promises.push(addRecord(record, force).then(function (newData) {
+                                        newDataArray.push(newData);
+                                    }));
+                                }
+                            });
+                            return $pq.all(promises).then(function () {
+                                return newDataArray;
+                            });
+                        }
+                        catch (err) {
+                            // angular does not reject automatically!! not sure why.
+                            return $pq.reject(err);
+                        }
+                    })
+                    // TODO: Investigate could be a scenario where those promises never resolve or fail?????
+                    .then(notifyDataReady);
             }
+
+            function waitForExternalDatasourcesReady() {
+                return {
+                    then: function (cb) {
+                        return cb();
+                    }
+                };//$pq.resolve();
+            }
+
+            function notifyDataReady(newDataArray) {
+                thisSub.ready = true;
+                if (isSingleObjectCache) {
+                    syncListener.notify('ready', getData());
+                } else {
+                    syncListener.notify('ready', getData(), newDataArray);
+                }
+            }
+
 
             /**
              * Although most cases are handled using onReady, this tells you the current data state.
@@ -1050,7 +1087,7 @@ function syncProvider($syncMappingProvider) {
             function updateRecord(record, force) {
                 var previous = getRecordState(record);
                 if (!force & getRevision(record) <= getRevision(previous)) {
-                    return $q.resolve();
+                    return $pq.resolve();
                 }
 
                 // has Sync received a record whose version was originated locally?
@@ -1060,7 +1097,7 @@ function syncProvider($syncMappingProvider) {
                     _.assign(obj.timestamp, record.timestamp);
                     obj.revision = record.revision;
                     previous.revision = record.revision;
-                    return $q.resolve(obj);
+                    return $pq.resolve(obj);
                 }
 
                 logDebug('Sync -> Updated record #' + JSON.stringify(record.id) + (force ? ' directly' : ' via sync') + ' for subscription to ' + thisSub);
@@ -1092,7 +1129,7 @@ function syncProvider($syncMappingProvider) {
                         return mapDataToOject(previous, true);
                     }
                 }
-                return $q.resolve(record);
+                return $pq.resolve(record);
             }
 
             function dispose(record) {
@@ -1210,7 +1247,7 @@ function syncProvider($syncMappingProvider) {
                     listeners = events[event] = {};
                 }
                 var id = count++;
-                listeners[id++] = callback;
+                listeners[id] = callback;
                 return function () {
                     delete listeners[id];
                 }
@@ -1240,6 +1277,18 @@ function syncProvider($syncMappingProvider) {
         if (debug >= 2) {
             console.debug('SYNC(debug): ' + msg);
         }
+    }
+
+    function formatSize(size) {
+        return size > 1000000 ? roundNumber(size / 1000000, 3) + 'Mgb' : size > 1000 ? roundNumber(size / 1000, 3) + 'Kb' : roundNumber(size) + 'b';
+    }
+
+    function roundNumber(num, n) {
+        if (!n) {
+            return Math.round(num);
+        }
+        var d = Math.pow(10, n);
+        return Math.round(num * d) / d;
     }
 
     function logError(msg, e) {

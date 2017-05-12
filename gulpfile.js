@@ -127,7 +127,7 @@ gulp.task('tdd', function (done) {
 // watch the app .js files for changes and execute the app-js task if necessary
 gulp.task('app-watch', function () {
     watch(appFiles, function (file) {
-        gulp.start('app-js-dev');
+        //gulp.start('app-js-dev');
     });
 });
 

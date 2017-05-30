@@ -1,5 +1,5 @@
 angular
-    .module('sync')
+    .module('zerv.sync')
     .provider('$syncMapping', syncMappingProvider);
 
 /**

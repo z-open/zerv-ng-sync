@@ -1,3 +1,3 @@
 angular
-    .module('sync.test', ['sync']);
+    .module('sync.test', ['zerv.sync']);
 

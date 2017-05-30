@@ -23,9 +23,9 @@ module.exports = function (config) {
             'libraries/angular-mocks/angular-mocks.js',
             'libraries/lodash/dist/lodash.js',
             'libraries//simple-uuid/uuid.js',
-            'libraries/angular-socketio/dist/angular-socketio.js',
-            'sync/sync.module.js',
-            'sync/**/*.*.js',
+            'libraries/zerv-ng-core/dist/zerv-ng-core.js',
+            'src/sync.module.js',
+            'src/**/*.*.js',
             'test/helpers/**/*.module.js',
             'test/helpers/**/*.*.js',
             'test/specs/**/*.*.js'

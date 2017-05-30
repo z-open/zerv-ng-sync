@@ -1,6 +1,6 @@
 {
   "name": "zerv-ng-sync",
-  "main": "dist/sync.module.js",
+  "main": "dist/zerv-ng-sync.js",
   "author": "",
   "homepage": "",
   "repository": {

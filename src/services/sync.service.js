@@ -20,7 +20,7 @@
  * 
  */
 angular
-    .module('sync')
+    .module('zerv.sync')
     .provider('$sync', syncProvider);
 
 function syncProvider($syncMappingProvider) {
@@ -142,6 +142,12 @@ function syncProvider($syncMappingProvider) {
             $socketio.on(
                 'SYNC_NOW',
                 function (subNotification, fn) {
+                    // if (subNotification.diff && !subNotification.records.length) {
+                    //     // this would happen only after a lost of network connection no data received
+                    //     fn('SYNCED'); // let know the backend the client was able to sync.
+                    //     return $pq.resolve();
+                    // }
+
                     logInfo('Syncing with subscription [name:' + subNotification.name + ', id:' + subNotification.subscriptionId + ' , params:' + JSON.stringify(subNotification.params) + ']. Records:' + subNotification.records.length + '[' + (subNotification.diff ? 'Diff' : 'All') + ']');
                     var listeners = publicationListeners[subNotification.name];
                     var processed = [];

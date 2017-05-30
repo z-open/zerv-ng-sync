@@ -5,7 +5,7 @@ describe('Basic Sync Service: ', function () {
     var subParams = { publication: 'myPub', params: {} };
 
 
-    beforeEach(module('sync'));
+    beforeEach(module('zerv.sync'));
     beforeEach(module('sync.test'));
 
     beforeEach(module(function ($provide,

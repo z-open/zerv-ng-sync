@@ -63,7 +63,7 @@ var consolidate = require('gulp-consolidate');
 // All application JS files.
 var appFiles = [
     //'api/models/**/*.model.js',
-    'sync/**/*.js'];
+    'src/**/*.js'];
 
 var mockFiles = [
     //'api/models/**/*.model.js',

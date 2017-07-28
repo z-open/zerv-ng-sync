@@ -6,7 +6,7 @@ describe('Multi Sync Service: ', function () {
     var syncedData;
 
 
-    beforeEach(module('sync'));
+    beforeEach(module('zerv.sync'));
     beforeEach(module('sync.test'));
 
     beforeEach(module(function ($provide,

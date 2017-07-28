@@ -2,7 +2,7 @@ describe('SyncGarbageCollector', function () {
     var garbageCollector;
     var data;
 
-    beforeEach(module('sync')); // still dependent on common for now.
+    beforeEach(module('zerv.sync')); // still dependent on common for now.
 
     beforeEach(inject(function (_$syncGarbageCollector_) {
         garbageCollector = _$syncGarbageCollector_;

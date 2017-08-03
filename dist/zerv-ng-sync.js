@@ -35,7 +35,7 @@ angular
 
 function pgProvider() {
     var bluebird;
-    this.useBluebird = function () {
+    this.useBluebird = function() {
         bluebird = true;
     };
 
@@ -45,34 +45,34 @@ function pgProvider() {
         }
         console.log('Bluebird');
         return {
-            defer: function () {
+            defer: function() {
                 var pResolve, pReject;
-                var p = new Promise(function (resolve, reject) {
+                var p = new Promise(function(resolve, reject) {
                     pResolve = resolve;
                     pReject = reject;
                 });
                 return {
-                    resolve: function (data) {
+                    resolve: function(data) {
                         return pResolve(data);
                     },
-                    reject: function (data) {
+                    reject: function(data) {
                         return pReject(data);
                     },
-                    promise: p
+                    promise: p,
                 };
             },
 
-            resolve: function (data) {
+            resolve: function(data) {
                 return Promise.resolve(data);
             },
 
-            reject: function (data) {
+            reject: function(data) {
                 return Promise.reject(data);
             },
 
-            all: function (promises) {
+            all: function(promises) {
                 return Promise.all(promises);
-            }
+            },
         };
     }];
 }
@@ -104,12 +104,12 @@ function syncGarbageCollector() {
         dispose: dispose,
         schedule: schedule,
         run: run,
-        getItemCount: getItemCount
+        getItemCount: getItemCount,
     };
 
     return service;
 
-    //////////
+    // ////////
 
     function setSeconds(value) {
         seconds = value;
@@ -126,7 +126,7 @@ function syncGarbageCollector() {
     function dispose(collect) {
         items.push({
             timestamp: Date.now(),
-            collect: collect
+            collect: collect,
         });
         if (!scheduled) {
             service.schedule();
@@ -139,7 +139,7 @@ function syncGarbageCollector() {
             return;
         }
         scheduled = true;
-        setTimeout(function () {
+        setTimeout(function() {
             service.run();
             if (items.length > 0) {
                 schedule();
@@ -187,26 +187,24 @@ angular
  *  
  */
 function syncMappingProvider() {
-
     var debug;
 
-    this.setDebug = function (value) {
+    this.setDebug = function(value) {
         debug = value;
     };
 
     this.$get = ["$pq", function syncMapping($pq) {
-
         var service = {
             addSyncObjectDefinition: addSyncObjectDefinition,
             addSyncArrayDefinition: addSyncArrayDefinition,
             mapObjectPropertiesToSubscriptionData: mapObjectPropertiesToSubscriptionData,
             removePropertyMappers: removePropertyMappers,
-            destroyDependentSubscriptions: destroyDependentSubscriptions
+            destroyDependentSubscriptions: destroyDependentSubscriptions,
         };
 
         return service;
 
-        //////////
+        // ////////
 
         function upgrade(thiSub) {
             if (thiSub.$datasources) {
@@ -245,7 +243,7 @@ function syncMappingProvider() {
                 single: true,
                 objectClass: options.objectClass,
                 mappings: options.mappings,
-                notifyReady: options.notifyReady
+                notifyReady: options.notifyReady,
             });
         }
 
@@ -264,7 +262,7 @@ function syncMappingProvider() {
                 single: false,
                 objectClass: options.objectClass,
                 mappings: options.mappings,
-                notifyReady: options.notifyReady
+                notifyReady: options.notifyReady,
 
             });
             return subscription;
@@ -288,19 +286,21 @@ function syncMappingProvider() {
             if (_.isFunction(fnOrMap)) {
                 fn = fnOrMap;
             } else {
-                fn = function (obj) {
+                fn = function(obj) {
                     var mappingParams = {};
                     for (var key in fnOrMap) {
-                        var v = _.get(obj, fnOrMap[key]);
-                        if (!_.isNil(v)) {
-                            mappingParams[key] = v;
+                        if (fnOrMap.hasOwnProperty(key)) {
+                            var v = _.get(obj, fnOrMap[key]);
+                            if (!_.isNil(v)) {
+                                mappingParams[key] = v;
+                            }
                         }
                     }
                     return mappingParams;
                 };
             }
 
-            return function () {
+            return function() {
                 var mappingParams = fn.apply(this, arguments);
                 // if there is no param, there is no mapping to do, most likely, there is no need for the dependent subscription
                 // ex a person.driverLicenceId.... if that person does not have this information, there would be no need to try to subscribe
@@ -308,7 +308,7 @@ function syncMappingProvider() {
                     return null;
                 }
                 return mappingParams;
-            }
+            };
         }
 
 
@@ -318,7 +318,6 @@ function syncMappingProvider() {
          * @returns <Promise> Resolve when it completes
          */
         function mapObjectPropertiesToSubscriptionData(subscription, obj) {
-
             if (subscription.$dependentSubscriptionDefinitions.length === 0) {
                 return $pq.resolve(obj);
             }
@@ -329,10 +328,10 @@ function syncMappingProvider() {
                 propertyMappers = createPropertyMappers(subscription, obj);
             }
             return $pq.all(_.map(propertyMappers,
-                function (propertyMapper) {
+                function(propertyMapper) {
                     return propertyMapper.update(obj);
                 }))
-                .then(function () {
+                .then(function() {
                     // object is now mapped with all data supplied by the subscriptions.
                     return obj;
                 });
@@ -349,13 +348,13 @@ function syncMappingProvider() {
 
             var propertyMappers = [];
             _.forEach(subscription.$dependentSubscriptionDefinitions,
-                function (dependentSubDef) {
+                function(dependentSubDef) {
                     propertyMappers.push(new PropertyMapper(subscription, obj, dependentSubDef));
                 }
             );
             subscription.$datasources.push({
                 objId: obj.id,
-                propertyMappers: propertyMappers
+                propertyMappers: propertyMappers,
             });
             return propertyMappers;
         }
@@ -367,7 +366,7 @@ function syncMappingProvider() {
               *  @returns all the subscriptions linked to this object
               */
         function findPropertyMappers(subscription, obj) {
-            var objDs = _.find(subscription.$datasources, { objId: obj.id });
+            var objDs = _.find(subscription.$datasources, {objId: obj.id});
             return objDs ? objDs.propertyMappers : null;
         }
 
@@ -377,10 +376,10 @@ function syncMappingProvider() {
          *  @param <Object> the object of that was removed
          */
         function removePropertyMappers(subscription, obj) {
-            var objDs = _.find(subscription.$datasources, { objId: obj.id });
+            var objDs = _.find(subscription.$datasources, {objId: obj.id});
             if (objDs && objDs.propertyMappers.length !== 0) {
                 logDebug('Sync -> Removing property mappers for record #' + obj.id + ' of subscription to ' + subscription);
-                _.forEach(objDs.propertyMappers, function (sub) {
+                _.forEach(objDs.propertyMappers, function(sub) {
                     sub.destroy();
                 });
             }
@@ -390,13 +389,13 @@ function syncMappingProvider() {
          * Destroy all subscriptions created by a subscription that has property mappers
          */
         function destroyDependentSubscriptions(subscription) {
-            var allSubscriptions = _.flatten(_.map(subscription.$datasources, function (datasource) {
-                return _.map(datasource.propertyMappers, function (propertyMapper) {
+            var allSubscriptions = _.flatten(_.map(subscription.$datasources, function(datasource) {
+                return _.map(datasource.propertyMappers, function(propertyMapper) {
                     return propertyMapper.subscription;
                 });
             }));
             var deps = [];
-            _.forEach(allSubscriptions, function (sub) {
+            _.forEach(allSubscriptions, function(sub) {
                 if (!sub) {
                     return;
                 }
@@ -416,7 +415,6 @@ function syncMappingProvider() {
          * 
          */
         function PropertyMapper(subscription, obj, dependentSubDef) {
-
             this.subscription = null;
             this.objectId = obj.id;
             this.parentSubscription = subscription;
@@ -445,11 +443,11 @@ function syncMappingProvider() {
                 } else {
                     propertyMapper.setParams(obj, subParams);
 
-                    return propertyMapper.subscription.waitForDataReady().then(function (data) {
+                    return propertyMapper.subscription.waitForDataReady().then(function(data) {
                         if (propertyMapper.subscription.isSingle()) {
                             propertyMapper.definition.mapFn(data, obj, false, '');
                         } else {
-                            _.forEach(data, function (resultObj) {
+                            _.forEach(data, function(resultObj) {
                                 propertyMapper.definition.mapFn(resultObj, obj, false, '');
                             });
                         }
@@ -463,7 +461,7 @@ function syncMappingProvider() {
             function setParams(obj, params) {
                 // if nothing change, the propertyMapper is already connected to the right subscription
                 if (_.isEqual(params, this.params)) {
-                    return
+                    return;
                 }
                 this.params = params;
                 var depSub = findSubScriptionInPool(subscription, this.definition, params);
@@ -533,7 +531,7 @@ function syncMappingProvider() {
             var sub = subscription;
             var params = [];
             while (sub) {
-                params.push({ publication: sub.getPublication(), params: sub.getParameters() });
+                params.push({publication: sub.getPublication(), params: sub.getParameters()});
                 sub = sub.$parentSubscription;
             }
             return params;
@@ -544,10 +542,10 @@ function syncMappingProvider() {
          * 
          */
         function findSubScriptionInPool(subscription, definition, params) {
-            var depSub = _.find(subscription.$getPool(), function (subscription) {
+            var depSub = _.find(subscription.$getPool(), function(subscription) {
                 // subscription should have a propertyMapper for the definition
                 return _.isEqual(subscription.getParameters(), params);
-            })
+            });
             return depSub;
         }
 
@@ -562,7 +560,7 @@ function syncMappingProvider() {
                 .$createDependentSubscription(definition.publication)
                 .setObjectClass(definition.objectClass)
                 .setSingle(definition.single)
-                .mapData(function (dependentSubObject, operation) {
+                .mapData(function(dependentSubObject, operation) {
                     // map will be triggered in the following conditions:
                     // - when the first time, the object is received, this dependent sync will be created and call map when it receives its data
                     // - the next time the dependent syncs
@@ -577,17 +575,16 @@ function syncMappingProvider() {
                     // To dig in, mostlikely when the dependent subscription is created, mapFn will be called twice.
                     // Try to prevent this... 
                     // -------------------------------------------------
-                    _.forEach(depSub.propertyMappers, function (propertyMapper) {
+                    _.forEach(depSub.propertyMappers, function(propertyMapper) {
                         propertyMapper.mapFn(dependentSubObject, operation);
                     });
                 })
-                .setOnReady(function () {
+                .setOnReady(function() {
                     // if the main sync is NOT ready, it means it is in the process of being ready and will notify when it is
                     if (definition.notifyReady && subscription.isReady()) {
                         notifyMainSubscription(subscription, depSub);
                     }
                 });
-
 
 
             // the dependent subscription might have itself some mappings
@@ -597,7 +594,6 @@ function syncMappingProvider() {
             // this starts the subscription using the params computed by the function provided when the dependent subscription was defined
             depSub.setParameters(subParams);
             return depSub;
-
         }
 
         /**
@@ -625,27 +621,11 @@ function syncMappingProvider() {
         }
     }];
 
-    function logInfo(msg) {
-        if (debug >= 1) {
-            console.debug('SYNCMAP(info): ' + msg);
-        }
-    }
-
     function logDebug(msg) {
         if (debug >= 2) {
             console.debug('SYNCMAP(debug): ' + msg);
         }
     }
-
-    function logError(msg, e) {
-        if (debug >= 0) {
-            console.error('SYNCMAP(error): ' + msg, e);
-        }
-    }
-
-
-
-
 }
 }());
 
@@ -684,11 +664,11 @@ function syncProvider($syncMappingProvider) {
     var debug, benchmark = true;
     var latencyInMilliSecs = 0;
 
-    this.setDebug = function (value) {
+    this.setDebug = function(value) {
         debug = value;
         $syncMappingProvider.setDebug(value);
     };
-    this.setBenchmark = function (value) {
+    this.setBenchmark = function(value) {
         benchmark = value;
     };
 
@@ -698,12 +678,11 @@ function syncProvider($syncMappingProvider) {
      * @param <number> milliseconds
      * 
      */
-    this.setLatency = function (seconds) {
+    this.setLatency = function(seconds) {
         latencyInMilliSecs = seconds;
     };
 
     this.$get = ["$rootScope", "$pq", "$socketio", "$syncGarbageCollector", "$syncMapping", "sessionUser", function sync($rootScope, $pq, $socketio, $syncGarbageCollector, $syncMapping, sessionUser) {
-
         var publicationListeners = {},
             lastPublicationListenerUid = 0;
         var GRACE_PERIOD_IN_SECONDS = 8;
@@ -717,12 +696,12 @@ function syncProvider($syncMappingProvider) {
             resolveSubscription: resolveSubscription,
             getGracePeriod: getGracePeriod,
             getIdValue: getIdValue,
-            getCurrentSubscriptionCount: getCurrentSubscriptionCount
+            getCurrentSubscriptionCount: getCurrentSubscriptionCount,
         };
 
         return service;
 
-        ///////////////////////////////////
+        // /////////////////////////////////
         /**
          * subscribe to publication and returns the subscription when data is available. 
          * @param publication name. on the server side, a publication shall exist. ex: magazines.sync
@@ -738,7 +717,7 @@ function syncProvider($syncMappingProvider) {
             var sDs = subscribe(publicationName).setObjectClass(objectClass);
 
             // give a little time for subscription to fetch the data...otherwise give up so that we don't get stuck in a resolve waiting forever.
-            var gracePeriod = setTimeout(function () {
+            var gracePeriod = setTimeout(function() {
                 if (!sDs.ready) {
                     sDs.destroy();
                     logInfo('Attempt to subscribe to publication ' + publicationName + ' failed');
@@ -748,10 +727,10 @@ function syncProvider($syncMappingProvider) {
 
             sDs.setParameters(params)
                 .waitForDataReady()
-                .then(function () {
+                .then(function() {
                     clearTimeout(gracePeriod);
                     deferred.resolve(sDs);
-                }).catch(function () {
+                }).catch(function() {
                     clearTimeout(gracePeriod);
                     sDs.destroy();
                     deferred.reject('Failed to subscribe to publication ' + publicationName + ' failed');
@@ -765,7 +744,7 @@ function syncProvider($syncMappingProvider) {
                 .setSingle(true)
                 .setObjectClass(options.objectClass)
                 .map(options.mappings)
-                .setParameters({ id: id });
+                .setParameters({id: id});
         }
 
         /**
@@ -788,15 +767,16 @@ function syncProvider($syncMappingProvider) {
         }
 
 
-
-        ///////////////////////////////////
+        // /////////////////////////////////
         // HELPERS
 
         // every sync notification comes thru the same event then it is dispatches to the targeted subscriptions.
         function listenToPublicationNotification() {
             $socketio.on(
                 'SYNC_NOW',
-                function (subNotification, fn) {
+                function(serializedObj, fn) {
+                    const subNotification = _.isNil(window.ZJSONBIN) ? serializedObj : window.ZJSONBIN.deserialize(serializedObj);
+                    //   const subNotification = serializedObj[0] === 'B' ? jsonpack.unpack(serializedObj.substring(1)) : JSON.parse(serializedObj.substring(1));
                     // if (subNotification.diff && !subNotification.records.length) {
                     //     // this would happen only after a lost of network connection no data received
                     //     fn('SYNCED'); // let know the backend the client was able to sync.
@@ -808,7 +788,9 @@ function syncProvider($syncMappingProvider) {
                     var processed = [];
                     if (listeners) {
                         for (var listener in listeners) {
-                            processed.push(listeners[listener](subNotification));
+                            if (listeners.hasOwnProperty(listener)) {
+                                processed.push(listeners[listener](subNotification));
+                            }
                         }
                     }
                     fn('SYNCED'); // let know the backend the client was able to sync.
@@ -831,11 +813,11 @@ function syncProvider($syncMappingProvider) {
             //    console.log('Added new one. remaining active publication: ' + totalSub);
 
 
-            return function () {
+            return function() {
                 totalSub--;
                 //    console.log('Release one. remaining active publication: ' + totalSub);
                 delete listeners[uid];
-            }
+            };
         }
         // ------------------------------------------------------
         // Subscription object
@@ -861,11 +843,11 @@ function syncProvider($syncMappingProvider) {
          */
 
         function Subscription(publication, scope) {
-            var timestampField, isSyncingOn = false, destroyed,
+            var isSyncingOn = false, destroyed,
                 isSingleObjectCache, updateDataStorage, cache, isInitialPushCompleted, initialStartTime, deferredInitialization;
             var onReadyOff, formatRecord;
             var reconnectOff, publicationListenerOff, destroyOff;
-            var objectClass;
+            var ObjectClass;
             var subscriptionId;
             var mapDataFn;
 
@@ -873,7 +855,7 @@ function syncProvider($syncMappingProvider) {
             thisSub.$dependentSubscriptionDefinitions = [];
             var subParams = {};
             var recordStates = {};
-            var innerScope; //= $rootScope.$new(true);
+            var innerScope; // = $rootScope.$new(true);
             var syncListener = new SyncListener();
 
             //  ----public----
@@ -930,7 +912,7 @@ function syncProvider($syncMappingProvider) {
             // this will make sure that the subscription is released from servers if the app closes (close browser, refresh...)
             attach(scope || $rootScope);
 
-            ///////////////////////////////////////////
+            // /////////////////////////////////////////
             function getId() {
                 return subscriptionId;
             }
@@ -1009,16 +991,16 @@ function syncProvider($syncMappingProvider) {
                     return thisSub;
                 }
 
-                objectClass = classValue;
-                formatRecord = function (record) {
-                    return new objectClass(record);
-                }
+                ObjectClass = classValue;
+                formatRecord = function(record) {
+                    return new ObjectClass(record);
+                };
                 setSingle(isSingleObjectCache);
                 return thisSub;
             }
 
             function getObjectClass() {
-                return objectClass;
+                return ObjectClass;
             }
 
             /**
@@ -1170,14 +1152,13 @@ function syncProvider($syncMappingProvider) {
              */
             function mapAllDataToObject(obj, operation) {
                 return $syncMapping.mapObjectPropertiesToSubscriptionData(thisSub, obj)
-                    .then(function (obj, operation) {
+                    .then(function(obj, operation) {
                         return mapDataToOject(obj, operation);
                     })
-                    .catch(function (err) {
+                    .catch(function(err) {
                         logError('Error when mapping received object.', err);
                         $pq.reject(err);
                     });
-
             }
 
             /** 
@@ -1198,7 +1179,7 @@ function syncProvider($syncMappingProvider) {
                     var result = mapDataFn(obj, operation);
                     if (result && result.then) {
                         return result
-                            .then(function () {
+                            .then(function() {
                                 return obj;
                             });
                     }
@@ -1215,7 +1196,7 @@ function syncProvider($syncMappingProvider) {
 
 
             function $notifyUpdateWithinDependentSubscription(idOfObjectImpactedByChange) {
-                var cachedObject = getRecordState({ id: idOfObjectImpactedByChange });
+                var cachedObject = getRecordState({id: idOfObjectImpactedByChange});
                 syncListener.notify('ready', getData(), [cachedObject]);
             }
 
@@ -1233,7 +1214,7 @@ function syncProvider($syncMappingProvider) {
             function setParameters(fetchingParams, options) {
                 if (isSyncingOn && angular.equals(fetchingParams || {}, subParams)) {
                     // if the params have not changed, just returns with current data.
-                    return thisSub; //$pq.resolve(getData());
+                    return thisSub; // $pq.resolve(getData());
                 }
                 syncOff();
                 if (!isSingleObjectCache) {
@@ -1260,7 +1241,7 @@ function syncProvider($syncMappingProvider) {
              * @returns {Promise} that waits for the initial fetch to complete then wait for the initial fetch to complete then returns this subscription.
              */
             function waitForSubscriptionReady(callback) {
-                return startSyncing().then(function () {
+                return startSyncing().then(function() {
                     if (callback) {
                         callback(thisSub);
                     }
@@ -1275,7 +1256,7 @@ function syncProvider($syncMappingProvider) {
              * @returns {Promise} that waits for the initial fetch to complete then returns the data
              */
             function waitForDataReady(callback) {
-                return startSyncing().then(function (data) {
+                return startSyncing().then(function(data) {
                     if (callback) {
                         callback(data, thisSub);
                     }
@@ -1293,13 +1274,13 @@ function syncProvider($syncMappingProvider) {
                 isSingleObjectCache = value;
                 if (value) {
                     updateFn = updateSyncedObject;
-                    cache = objectClass ? new objectClass({}) : {};
+                    cache = ObjectClass ? new ObjectClass({}) : {};
                 } else {
                     updateFn = updateSyncedArray;
                     cache = [];
                 }
 
-                updateDataStorage = function (record) {
+                updateDataStorage = function(record) {
                     try {
                         if (record.timestamp) {
                             record.timestamp.$sync = thisSub;
@@ -1309,7 +1290,7 @@ function syncProvider($syncMappingProvider) {
                         e.message = 'Received Invalid object from publication [' + publication + ']: ' + JSON.stringify(record) + '. DETAILS: ' + e.message;
                         throw e;
                     }
-                }
+                };
 
                 return thisSub;
             }
@@ -1337,7 +1318,7 @@ function syncProvider($syncMappingProvider) {
                 if (isSingleObjectCache) {
                     return cache.id === id ? cache : null;
                 }
-                return _.find(cache, { id: id });
+                return _.find(cache, {id: id});
             }
 
 
@@ -1423,7 +1404,6 @@ function syncProvider($syncMappingProvider) {
 
             function readyForListening() {
                 if (!publicationListenerOff) {
-
                     // if the subscription belongs to a parent one and the network is lost, the top parent subscription will release/destroy all dependent subscriptions and take care of re-registering itself and its dependents.
                     if (!thisSub.$parentSubscription) {
                         listenForReconnectionToResync();
@@ -1431,18 +1411,17 @@ function syncProvider($syncMappingProvider) {
 
                     publicationListenerOff = addPublicationListener(
                         publication,
-                        function (batch) {
+                        function(batch) {
                             // Create a delay before processing publication data to simulate network latency
                             if (latencyInMilliSecs) {
                                 logInfo('Sync -> Processing delayed for ' + latencyInMilliSecs + ' ms.'); // 
-                                setTimeout(function () {
+                                setTimeout(function() {
                                     logInfo('Sync -> Processing ' + publication + ' now.');
                                     processPublicationData(batch);
                                 }, latencyInMilliSecs);
                             } else {
                                 return processPublicationData(batch);
                             }
-
                         }
 
                     );
@@ -1461,7 +1440,7 @@ function syncProvider($syncMappingProvider) {
                     destroyOff();
                 }
                 innerScope = newScope;
-                destroyOff = innerScope.$on('$destroy', function () {
+                destroyOff = innerScope.$on('$destroy', function() {
                     destroy();
                 });
 
@@ -1470,8 +1449,8 @@ function syncProvider($syncMappingProvider) {
 
             function listenForReconnectionToResync(listenNow) {
                 // give a chance to connect before listening to reconnection... @TODO should have user_reconnected_event
-                setTimeout(function () {
-                    reconnectOff = innerScope.$on('user_connected', function () {
+                setTimeout(function() {
+                    reconnectOff = innerScope.$on('user_connected', function() {
                         logDebug('Resyncing after network loss to ' + publication);
                         // note the backend might return a new subscription if the client took too much time to reconnect.
                         registerSubscription();
@@ -1484,8 +1463,8 @@ function syncProvider($syncMappingProvider) {
                     version: SYNC_VERSION,
                     id: subscriptionId, // to try to re-use existing subcription
                     publication: publication,
-                    params: subParams
-                }).then(function (subId) {
+                    params: subParams,
+                }).then(function(subId) {
                     subscriptionId = subId;
                 });
             }
@@ -1497,7 +1476,7 @@ function syncProvider($syncMappingProvider) {
                         id: subscriptionId,
                         // following only useful for unit testing
                         publication: publication,
-                        params: subParams
+                        params: subParams,
                     });
                     subscriptionId = null;
                 }
@@ -1519,14 +1498,14 @@ function syncProvider($syncMappingProvider) {
                     if (!batch.diff && isDataCached()) {
                         // Clear the cache to rebuild it if all data was received.
                         applyPromise = clearCache()
-                            .then(function () {
+                            .then(function() {
                                 return applyChanges(batch.records);
                             });
                     } else {
                         applyPromise = applyChanges(batch.records);
                     }
                     return applyPromise.then(
-                        function () {
+                        function() {
                             if (!isInitialPushCompleted) {
                                 isInitialPushCompleted = true;
 
@@ -1539,7 +1518,7 @@ function syncProvider($syncMappingProvider) {
                                 deferredInitialization.resolve(getData());
                             }
                         }
-                    )
+                    );
                 }
                 // unit test will know when the apply is completed when the promise resolve;
                 return $pq.resolve();
@@ -1569,19 +1548,19 @@ function syncProvider($syncMappingProvider) {
                 } else {
                     result = clearObjectCache();
                 }
-                return result.catch(function (err) {
+                return result.catch(function(err) {
                     logError('Error clearing subscription cache - ' + err);
-                })
+                });
             }
 
             function clearArrayCache() {
                 var promises = [];
-                _.forEach(cache, function (obj) {
+                _.forEach(cache, function(obj) {
                     $syncMapping.removePropertyMappers(thisSub, obj);
                     obj.removed = true;
                     promises.push(mapDataToOject(obj));
                 });
-                return $pq.all(promises).finally(function () {
+                return $pq.all(promises).finally(function() {
                     recordStates = {};
                     cache.length = 0;
                 });
@@ -1601,7 +1580,7 @@ function syncProvider($syncMappingProvider) {
                 //     return false;
                 // }
                 if (!subParams || Object.keys(subParams).length == 0) {
-                    return true
+                    return true;
                 }
                 var matching = true;
                 for (var param in batchParams) {
@@ -1613,7 +1592,6 @@ function syncProvider($syncMappingProvider) {
                     }
                 }
                 return matching;
-
             }
 
             /** 
@@ -1639,31 +1617,30 @@ function syncProvider($syncMappingProvider) {
             function applyChanges(records, force) {
                 thisSub.ready = false;
                 return waitForExternalDatasourcesReady()
-                    .then(function () {
+                    .then(function() {
                         try {
                             var newDataArray = [];
                             var promises = [];
-                            records.forEach(function (record) {
+                            records.forEach(function(record) {
                                 //                   logInfo('Datasync [' + dataStreamName + '] received:' +JSON.stringify(record));//+ JSON.stringify(record.id));
                                 if (record.remove) {
                                     promises.push(removeRecord(record, force));
                                 } else if (getRecordState(record)) {
                                     // if the record is already present in the cache...so it is mightbe an update..
-                                    promises.push(updateRecord(record, force).then(function (newData) {
+                                    promises.push(updateRecord(record, force).then(function(newData) {
                                         newDataArray.push(newData);
                                     }));
                                 } else {
                                     // if the record is already present in the cache...so it is mightbe an update..
-                                    promises.push(addRecord(record, force).then(function (newData) {
+                                    promises.push(addRecord(record, force).then(function(newData) {
                                         newDataArray.push(newData);
                                     }));
                                 }
                             });
-                            return $pq.all(promises).then(function () {
+                            return $pq.all(promises).then(function() {
                                 return newDataArray;
                             });
-                        }
-                        catch (err) {
+                        } catch (err) {
                             // angular does not reject automatically!! not sure why.
                             return $pq.reject(err);
                         }
@@ -1674,10 +1651,10 @@ function syncProvider($syncMappingProvider) {
 
             function waitForExternalDatasourcesReady() {
                 return {
-                    then: function (cb) {
+                    then: function(cb) {
                         return cb();
-                    }
-                };//$pq.resolve();
+                    },
+                };// $pq.resolve();
             }
 
             function notifyDataReady(newDataArray) {
@@ -1737,7 +1714,7 @@ function syncProvider($syncMappingProvider) {
 
                 var obj = formatRecord ? formatRecord(record) : record;
 
-                return mapAllDataToObject(obj, 'add').then(function () {
+                return mapAllDataToObject(obj, 'add').then(function() {
                     updateDataStorage(obj);
                     syncListener.notify('add', obj);
                     return obj;
@@ -1764,7 +1741,7 @@ function syncProvider($syncMappingProvider) {
                 logDebug('Sync -> Updated record #' + JSON.stringify(record.id) + (force ? ' directly' : ' via sync') + ' for subscription to ' + thisSub);
                 obj = formatRecord ? formatRecord(record) : record;
 
-                return mapAllDataToObject(obj, 'update').then(function () {
+                return mapAllDataToObject(obj, 'update').then(function() {
                     updateDataStorage(obj);
                     syncListener.notify('update', obj);
                     return obj;
@@ -1797,7 +1774,7 @@ function syncProvider($syncMappingProvider) {
                 $syncGarbageCollector.dispose(function collect() {
                     var existingRecord = getRecordState(record);
                     if (existingRecord && record.revision >= existingRecord.revision) {
-                        //logDebug('Collect Now:' + JSON.stringify(record));
+                        // logDebug('Collect Now:' + JSON.stringify(record));
                         delete recordStates[getIdValue(record.id)];
                     }
                 });
@@ -1850,7 +1827,6 @@ function syncProvider($syncMappingProvider) {
                         cache.splice(cache.indexOf(existing), 1);
                     }
                 }
-
             }
 
             function merge(destination, source) {
@@ -1861,11 +1837,12 @@ function syncProvider($syncMappingProvider) {
                 if (!destination.timestamp) {
                     destination.timestamp = {};
                 }
-
             }
 
             function clearObject(object) {
-                Object.keys(object).forEach(function (key) { delete object[key]; });
+                Object.keys(object).forEach(function(key) {
+                    delete object[key];
+                });
             }
 
             function getRevision(record) {
@@ -1876,7 +1853,7 @@ function syncProvider($syncMappingProvider) {
                 if (angular.isDefined(record.timestamp)) {
                     return record.timestamp;
                 }
-                throw new Error('Sync requires a revision or timestamp property in received ' + (objectClass ? 'object [' + objectClass.name + ']' : 'record'));
+                throw new Error('Sync requires a revision or timestamp property in received ' + (ObjectClass ? 'object [' + ObjectClass.name + ']' : 'record'));
             }
         }
 
@@ -1893,7 +1870,7 @@ function syncProvider($syncMappingProvider) {
             function notify(event, data1, data2) {
                 var listeners = events[event];
                 if (listeners) {
-                    _.forEach(listeners, function (callback, id) {
+                    _.forEach(listeners, function(callback, id) {
                         callback(data1, data2);
                     });
                 }
@@ -1909,9 +1886,9 @@ function syncProvider($syncMappingProvider) {
                 }
                 var id = count++;
                 listeners[id] = callback;
-                return function () {
+                return function() {
                     delete listeners[id];
-                }
+                };
             }
         }
     }];
@@ -1921,7 +1898,7 @@ function syncProvider($syncMappingProvider) {
             return id;
         }
         // build composite key value
-        var r = _.join(_.map(id, function (value) {
+        var r = _.join(_.map(id, function(value) {
             return value;
         }), '~');
         return r;
@@ -1961,8 +1938,5 @@ function syncProvider($syncMappingProvider) {
     function getCurrentSubscriptionCount() {
         return totalSub;
     }
-
-
-
 };
 }());

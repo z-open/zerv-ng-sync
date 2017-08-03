@@ -29,11 +29,11 @@ function syncProvider($syncMappingProvider) {
     var debug, benchmark = true;
     var latencyInMilliSecs = 0;
 
-    this.setDebug = function (value) {
+    this.setDebug = function(value) {
         debug = value;
         $syncMappingProvider.setDebug(value);
     };
-    this.setBenchmark = function (value) {
+    this.setBenchmark = function(value) {
         benchmark = value;
     };
 
@@ -43,12 +43,11 @@ function syncProvider($syncMappingProvider) {
      * @param <number> milliseconds
      * 
      */
-    this.setLatency = function (seconds) {
+    this.setLatency = function(seconds) {
         latencyInMilliSecs = seconds;
     };
 
     this.$get = function sync($rootScope, $pq, $socketio, $syncGarbageCollector, $syncMapping, sessionUser) {
-
         var publicationListeners = {},
             lastPublicationListenerUid = 0;
         var GRACE_PERIOD_IN_SECONDS = 8;
@@ -62,12 +61,12 @@ function syncProvider($syncMappingProvider) {
             resolveSubscription: resolveSubscription,
             getGracePeriod: getGracePeriod,
             getIdValue: getIdValue,
-            getCurrentSubscriptionCount: getCurrentSubscriptionCount
+            getCurrentSubscriptionCount: getCurrentSubscriptionCount,
         };
 
         return service;
 
-        ///////////////////////////////////
+        // /////////////////////////////////
         /**
          * subscribe to publication and returns the subscription when data is available. 
          * @param publication name. on the server side, a publication shall exist. ex: magazines.sync
@@ -83,7 +82,7 @@ function syncProvider($syncMappingProvider) {
             var sDs = subscribe(publicationName).setObjectClass(objectClass);
 
             // give a little time for subscription to fetch the data...otherwise give up so that we don't get stuck in a resolve waiting forever.
-            var gracePeriod = setTimeout(function () {
+            var gracePeriod = setTimeout(function() {
                 if (!sDs.ready) {
                     sDs.destroy();
                     logInfo('Attempt to subscribe to publication ' + publicationName + ' failed');
@@ -93,10 +92,10 @@ function syncProvider($syncMappingProvider) {
 
             sDs.setParameters(params)
                 .waitForDataReady()
-                .then(function () {
+                .then(function() {
                     clearTimeout(gracePeriod);
                     deferred.resolve(sDs);
-                }).catch(function () {
+                }).catch(function() {
                     clearTimeout(gracePeriod);
                     sDs.destroy();
                     deferred.reject('Failed to subscribe to publication ' + publicationName + ' failed');
@@ -110,7 +109,7 @@ function syncProvider($syncMappingProvider) {
                 .setSingle(true)
                 .setObjectClass(options.objectClass)
                 .map(options.mappings)
-                .setParameters({ id: id });
+                .setParameters({id: id});
         }
 
         /**
@@ -133,15 +132,16 @@ function syncProvider($syncMappingProvider) {
         }
 
 
-
-        ///////////////////////////////////
+        // /////////////////////////////////
         // HELPERS
 
         // every sync notification comes thru the same event then it is dispatches to the targeted subscriptions.
         function listenToPublicationNotification() {
             $socketio.on(
                 'SYNC_NOW',
-                function (subNotification, fn) {
+                function(serializedObj, fn) {
+                    const subNotification = _.isNil(window.ZJSONBIN) ? serializedObj : window.ZJSONBIN.deserialize(serializedObj);
+                    //   const subNotification = serializedObj[0] === 'B' ? jsonpack.unpack(serializedObj.substring(1)) : JSON.parse(serializedObj.substring(1));
                     // if (subNotification.diff && !subNotification.records.length) {
                     //     // this would happen only after a lost of network connection no data received
                     //     fn('SYNCED'); // let know the backend the client was able to sync.
@@ -153,7 +153,9 @@ function syncProvider($syncMappingProvider) {
                     var processed = [];
                     if (listeners) {
                         for (var listener in listeners) {
-                            processed.push(listeners[listener](subNotification));
+                            if (listeners.hasOwnProperty(listener)) {
+                                processed.push(listeners[listener](subNotification));
+                            }
                         }
                     }
                     fn('SYNCED'); // let know the backend the client was able to sync.
@@ -176,11 +178,11 @@ function syncProvider($syncMappingProvider) {
             //    console.log('Added new one. remaining active publication: ' + totalSub);
 
 
-            return function () {
+            return function() {
                 totalSub--;
                 //    console.log('Release one. remaining active publication: ' + totalSub);
                 delete listeners[uid];
-            }
+            };
         }
         // ------------------------------------------------------
         // Subscription object
@@ -206,11 +208,11 @@ function syncProvider($syncMappingProvider) {
          */
 
         function Subscription(publication, scope) {
-            var timestampField, isSyncingOn = false, destroyed,
+            var isSyncingOn = false, destroyed,
                 isSingleObjectCache, updateDataStorage, cache, isInitialPushCompleted, initialStartTime, deferredInitialization;
             var onReadyOff, formatRecord;
             var reconnectOff, publicationListenerOff, destroyOff;
-            var objectClass;
+            var ObjectClass;
             var subscriptionId;
             var mapDataFn;
 
@@ -218,7 +220,7 @@ function syncProvider($syncMappingProvider) {
             thisSub.$dependentSubscriptionDefinitions = [];
             var subParams = {};
             var recordStates = {};
-            var innerScope; //= $rootScope.$new(true);
+            var innerScope; // = $rootScope.$new(true);
             var syncListener = new SyncListener();
 
             //  ----public----
@@ -275,7 +277,7 @@ function syncProvider($syncMappingProvider) {
             // this will make sure that the subscription is released from servers if the app closes (close browser, refresh...)
             attach(scope || $rootScope);
 
-            ///////////////////////////////////////////
+            // /////////////////////////////////////////
             function getId() {
                 return subscriptionId;
             }
@@ -354,16 +356,16 @@ function syncProvider($syncMappingProvider) {
                     return thisSub;
                 }
 
-                objectClass = classValue;
-                formatRecord = function (record) {
-                    return new objectClass(record);
-                }
+                ObjectClass = classValue;
+                formatRecord = function(record) {
+                    return new ObjectClass(record);
+                };
                 setSingle(isSingleObjectCache);
                 return thisSub;
             }
 
             function getObjectClass() {
-                return objectClass;
+                return ObjectClass;
             }
 
             /**
@@ -515,14 +517,13 @@ function syncProvider($syncMappingProvider) {
              */
             function mapAllDataToObject(obj, operation) {
                 return $syncMapping.mapObjectPropertiesToSubscriptionData(thisSub, obj)
-                    .then(function (obj, operation) {
+                    .then(function(obj, operation) {
                         return mapDataToOject(obj, operation);
                     })
-                    .catch(function (err) {
+                    .catch(function(err) {
                         logError('Error when mapping received object.', err);
                         $pq.reject(err);
                     });
-
             }
 
             /** 
@@ -543,7 +544,7 @@ function syncProvider($syncMappingProvider) {
                     var result = mapDataFn(obj, operation);
                     if (result && result.then) {
                         return result
-                            .then(function () {
+                            .then(function() {
                                 return obj;
                             });
                     }
@@ -560,7 +561,7 @@ function syncProvider($syncMappingProvider) {
 
 
             function $notifyUpdateWithinDependentSubscription(idOfObjectImpactedByChange) {
-                var cachedObject = getRecordState({ id: idOfObjectImpactedByChange });
+                var cachedObject = getRecordState({id: idOfObjectImpactedByChange});
                 syncListener.notify('ready', getData(), [cachedObject]);
             }
 
@@ -578,7 +579,7 @@ function syncProvider($syncMappingProvider) {
             function setParameters(fetchingParams, options) {
                 if (isSyncingOn && angular.equals(fetchingParams || {}, subParams)) {
                     // if the params have not changed, just returns with current data.
-                    return thisSub; //$pq.resolve(getData());
+                    return thisSub; // $pq.resolve(getData());
                 }
                 syncOff();
                 if (!isSingleObjectCache) {
@@ -605,7 +606,7 @@ function syncProvider($syncMappingProvider) {
              * @returns {Promise} that waits for the initial fetch to complete then wait for the initial fetch to complete then returns this subscription.
              */
             function waitForSubscriptionReady(callback) {
-                return startSyncing().then(function () {
+                return startSyncing().then(function() {
                     if (callback) {
                         callback(thisSub);
                     }
@@ -620,7 +621,7 @@ function syncProvider($syncMappingProvider) {
              * @returns {Promise} that waits for the initial fetch to complete then returns the data
              */
             function waitForDataReady(callback) {
-                return startSyncing().then(function (data) {
+                return startSyncing().then(function(data) {
                     if (callback) {
                         callback(data, thisSub);
                     }
@@ -638,13 +639,13 @@ function syncProvider($syncMappingProvider) {
                 isSingleObjectCache = value;
                 if (value) {
                     updateFn = updateSyncedObject;
-                    cache = objectClass ? new objectClass({}) : {};
+                    cache = ObjectClass ? new ObjectClass({}) : {};
                 } else {
                     updateFn = updateSyncedArray;
                     cache = [];
                 }
 
-                updateDataStorage = function (record) {
+                updateDataStorage = function(record) {
                     try {
                         if (record.timestamp) {
                             record.timestamp.$sync = thisSub;
@@ -654,7 +655,7 @@ function syncProvider($syncMappingProvider) {
                         e.message = 'Received Invalid object from publication [' + publication + ']: ' + JSON.stringify(record) + '. DETAILS: ' + e.message;
                         throw e;
                     }
-                }
+                };
 
                 return thisSub;
             }
@@ -682,7 +683,7 @@ function syncProvider($syncMappingProvider) {
                 if (isSingleObjectCache) {
                     return cache.id === id ? cache : null;
                 }
-                return _.find(cache, { id: id });
+                return _.find(cache, {id: id});
             }
 
 
@@ -768,7 +769,6 @@ function syncProvider($syncMappingProvider) {
 
             function readyForListening() {
                 if (!publicationListenerOff) {
-
                     // if the subscription belongs to a parent one and the network is lost, the top parent subscription will release/destroy all dependent subscriptions and take care of re-registering itself and its dependents.
                     if (!thisSub.$parentSubscription) {
                         listenForReconnectionToResync();
@@ -776,18 +776,17 @@ function syncProvider($syncMappingProvider) {
 
                     publicationListenerOff = addPublicationListener(
                         publication,
-                        function (batch) {
+                        function(batch) {
                             // Create a delay before processing publication data to simulate network latency
                             if (latencyInMilliSecs) {
                                 logInfo('Sync -> Processing delayed for ' + latencyInMilliSecs + ' ms.'); // 
-                                setTimeout(function () {
+                                setTimeout(function() {
                                     logInfo('Sync -> Processing ' + publication + ' now.');
                                     processPublicationData(batch);
                                 }, latencyInMilliSecs);
                             } else {
                                 return processPublicationData(batch);
                             }
-
                         }
 
                     );
@@ -806,7 +805,7 @@ function syncProvider($syncMappingProvider) {
                     destroyOff();
                 }
                 innerScope = newScope;
-                destroyOff = innerScope.$on('$destroy', function () {
+                destroyOff = innerScope.$on('$destroy', function() {
                     destroy();
                 });
 
@@ -815,8 +814,8 @@ function syncProvider($syncMappingProvider) {
 
             function listenForReconnectionToResync(listenNow) {
                 // give a chance to connect before listening to reconnection... @TODO should have user_reconnected_event
-                setTimeout(function () {
-                    reconnectOff = innerScope.$on('user_connected', function () {
+                setTimeout(function() {
+                    reconnectOff = innerScope.$on('user_connected', function() {
                         logDebug('Resyncing after network loss to ' + publication);
                         // note the backend might return a new subscription if the client took too much time to reconnect.
                         registerSubscription();
@@ -829,8 +828,8 @@ function syncProvider($syncMappingProvider) {
                     version: SYNC_VERSION,
                     id: subscriptionId, // to try to re-use existing subcription
                     publication: publication,
-                    params: subParams
-                }).then(function (subId) {
+                    params: subParams,
+                }).then(function(subId) {
                     subscriptionId = subId;
                 });
             }
@@ -842,7 +841,7 @@ function syncProvider($syncMappingProvider) {
                         id: subscriptionId,
                         // following only useful for unit testing
                         publication: publication,
-                        params: subParams
+                        params: subParams,
                     });
                     subscriptionId = null;
                 }
@@ -864,14 +863,14 @@ function syncProvider($syncMappingProvider) {
                     if (!batch.diff && isDataCached()) {
                         // Clear the cache to rebuild it if all data was received.
                         applyPromise = clearCache()
-                            .then(function () {
+                            .then(function() {
                                 return applyChanges(batch.records);
                             });
                     } else {
                         applyPromise = applyChanges(batch.records);
                     }
                     return applyPromise.then(
-                        function () {
+                        function() {
                             if (!isInitialPushCompleted) {
                                 isInitialPushCompleted = true;
 
@@ -884,7 +883,7 @@ function syncProvider($syncMappingProvider) {
                                 deferredInitialization.resolve(getData());
                             }
                         }
-                    )
+                    );
                 }
                 // unit test will know when the apply is completed when the promise resolve;
                 return $pq.resolve();
@@ -914,19 +913,19 @@ function syncProvider($syncMappingProvider) {
                 } else {
                     result = clearObjectCache();
                 }
-                return result.catch(function (err) {
+                return result.catch(function(err) {
                     logError('Error clearing subscription cache - ' + err);
-                })
+                });
             }
 
             function clearArrayCache() {
                 var promises = [];
-                _.forEach(cache, function (obj) {
+                _.forEach(cache, function(obj) {
                     $syncMapping.removePropertyMappers(thisSub, obj);
                     obj.removed = true;
                     promises.push(mapDataToOject(obj));
                 });
-                return $pq.all(promises).finally(function () {
+                return $pq.all(promises).finally(function() {
                     recordStates = {};
                     cache.length = 0;
                 });
@@ -946,7 +945,7 @@ function syncProvider($syncMappingProvider) {
                 //     return false;
                 // }
                 if (!subParams || Object.keys(subParams).length == 0) {
-                    return true
+                    return true;
                 }
                 var matching = true;
                 for (var param in batchParams) {
@@ -958,7 +957,6 @@ function syncProvider($syncMappingProvider) {
                     }
                 }
                 return matching;
-
             }
 
             /** 
@@ -984,31 +982,30 @@ function syncProvider($syncMappingProvider) {
             function applyChanges(records, force) {
                 thisSub.ready = false;
                 return waitForExternalDatasourcesReady()
-                    .then(function () {
+                    .then(function() {
                         try {
                             var newDataArray = [];
                             var promises = [];
-                            records.forEach(function (record) {
+                            records.forEach(function(record) {
                                 //                   logInfo('Datasync [' + dataStreamName + '] received:' +JSON.stringify(record));//+ JSON.stringify(record.id));
                                 if (record.remove) {
                                     promises.push(removeRecord(record, force));
                                 } else if (getRecordState(record)) {
                                     // if the record is already present in the cache...so it is mightbe an update..
-                                    promises.push(updateRecord(record, force).then(function (newData) {
+                                    promises.push(updateRecord(record, force).then(function(newData) {
                                         newDataArray.push(newData);
                                     }));
                                 } else {
                                     // if the record is already present in the cache...so it is mightbe an update..
-                                    promises.push(addRecord(record, force).then(function (newData) {
+                                    promises.push(addRecord(record, force).then(function(newData) {
                                         newDataArray.push(newData);
                                     }));
                                 }
                             });
-                            return $pq.all(promises).then(function () {
+                            return $pq.all(promises).then(function() {
                                 return newDataArray;
                             });
-                        }
-                        catch (err) {
+                        } catch (err) {
                             // angular does not reject automatically!! not sure why.
                             return $pq.reject(err);
                         }
@@ -1019,10 +1016,10 @@ function syncProvider($syncMappingProvider) {
 
             function waitForExternalDatasourcesReady() {
                 return {
-                    then: function (cb) {
+                    then: function(cb) {
                         return cb();
-                    }
-                };//$pq.resolve();
+                    },
+                };// $pq.resolve();
             }
 
             function notifyDataReady(newDataArray) {
@@ -1082,7 +1079,7 @@ function syncProvider($syncMappingProvider) {
 
                 var obj = formatRecord ? formatRecord(record) : record;
 
-                return mapAllDataToObject(obj, 'add').then(function () {
+                return mapAllDataToObject(obj, 'add').then(function() {
                     updateDataStorage(obj);
                     syncListener.notify('add', obj);
                     return obj;
@@ -1109,7 +1106,7 @@ function syncProvider($syncMappingProvider) {
                 logDebug('Sync -> Updated record #' + JSON.stringify(record.id) + (force ? ' directly' : ' via sync') + ' for subscription to ' + thisSub);
                 obj = formatRecord ? formatRecord(record) : record;
 
-                return mapAllDataToObject(obj, 'update').then(function () {
+                return mapAllDataToObject(obj, 'update').then(function() {
                     updateDataStorage(obj);
                     syncListener.notify('update', obj);
                     return obj;
@@ -1142,7 +1139,7 @@ function syncProvider($syncMappingProvider) {
                 $syncGarbageCollector.dispose(function collect() {
                     var existingRecord = getRecordState(record);
                     if (existingRecord && record.revision >= existingRecord.revision) {
-                        //logDebug('Collect Now:' + JSON.stringify(record));
+                        // logDebug('Collect Now:' + JSON.stringify(record));
                         delete recordStates[getIdValue(record.id)];
                     }
                 });
@@ -1195,7 +1192,6 @@ function syncProvider($syncMappingProvider) {
                         cache.splice(cache.indexOf(existing), 1);
                     }
                 }
-
             }
 
             function merge(destination, source) {
@@ -1206,11 +1202,12 @@ function syncProvider($syncMappingProvider) {
                 if (!destination.timestamp) {
                     destination.timestamp = {};
                 }
-
             }
 
             function clearObject(object) {
-                Object.keys(object).forEach(function (key) { delete object[key]; });
+                Object.keys(object).forEach(function(key) {
+                    delete object[key];
+                });
             }
 
             function getRevision(record) {
@@ -1221,7 +1218,7 @@ function syncProvider($syncMappingProvider) {
                 if (angular.isDefined(record.timestamp)) {
                     return record.timestamp;
                 }
-                throw new Error('Sync requires a revision or timestamp property in received ' + (objectClass ? 'object [' + objectClass.name + ']' : 'record'));
+                throw new Error('Sync requires a revision or timestamp property in received ' + (ObjectClass ? 'object [' + ObjectClass.name + ']' : 'record'));
             }
         }
 
@@ -1238,7 +1235,7 @@ function syncProvider($syncMappingProvider) {
             function notify(event, data1, data2) {
                 var listeners = events[event];
                 if (listeners) {
-                    _.forEach(listeners, function (callback, id) {
+                    _.forEach(listeners, function(callback, id) {
                         callback(data1, data2);
                     });
                 }
@@ -1254,9 +1251,9 @@ function syncProvider($syncMappingProvider) {
                 }
                 var id = count++;
                 listeners[id] = callback;
-                return function () {
+                return function() {
                     delete listeners[id];
-                }
+                };
             }
         }
     };
@@ -1266,7 +1263,7 @@ function syncProvider($syncMappingProvider) {
             return id;
         }
         // build composite key value
-        var r = _.join(_.map(id, function (value) {
+        var r = _.join(_.map(id, function(value) {
             return value;
         }), '~');
         return r;
@@ -1306,7 +1303,4 @@ function syncProvider($syncMappingProvider) {
     function getCurrentSubscriptionCount() {
         return totalSub;
     }
-
-
-
 };

@@ -24,26 +24,24 @@ angular
  *  
  */
 function syncMappingProvider() {
-
     var debug;
 
-    this.setDebug = function (value) {
+    this.setDebug = function(value) {
         debug = value;
     };
 
     this.$get = function syncMapping($pq) {
-
         var service = {
             addSyncObjectDefinition: addSyncObjectDefinition,
             addSyncArrayDefinition: addSyncArrayDefinition,
             mapObjectPropertiesToSubscriptionData: mapObjectPropertiesToSubscriptionData,
             removePropertyMappers: removePropertyMappers,
-            destroyDependentSubscriptions: destroyDependentSubscriptions
+            destroyDependentSubscriptions: destroyDependentSubscriptions,
         };
 
         return service;
 
-        //////////
+        // ////////
 
         function upgrade(thiSub) {
             if (thiSub.$datasources) {
@@ -82,7 +80,7 @@ function syncMappingProvider() {
                 single: true,
                 objectClass: options.objectClass,
                 mappings: options.mappings,
-                notifyReady: options.notifyReady
+                notifyReady: options.notifyReady,
             });
         }
 
@@ -101,7 +99,7 @@ function syncMappingProvider() {
                 single: false,
                 objectClass: options.objectClass,
                 mappings: options.mappings,
-                notifyReady: options.notifyReady
+                notifyReady: options.notifyReady,
 
             });
             return subscription;
@@ -125,19 +123,21 @@ function syncMappingProvider() {
             if (_.isFunction(fnOrMap)) {
                 fn = fnOrMap;
             } else {
-                fn = function (obj) {
+                fn = function(obj) {
                     var mappingParams = {};
                     for (var key in fnOrMap) {
-                        var v = _.get(obj, fnOrMap[key]);
-                        if (!_.isNil(v)) {
-                            mappingParams[key] = v;
+                        if (fnOrMap.hasOwnProperty(key)) {
+                            var v = _.get(obj, fnOrMap[key]);
+                            if (!_.isNil(v)) {
+                                mappingParams[key] = v;
+                            }
                         }
                     }
                     return mappingParams;
                 };
             }
 
-            return function () {
+            return function() {
                 var mappingParams = fn.apply(this, arguments);
                 // if there is no param, there is no mapping to do, most likely, there is no need for the dependent subscription
                 // ex a person.driverLicenceId.... if that person does not have this information, there would be no need to try to subscribe
@@ -145,7 +145,7 @@ function syncMappingProvider() {
                     return null;
                 }
                 return mappingParams;
-            }
+            };
         }
 
 
@@ -155,7 +155,6 @@ function syncMappingProvider() {
          * @returns <Promise> Resolve when it completes
          */
         function mapObjectPropertiesToSubscriptionData(subscription, obj) {
-
             if (subscription.$dependentSubscriptionDefinitions.length === 0) {
                 return $pq.resolve(obj);
             }
@@ -166,10 +165,10 @@ function syncMappingProvider() {
                 propertyMappers = createPropertyMappers(subscription, obj);
             }
             return $pq.all(_.map(propertyMappers,
-                function (propertyMapper) {
+                function(propertyMapper) {
                     return propertyMapper.update(obj);
                 }))
-                .then(function () {
+                .then(function() {
                     // object is now mapped with all data supplied by the subscriptions.
                     return obj;
                 });
@@ -186,13 +185,13 @@ function syncMappingProvider() {
 
             var propertyMappers = [];
             _.forEach(subscription.$dependentSubscriptionDefinitions,
-                function (dependentSubDef) {
+                function(dependentSubDef) {
                     propertyMappers.push(new PropertyMapper(subscription, obj, dependentSubDef));
                 }
             );
             subscription.$datasources.push({
                 objId: obj.id,
-                propertyMappers: propertyMappers
+                propertyMappers: propertyMappers,
             });
             return propertyMappers;
         }
@@ -204,7 +203,7 @@ function syncMappingProvider() {
               *  @returns all the subscriptions linked to this object
               */
         function findPropertyMappers(subscription, obj) {
-            var objDs = _.find(subscription.$datasources, { objId: obj.id });
+            var objDs = _.find(subscription.$datasources, {objId: obj.id});
             return objDs ? objDs.propertyMappers : null;
         }
 
@@ -214,10 +213,10 @@ function syncMappingProvider() {
          *  @param <Object> the object of that was removed
          */
         function removePropertyMappers(subscription, obj) {
-            var objDs = _.find(subscription.$datasources, { objId: obj.id });
+            var objDs = _.find(subscription.$datasources, {objId: obj.id});
             if (objDs && objDs.propertyMappers.length !== 0) {
                 logDebug('Sync -> Removing property mappers for record #' + obj.id + ' of subscription to ' + subscription);
-                _.forEach(objDs.propertyMappers, function (sub) {
+                _.forEach(objDs.propertyMappers, function(sub) {
                     sub.destroy();
                 });
             }
@@ -227,13 +226,13 @@ function syncMappingProvider() {
          * Destroy all subscriptions created by a subscription that has property mappers
          */
         function destroyDependentSubscriptions(subscription) {
-            var allSubscriptions = _.flatten(_.map(subscription.$datasources, function (datasource) {
-                return _.map(datasource.propertyMappers, function (propertyMapper) {
+            var allSubscriptions = _.flatten(_.map(subscription.$datasources, function(datasource) {
+                return _.map(datasource.propertyMappers, function(propertyMapper) {
                     return propertyMapper.subscription;
                 });
             }));
             var deps = [];
-            _.forEach(allSubscriptions, function (sub) {
+            _.forEach(allSubscriptions, function(sub) {
                 if (!sub) {
                     return;
                 }
@@ -253,7 +252,6 @@ function syncMappingProvider() {
          * 
          */
         function PropertyMapper(subscription, obj, dependentSubDef) {
-
             this.subscription = null;
             this.objectId = obj.id;
             this.parentSubscription = subscription;
@@ -282,11 +280,11 @@ function syncMappingProvider() {
                 } else {
                     propertyMapper.setParams(obj, subParams);
 
-                    return propertyMapper.subscription.waitForDataReady().then(function (data) {
+                    return propertyMapper.subscription.waitForDataReady().then(function(data) {
                         if (propertyMapper.subscription.isSingle()) {
                             propertyMapper.definition.mapFn(data, obj, false, '');
                         } else {
-                            _.forEach(data, function (resultObj) {
+                            _.forEach(data, function(resultObj) {
                                 propertyMapper.definition.mapFn(resultObj, obj, false, '');
                             });
                         }
@@ -300,7 +298,7 @@ function syncMappingProvider() {
             function setParams(obj, params) {
                 // if nothing change, the propertyMapper is already connected to the right subscription
                 if (_.isEqual(params, this.params)) {
-                    return
+                    return;
                 }
                 this.params = params;
                 var depSub = findSubScriptionInPool(subscription, this.definition, params);
@@ -370,7 +368,7 @@ function syncMappingProvider() {
             var sub = subscription;
             var params = [];
             while (sub) {
-                params.push({ publication: sub.getPublication(), params: sub.getParameters() });
+                params.push({publication: sub.getPublication(), params: sub.getParameters()});
                 sub = sub.$parentSubscription;
             }
             return params;
@@ -381,10 +379,10 @@ function syncMappingProvider() {
          * 
          */
         function findSubScriptionInPool(subscription, definition, params) {
-            var depSub = _.find(subscription.$getPool(), function (subscription) {
+            var depSub = _.find(subscription.$getPool(), function(subscription) {
                 // subscription should have a propertyMapper for the definition
                 return _.isEqual(subscription.getParameters(), params);
-            })
+            });
             return depSub;
         }
 
@@ -399,7 +397,7 @@ function syncMappingProvider() {
                 .$createDependentSubscription(definition.publication)
                 .setObjectClass(definition.objectClass)
                 .setSingle(definition.single)
-                .mapData(function (dependentSubObject, operation) {
+                .mapData(function(dependentSubObject, operation) {
                     // map will be triggered in the following conditions:
                     // - when the first time, the object is received, this dependent sync will be created and call map when it receives its data
                     // - the next time the dependent syncs
@@ -414,17 +412,16 @@ function syncMappingProvider() {
                     // To dig in, mostlikely when the dependent subscription is created, mapFn will be called twice.
                     // Try to prevent this... 
                     // -------------------------------------------------
-                    _.forEach(depSub.propertyMappers, function (propertyMapper) {
+                    _.forEach(depSub.propertyMappers, function(propertyMapper) {
                         propertyMapper.mapFn(dependentSubObject, operation);
                     });
                 })
-                .setOnReady(function () {
+                .setOnReady(function() {
                     // if the main sync is NOT ready, it means it is in the process of being ready and will notify when it is
                     if (definition.notifyReady && subscription.isReady()) {
                         notifyMainSubscription(subscription, depSub);
                     }
                 });
-
 
 
             // the dependent subscription might have itself some mappings
@@ -434,7 +431,6 @@ function syncMappingProvider() {
             // this starts the subscription using the params computed by the function provided when the dependent subscription was defined
             depSub.setParameters(subParams);
             return depSub;
-
         }
 
         /**
@@ -462,27 +458,11 @@ function syncMappingProvider() {
         }
     };
 
-    function logInfo(msg) {
-        if (debug >= 1) {
-            console.debug('SYNCMAP(info): ' + msg);
-        }
-    }
-
     function logDebug(msg) {
         if (debug >= 2) {
             console.debug('SYNCMAP(debug): ' + msg);
         }
     }
-
-    function logError(msg, e) {
-        if (debug >= 0) {
-            console.error('SYNCMAP(error): ' + msg, e);
-        }
-    }
-
-
-
-
 }
 
 

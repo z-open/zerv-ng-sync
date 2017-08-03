@@ -13,17 +13,16 @@ angular
     .provider('$socketio', mockSocketio);
 
 function mockSocketio() {
-
     var debug;
+    window.ZJSONBIN = {disabled: true};
 
-    this.setDebug = function (value) {
+    this.setDebug = function(value) {
         debug = value;
     };
 
 
     this.$get =
-        ["$rootScope", "$pq", function ($rootScope, $pq) {
-
+        ["$rootScope", "$pq", function($rootScope, $pq) {
             var self = this;
             this.network = true;
             var events = {},
@@ -104,7 +103,7 @@ function mockSocketio() {
                     console.debug('SOCKETIO: ' + msg, data);
                 }
             }
-        }]
+        }];
 }
 }());
 

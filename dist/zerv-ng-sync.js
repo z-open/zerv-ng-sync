@@ -664,6 +664,11 @@ function syncProvider($syncMappingProvider) {
     var debug, benchmark = true;
     var latencyInMilliSecs = 0;
 
+    var deserialize = _.isNil(window.ZJSONBIN) || window.ZJSONBIN.disabled ? noop : window.ZJSONBIN.deserialize;
+    function noop(r) {
+        return r;
+    }
+
     this.setDebug = function(value) {
         debug = value;
         $syncMappingProvider.setDebug(value);
@@ -775,7 +780,7 @@ function syncProvider($syncMappingProvider) {
             $socketio.on(
                 'SYNC_NOW',
                 function(serializedObj, fn) {
-                    const subNotification = _.isNil(window.ZJSONBIN) ? serializedObj : window.ZJSONBIN.deserialize(serializedObj);
+                    var subNotification = deserialize(serializedObj);
                     //   const subNotification = serializedObj[0] === 'B' ? jsonpack.unpack(serializedObj.substring(1)) : JSON.parse(serializedObj.substring(1));
                     // if (subNotification.diff && !subNotification.records.length) {
                     //     // this would happen only after a lost of network connection no data received

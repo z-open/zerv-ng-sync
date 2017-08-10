@@ -841,12 +841,12 @@ function syncProvider($syncMappingProvider) {
             function scheduleRelease() {
                 // detach must be called otherwise,  the subscription is planned for release.
                 if (innerScope === $rootScope) {
-                    isLogDebug && logDebug('Release not necessary of unattached ' + thisSub);
+                    isLogDebug && logDebug('Release not necessary (unattached): ' + thisSub);
                 } else {
                     isLogDebug && logDebug('Releasing subscription in ' + (releaseDelay / 1000) + 's: ' + thisSub);
                     releaseTimeout = setTimeout(function() {
                         if (releaseTimeout) {
-                            isLogInfo && logInfo('Released subscription (sync off): ' + thisSub);
+                            isLogInfo && logInfo('Subscription released: ' + thisSub);
                             thisSub.syncOff();
                             releaseTimeout = null;
                         }

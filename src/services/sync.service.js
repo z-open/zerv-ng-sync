@@ -26,7 +26,8 @@ angular
 function syncProvider($syncMappingProvider) {
     var totalSub = 0;
 
-    var debug, benchmark = true;
+    var benchmark = true, isLogDebug, isLogInfo;
+
     var latencyInMilliSecs = 0;
 
     var deserialize = _.isNil(window.ZJSONBIN) || window.ZJSONBIN.disabled ? noop : window.ZJSONBIN.deserialize;
@@ -35,7 +36,8 @@ function syncProvider($syncMappingProvider) {
     }
 
     this.setDebug = function(value) {
-        debug = value;
+        isLogInfo = value === 1;
+        isLogDebug = value === 2;
         $syncMappingProvider.setDebug(value);
     };
     this.setBenchmark = function(value) {
@@ -90,7 +92,7 @@ function syncProvider($syncMappingProvider) {
             var gracePeriod = setTimeout(function() {
                 if (!sDs.ready) {
                     sDs.destroy();
-                    logInfo('Attempt to subscribe to publication ' + publicationName + ' failed');
+                    isLogInfo && logInfo('Attempt to subscribe to publication ' + publicationName + ' failed');
                     deferred.reject('SYNC_TIMEOUT');
                 }
             }, GRACE_PERIOD_IN_SECONDS * 1000);
@@ -153,7 +155,7 @@ function syncProvider($syncMappingProvider) {
                     //     return $pq.resolve();
                     // }
 
-                    logInfo('Syncing with subscription [name:' + subNotification.name + ', id:' + subNotification.subscriptionId + ' , params:' + JSON.stringify(subNotification.params) + ']. Records:' + subNotification.records.length + '[' + (subNotification.diff ? 'Diff' : 'All') + ']');
+                    isLogInfo && logInfo('Syncing with subscription [name:' + subNotification.name + ', id:' + subNotification.subscriptionId + ' , params:' + JSON.stringify(subNotification.params) + ']. Records:' + subNotification.records.length + '[' + (subNotification.diff ? 'Diff' : 'All') + ']');
                     var listeners = publicationListeners[subNotification.name];
                     var processed = [];
                     if (listeners) {
@@ -303,13 +305,13 @@ function syncProvider($syncMappingProvider) {
                 }
                 destroyed = true;
                 if (thisSub.$parentSubscription) {
-                    logDebug('Destroying Sub Subscription(s) to ' + thisSub);
+                    isLogDebug && logDebug('Destroying Sub Subscription(s) to ' + thisSub);
                 } else {
-                    logDebug('Destroying Subscription to ' + thisSub);
+                    isLogDebug && logDebug('Destroying Subscription to ' + thisSub);
                 }
                 syncOff();
                 $syncMapping.destroyDependentSubscriptions(thisSub);
-                logDebug('Subscription to ' + thisSub + ' destroyed.');
+                isLogDebug && logDebug('Subscription to ' + thisSub + ' destroyed.');
             }
 
 
@@ -720,7 +722,7 @@ function syncProvider($syncMappingProvider) {
                     unregisterSubscription();
                     isSyncingOn = false;
 
-                    logInfo('Sync ' + publication + ' off. Params:' + JSON.stringify(subParams));
+                    isLogInfo && logInfo('Sync ' + publication + ' off. Params:' + JSON.stringify(subParams));
                     if (publicationListenerOff) {
                         publicationListenerOff();
                         publicationListenerOff = null;
@@ -761,7 +763,7 @@ function syncProvider($syncMappingProvider) {
                 deferredInitialization = $pq.defer();
                 initialStartTime = Date.now();
                 isInitialPushCompleted = false;
-                logInfo('Sync ' + publication + ' on. Params:' + JSON.stringify(subParams));
+                isLogInfo && logInfo('Sync ' + publication + ' on. Params:' + JSON.stringify(subParams));
                 isSyncingOn = true;
                 registerSubscription();
                 readyForListening();
@@ -784,9 +786,9 @@ function syncProvider($syncMappingProvider) {
                         function(batch) {
                             // Create a delay before processing publication data to simulate network latency
                             if (latencyInMilliSecs) {
-                                logInfo('Sync -> Processing delayed for ' + latencyInMilliSecs + ' ms.'); // 
+                                isLogInfo && logInfo('Sync -> Processing delayed for ' + latencyInMilliSecs + ' ms.'); // 
                                 setTimeout(function() {
-                                    logInfo('Sync -> Processing ' + publication + ' now.');
+                                    isLogInfo && logInfo('Sync -> Processing ' + publication + ' now.');
                                     processPublicationData(batch);
                                 }, latencyInMilliSecs);
                             } else {
@@ -817,12 +819,12 @@ function syncProvider($syncMappingProvider) {
             function scheduleRelease() {
                 // detach must be called otherwise,  the subscription is planned for release.
                 if (innerScope === $rootScope) {
-                    logInfo('Release not necessary of unattached ' + thisSub);
+                    isLogDebug && logDebug('Release not necessary of unattached ' + thisSub);
                 } else {
-                    logInfo('Releasing subscription in ' + (releasePeriod / 1000) + 's: ' + thisSub);
+                    isLogDebug && logDebug('Releasing subscription in ' + (releasePeriod / 1000) + 's: ' + thisSub);
                     released = setTimeout(function() {
                         if (released) {
-                            logInfo('Released subscription (sync off): ' + thisSub);
+                            isLogInfo && logInfo('Released subscription (sync off): ' + thisSub);
                             thisSub.syncOff();
                             released = null;
                         }
@@ -839,10 +841,10 @@ function syncProvider($syncMappingProvider) {
                 // if (innerScope === $rootScope) {
                 //     return;
                 // }
-                logInfo('Detach subscription(release): ' + thisSub);
+                isLogDebug && logDebug('Detach subscription(release): ' + thisSub);
                 // if sub was about to be released, keep it.
                 if (released) {
-                    logInfo('Cancel Release. Reuse subscription: ' + thisSub);
+                    isLogInfo && logInfo('Cancel Release. Reuse subscription: ' + thisSub);
                     clearTimeout(released);
                     released = null;
                 }
@@ -866,7 +868,7 @@ function syncProvider($syncMappingProvider) {
                 if (innerScope && innerScope !== $rootScope) {
                     throw new Error('Subscription is already attached to a different scope. Detach first: ' + thisSub);
                 }
-                logInfo('Attach subscription(release): ' + thisSub);
+                isLogDebug && logDebug('Attach subscription(release): ' + thisSub);
 
                 if (destroyOff) {
                     destroyOff();
@@ -874,7 +876,6 @@ function syncProvider($syncMappingProvider) {
                 innerScope = newScope;
                 destroyOff = innerScope.$on('$destroy', function() {
                     if (delayDestruction) {
-                        logInfo('Ondestroy release subscription: ' + thisSub);
                         scheduleRelease();
                     } else {
                         destroy();
@@ -891,7 +892,7 @@ function syncProvider($syncMappingProvider) {
                 // give a chance to connect before listening to reconnection... @TODO should have user_reconnected_event
                 setTimeout(function() {
                     reconnectOff = innerScope.$on('user_connected', function() {
-                        logDebug('Resyncing after network loss to ' + publication);
+                        isLogDebug && logDebug('Resyncing after network loss to ' + publication);
                         // note the backend might return a new subscription if the client took too much time to reconnect.
                         registerSubscription();
                     });
@@ -933,7 +934,7 @@ function syncProvider($syncMappingProvider) {
                     var applyPromise;
 
                     var startTime = Date.now();
-                    var size = benchmark && debug ? JSON.stringify(batch.records).length : null;
+                    var size = benchmark && isLogInfo ? JSON.stringify(batch.records).length : null;
 
                     if (!batch.diff && isDataCached()) {
                         // Clear the cache to rebuild it if all data was received.
@@ -949,10 +950,10 @@ function syncProvider($syncMappingProvider) {
                             if (!isInitialPushCompleted) {
                                 isInitialPushCompleted = true;
 
-                                if (benchmark && debug) {
+                                if (benchmark && isLogInfo) {
                                     var timeToReceive = Date.now() - initialStartTime;
                                     var timeToProcess = Date.now() - startTime;
-                                    logInfo('Initial sync total time for ' + publication + ': ' + (timeToReceive + timeToProcess) + 'ms - Data Received in: ' + timeToReceive + 'ms, applied in: ' + timeToProcess + 'ms - Estimated size: ' + formatSize(size) + ' - Records: ' + batch.records.length + ' - Avg size/time: ' + formatSize(size / (batch.records.length || 1)) + '/' + roundNumber(timeToProcess / (batch.records.length || 1), 2) + 'ms');
+                                    isLogInfo && logInfo('Initial sync total time for ' + publication + ': ' + (timeToReceive + timeToProcess) + 'ms - Data Received in: ' + timeToReceive + 'ms, applied in: ' + timeToProcess + 'ms - Estimated size: ' + formatSize(size) + ' - Records: ' + batch.records.length + ' - Avg size/time: ' + formatSize(size / (batch.records.length || 1)) + '/' + roundNumber(timeToProcess / (batch.records.length || 1), 2) + 'ms');
                                 }
 
                                 deferredInitialization.resolve(getData());
@@ -1062,7 +1063,7 @@ function syncProvider($syncMappingProvider) {
                             var newDataArray = [];
                             var promises = [];
                             records.forEach(function(record) {
-                                //                   logInfo('Datasync [' + dataStreamName + '] received:' +JSON.stringify(record));//+ JSON.stringify(record.id));
+                                //                   isInfo && logInfo('Datasync [' + dataStreamName + '] received:' +JSON.stringify(record));//+ JSON.stringify(record.id));
                                 if (record.remove) {
                                     promises.push(removeRecord(record, force));
                                 } else if (getRecordState(record)) {
@@ -1149,7 +1150,7 @@ function syncProvider($syncMappingProvider) {
 
 
             function addRecord(record, force) {
-                logDebug('Sync -> Inserted New record #' + JSON.stringify(record.id) + (force ? ' directly' : ' via sync') + ' for subscription to ' + thisSub); // JSON.stringify(record));
+                isLogDebug && logDebug('Sync -> Inserted New record #' + JSON.stringify(record.id) + (force ? ' directly' : ' via sync') + ' for subscription to ' + thisSub); // JSON.stringify(record));
                 getRevision(record); // just make sure we can get a revision before we handle this record
 
                 var obj = formatRecord ? formatRecord(record) : record;
@@ -1171,14 +1172,14 @@ function syncProvider($syncMappingProvider) {
                 // has Sync received a record whose version was originated locally?
                 var obj = isSingleObjectCache ? cache : previous;
                 if (isLocalChange(obj, record)) {
-                    logDebug('Sync -> Updated own record #' + JSON.stringify(record.id) + ' for subscription to ' + thisSub);
+                    isLogDebug && logDebug('Sync -> Updated own record #' + JSON.stringify(record.id) + ' for subscription to ' + thisSub);
                     _.assign(obj.timestamp, record.timestamp);
                     obj.revision = record.revision;
                     previous.revision = record.revision;
                     return $pq.resolve(obj);
                 }
 
-                logDebug('Sync -> Updated record #' + JSON.stringify(record.id) + (force ? ' directly' : ' via sync') + ' for subscription to ' + thisSub);
+                isLogDebug && logDebug('Sync -> Updated record #' + JSON.stringify(record.id) + (force ? ' directly' : ' via sync') + ' for subscription to ' + thisSub);
                 obj = formatRecord ? formatRecord(record) : record;
 
                 return mapAllDataToObject(obj, 'update').then(function() {
@@ -1193,7 +1194,7 @@ function syncProvider($syncMappingProvider) {
                 var previous = getRecordState(record);
 
                 if (force || !previous || getRevision(record) > getRevision(previous)) {
-                    logDebug('Sync -> Removed #' + JSON.stringify(record.id) + (force ? ' directly' : ' via sync') + ' for subscription to ' + thisSub);
+                    isLogDebug && logDebug('Sync -> Removed #' + JSON.stringify(record.id) + (force ? ' directly' : ' via sync') + ' for subscription to ' + thisSub);
                     // We could have for the same record consecutively fetching in this order:
                     // delete id:4, rev 10, then add id:4, rev 9.... by keeping track of what was deleted, we will not add the record since it was deleted with a most recent timestamp.
                     record.removed = true; // So we only flag as removed, later on the garbage collector will get rid of it.       
@@ -1214,7 +1215,7 @@ function syncProvider($syncMappingProvider) {
                 $syncGarbageCollector.dispose(function collect() {
                     var existingRecord = getRecordState(record);
                     if (existingRecord && record.revision >= existingRecord.revision) {
-                        // logDebug('Collect Now:' + JSON.stringify(record));
+                        // isDebug && logDebug('Collect Now:' + JSON.stringify(record));
                         delete recordStates[getIdValue(record.id)];
                     }
                 });
@@ -1346,13 +1347,13 @@ function syncProvider($syncMappingProvider) {
 
 
     function logInfo(msg) {
-        if (debug >= 1) {
+        if (isLogInfo) {
             console.debug('SYNC(info): ' + msg);
         }
     }
 
     function logDebug(msg) {
-        if (debug >= 2) {
+        if (isLogDebug) {
             console.debug('SYNC(debug): ' + msg);
         }
     }
@@ -1370,9 +1371,7 @@ function syncProvider($syncMappingProvider) {
     }
 
     function logError(msg, e) {
-        if (debug >= 0) {
             console.error('SYNC(error): ' + msg, e);
-        }
     }
 
     function getCurrentSubscriptionCount() {

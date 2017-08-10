@@ -661,7 +661,7 @@ angular
 function syncProvider($syncMappingProvider) {
     var totalSub = 0;
 
-    var benchmark = true, isLogDebug, isLogInfo;
+    var benchmark = true, isLogDebug, isLogInfo, defaultReleaseDelay =30;
 
     var latencyInMilliSecs = 0;
 
@@ -687,6 +687,15 @@ function syncProvider($syncMappingProvider) {
      */
     this.setLatency = function(seconds) {
         latencyInMilliSecs = seconds;
+    };
+
+    /**
+     * Delay before a released subscription stop syncing (see attach)
+     * 
+     *  @param <number> seconds
+     */
+    this.setReleaseDelay = function(seconds) {
+        defaultReleaseDelay = seconds*1000;
     };
 
     this.$get = ["$rootScope", "$pq", "$socketio", "$syncGarbageCollector", "$syncMapping", "sessionUser", function sync($rootScope, $pq, $socketio, $syncGarbageCollector, $syncMapping, sessionUser) {
@@ -783,14 +792,8 @@ function syncProvider($syncMappingProvider) {
                 'SYNC_NOW',
                 function(serializedObj, fn) {
                     var subNotification = deserialize(serializedObj);
-                    //   const subNotification = serializedObj[0] === 'B' ? jsonpack.unpack(serializedObj.substring(1)) : JSON.parse(serializedObj.substring(1));
-                    // if (subNotification.diff && !subNotification.records.length) {
-                    //     // this would happen only after a lost of network connection no data received
-                    //     fn('SYNCED'); // let know the backend the client was able to sync.
-                    //     return $pq.resolve();
-                    // }
 
-                    isLogInfo && logInfo('Syncing with subscription [name:' + subNotification.name + ', id:' + subNotification.subscriptionId + ' , params:' + JSON.stringify(subNotification.params) + ']. Records:' + subNotification.records.length + '[' + (subNotification.diff ? 'Diff' : 'All') + ']');
+                    isLogInfo && logInfo('Syncing with [' + subNotification.name + ', id:' + subNotification.subscriptionId + ' , params:' + JSON.stringify(subNotification.params) + ']. Records:' + subNotification.records.length + '[' + (subNotification.diff ? 'Diff' : 'All') + ']');
                     var listeners = publicationListeners[subNotification.name];
                     var processed = [];
                     if (listeners) {
@@ -865,6 +868,11 @@ function syncProvider($syncMappingProvider) {
             var innerScope; // = $rootScope.$new(true);
             var syncListener = new SyncListener();
 
+
+            var dependentSubscriptions = [];
+            var releaseDelay = defaultReleaseDelay;
+            var releaseTimeout = null;
+
             //  ----public----
             this.toString = toString;
             this.getPublication = getPublication;
@@ -902,6 +910,9 @@ function syncProvider($syncMappingProvider) {
             this.getObjectClass = getObjectClass;
 
             this.attach = attach;
+            this.detach = detach;
+            this.setDependentSubscriptions = setDependentSubscriptions;
+            this.setReleaseDelay = setReleaseDelay;
             this.destroy = destroy;
 
             this.isExistingStateFor = isExistingStateFor; // for testing purposes
@@ -1435,35 +1446,46 @@ function syncProvider($syncMappingProvider) {
                 }
             }
 
-            var dependentSubscriptions = [];
-            var releasePeriod = 15000;
-            var released = null;
-            this.detach = detach;
-            this.setDependentSubscriptions = setDependentSubscriptions;
-            this.setReleasePeriod = setReleasePeriod;
-
+            /**
+             * set which external subscription this subscription depends on.
+             * When this subscription is released, the other subscription will be released as well.
+             *  
+             * When a subscription is released, it remains in sync for a little while to promote reuse.
+             * 
+             * @param {Array} subscriptions 
+             */
             function setDependentSubscriptions(subs) {
                 dependentSubscriptions = subs;
                 return thisSub;
             }
 
-            function setReleasePeriod(t) {
-                releasePeriod = t * 1000;
+            /**
+             * set the number of seconds before a subscription stops syncing after it is release for destruction.
+             * This promotes re-use.
+             * 
+             * @param {int} t in seconds
+             */
+            function setReleaseDelay(t) {
+                releaseDelay = t * 1000;
             }
 
+            /**
+             * Schedule this subscription to stop syncing after a lap of time (releaseDelay)
+             * 
+             */
             function scheduleRelease() {
                 // detach must be called otherwise,  the subscription is planned for release.
                 if (innerScope === $rootScope) {
                     isLogDebug && logDebug('Release not necessary of unattached ' + thisSub);
                 } else {
-                    isLogDebug && logDebug('Releasing subscription in ' + (releasePeriod / 1000) + 's: ' + thisSub);
-                    released = setTimeout(function() {
-                        if (released) {
+                    isLogDebug && logDebug('Releasing subscription in ' + (releaseDelay / 1000) + 's: ' + thisSub);
+                    releaseTimeout = setTimeout(function() {
+                        if (releaseTimeout) {
                             isLogInfo && logInfo('Released subscription (sync off): ' + thisSub);
                             thisSub.syncOff();
-                            released = null;
+                            releaseTimeout = null;
                         }
-                    }, releasePeriod);
+                    }, releaseDelay);
                 }
             }
 
@@ -1478,10 +1500,10 @@ function syncProvider($syncMappingProvider) {
                 // }
                 isLogDebug && logDebug('Detach subscription(release): ' + thisSub);
                 // if sub was about to be released, keep it.
-                if (released) {
+                if (releaseTimeout) {
                     isLogInfo && logInfo('Cancel Release. Reuse subscription: ' + thisSub);
-                    clearTimeout(released);
-                    released = null;
+                    clearTimeout(releaseTimeout);
+                    releaseTimeout = null;
                 }
                 if (destroyOff) {
                     destroyOff();
@@ -1494,9 +1516,26 @@ function syncProvider($syncMappingProvider) {
 
             /**
              *  By default the rootscope is attached if no scope was provided. But it is possible to re-attach it to a different scope. if the subscription depends on a controller.
-             *
+             * When the scope is destroyed, the subscription will be destroyed or released for future reuse if option is selected (delayRelease)
+             *  a subscription that is attached to a scope cannot be reattached to another scope.
+             *  It must detach first.
+             * 
+             *  To allow a subscription to remain in memory for re-reuse:
+             * 
+             *  create a subscription in a service
+             *  create a view
+             *  detach and start the subscription in the resolve
+             *  attach it to the view controller scope with delayRelease
+             *  
+             *  create a different view that is not an inner view or parent view of the previous one
+             *  detach and start the subscription in the resolve
+             *  attach it to the view controller scope with delayRelease
+             *  
+             *  when the app goes to the different view, the subscription will be reused (will not re initialize if the params have not changed).
+             * 
+             *  
              */
-            function attach(newScope, delayDestruction) {
+            function attach(newScope, delayRelease) {
                 if (newScope === innerScope) {
                     return thisSub;
                 }
@@ -1510,7 +1549,7 @@ function syncProvider($syncMappingProvider) {
                 }
                 innerScope = newScope;
                 destroyOff = innerScope.$on('$destroy', function() {
-                    if (delayDestruction) {
+                    if (delayRelease) {
                         scheduleRelease();
                     } else {
                         destroy();
@@ -1518,7 +1557,7 @@ function syncProvider($syncMappingProvider) {
                 });
 
                 _.forEach(dependentSubscriptions, function(dsub) {
-                    dsub.attach(newScope, delayDestruction);
+                    dsub.attach(newScope, delayRelease);
                 });
                 return thisSub;
             }

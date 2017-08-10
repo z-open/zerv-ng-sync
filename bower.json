@@ -1,6 +1,6 @@
 {
   "name": "zerv-ng-sync",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "authors": [
     "Emmanuel Telmon <etelmon@zimit.io>"
   ],
@@ -30,11 +30,11 @@
   "dependencies": {
     "angular": "~1.5.0",
     "lodash": "^4.0.0",
-    "zerv-ng-core": "z-open/zerv-ng-core#^1.1.0",
-    "bluebird": "^3.5.0"
+    "zerv-ng-core": "z-open/zerv-ng-core#^1.1.0"
   },
   "devDependencies": {
-    "angular-mocks": "~1.5.0"
+    "angular-mocks": "~1.5.0",
+    "bluebird": "^3.5.0"
   },
   "main": [
     "dist/angular-sync.js"

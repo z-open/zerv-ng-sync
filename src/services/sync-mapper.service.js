@@ -24,10 +24,10 @@ angular
  *  
  */
 function syncMappingProvider() {
-    var debug;
+    var isDebug;
 
     this.setDebug = function(value) {
-        debug = value;
+        isDebug = value;
     };
 
     this.$get = function syncMapping($pq) {
@@ -181,7 +181,7 @@ function syncMappingProvider() {
          * 
          */
         function createPropertyMappers(subscription, obj) {
-            logDebug('Sync -> creating ' + subscription.$dependentSubscriptionDefinitions.length + ' property mapper(s) for record #' + JSON.stringify(obj.id) + ' of subscription ' + subscription);
+            isDebug && logDebug('Sync -> creating ' + subscription.$dependentSubscriptionDefinitions.length + ' property mapper(s) for record #' + JSON.stringify(obj.id) + ' of subscription ' + subscription);
 
             var propertyMappers = [];
             _.forEach(subscription.$dependentSubscriptionDefinitions,
@@ -215,7 +215,7 @@ function syncMappingProvider() {
         function removePropertyMappers(subscription, obj) {
             var objDs = _.find(subscription.$datasources, {objId: obj.id});
             if (objDs && objDs.propertyMappers.length !== 0) {
-                logDebug('Sync -> Removing property mappers for record #' + obj.id + ' of subscription to ' + subscription);
+                isDebug && logDebug('Sync -> Removing property mappers for record #' + obj.id + ' of subscription to ' + subscription);
                 _.forEach(objDs.propertyMappers, function(sub) {
                     sub.destroy();
                 });
@@ -321,7 +321,7 @@ function syncMappingProvider() {
             function mapFn(dependentSubObject, operation) {
                 var objectToBeMapped = subscription.getData(obj.id);
                 if (objectToBeMapped) {
-                    logDebug('Sync -> mapping data [' + operation + '] of dependent sub [' + dependentSubDef.publication + '] to record of sub [' + subscription + ']');
+                    isDebug && logDebug('Sync -> mapping data [' + operation + '] of dependent sub [' + dependentSubDef.publication + '] to record of sub [' + subscription + ']');
                     // need to remove 3rd params...!!!
                     this.definition.mapFn(dependentSubObject, objectToBeMapped, dependentSubObject.removed, operation);
                 }
@@ -444,7 +444,7 @@ function syncMappingProvider() {
             while (mainSub.$parentSubscription) {
                 mainSub = mainSub.$parentSubscription;
             }
-            logDebug('Sync -> Notifying main subscription ' + mainSub.getPublication() + ' that its dependent subscription ' + dependentSubscription.getPublication() + ' was updated.');
+            isDebug && logDebug('Sync -> Notifying main subscription ' + mainSub.getPublication() + ' that its dependent subscription ' + dependentSubscription.getPublication() + ' was updated.');
             mainSub.$notifyUpdateWithinDependentSubscription(mainObjectId);
         }
 
@@ -459,7 +459,7 @@ function syncMappingProvider() {
     };
 
     function logDebug(msg) {
-        if (debug >= 2) {
+        if (isDebug) {
             console.debug('SYNCMAP(debug): ' + msg);
         }
     }

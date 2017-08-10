@@ -798,22 +798,92 @@ function syncProvider($syncMappingProvider) {
                 }
             }
 
+            var dependentSubscriptions = [];
+            var releasePeriod = 15000;
+            var released = null;
+            this.detach = detach;
+            this.setDependentSubscriptions = setDependentSubscriptions;
+            this.setReleasePeriod = setReleasePeriod;
+
+            function setDependentSubscriptions(subs) {
+                dependentSubscriptions = subs;
+                return thisSub;
+            }
+
+            function setReleasePeriod(t) {
+                releasePeriod = t * 1000;
+            }
+
+            function scheduleRelease() {
+                // detach must be called otherwise,  the subscription is planned for release.
+                if (innerScope === $rootScope) {
+                    logInfo('Release not necessary of unattached ' + thisSub);
+                } else {
+                    logInfo('Releasing subscription in ' + (releasePeriod / 1000) + 's: ' + thisSub);
+                    released = setTimeout(function() {
+                        if (released) {
+                            logInfo('Released subscription (sync off): ' + thisSub);
+                            thisSub.syncOff();
+                            released = null;
+                        }
+                    }, releasePeriod);
+                }
+            }
+
+            /**
+             * Detach a subscription will give the ability to reuse an active subscription without stopping syncing.
+             * It is useful mainly if the subscription is used on a new scope with similar params (there is no need to resync/refetch data.)
+             * 
+             */
+            function detach() {
+                // if (innerScope === $rootScope) {
+                //     return;
+                // }
+                logInfo('Detach subscription(release): ' + thisSub);
+                // if sub was about to be released, keep it.
+                if (released) {
+                    logInfo('Cancel Release. Reuse subscription: ' + thisSub);
+                    clearTimeout(released);
+                    released = null;
+                }
+                if (destroyOff) {
+                    destroyOff();
+                }
+                innerScope = $rootScope;
+                _.forEach(dependentSubscriptions, function(dsub) {
+                    dsub.detach();
+                });
+            }
+
             /**
              *  By default the rootscope is attached if no scope was provided. But it is possible to re-attach it to a different scope. if the subscription depends on a controller.
              *
              */
-            function attach(newScope) {
+            function attach(newScope, delayDestruction) {
                 if (newScope === innerScope) {
                     return thisSub;
                 }
+                if (innerScope && innerScope !== $rootScope) {
+                    throw new Error('Subscription is already attached to a different scope. Detach first: ' + thisSub);
+                }
+                logInfo('Attach subscription(release): ' + thisSub);
+
                 if (destroyOff) {
                     destroyOff();
                 }
                 innerScope = newScope;
                 destroyOff = innerScope.$on('$destroy', function() {
-                    destroy();
+                    if (delayDestruction) {
+                        logInfo('Ondestroy release subscription: ' + thisSub);
+                        scheduleRelease();
+                    } else {
+                        destroy();
+                    }
                 });
 
+                _.forEach(dependentSubscriptions, function(dsub) {
+                    dsub.attach(newScope, delayDestruction);
+                });
                 return thisSub;
             }
 

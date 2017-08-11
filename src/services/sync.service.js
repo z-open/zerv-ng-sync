@@ -38,7 +38,7 @@ function syncProvider($syncMappingProvider) {
     this.setDebug = function(value) {
         isLogInfo = value === 1;
         isLogDebug = value === 2;
-        $syncMappingProvider.setDebug(value);
+        $syncMappingProvider.setDebug(isLogDebug);
     };
     this.setBenchmark = function(value) {
         benchmark = value;
@@ -220,7 +220,7 @@ function syncProvider($syncMappingProvider) {
         function Subscription(publication, scope) {
             var isSyncingOn = false, destroyed,
                 isSingleObjectCache, updateDataStorage, cache, isInitialPushCompleted, initialStartTime, deferredInitialization;
-            var onReadyOff, formatRecord;
+            var onReadyOff, onUpdateOff, formatRecord;
             var reconnectOff, publicationListenerOff, destroyOff;
             var ObjectClass;
             var subscriptionId;
@@ -246,6 +246,7 @@ function syncProvider($syncMappingProvider) {
             this.syncOn = syncOn;
             this.syncOff = syncOff;
             this.setOnReady = setOnReady;
+            this.setOnUpdate = setOnUpdate;
 
             this.resync = resync;
 
@@ -335,7 +336,22 @@ function syncProvider($syncMappingProvider) {
                 if (onReadyOff) {
                     onReadyOff();
                 }
-                onReadyOff = onReady(callback);
+                // this onReady is not attached to any scope and will only be gone when the sub is destroyed
+                onReadyOff = syncListener.on('ready', callback, null);
+                return thisSub;
+            }
+
+            /** this will be called when data is available 
+             *  it means right after each sync!
+             * 
+             * 
+             */
+            function setOnUpdate(callback) {
+                if (onUpdateOff) {
+                    onUpdateOff();
+                }
+                // this onUpdateOff is not attached to any scope and will only be gone when the sub is destroyed
+                onUpdateOff = syncListener.on('update', callback, null);
                 return thisSub;
             }
 
@@ -913,7 +929,10 @@ function syncProvider($syncMappingProvider) {
                     destroyOff();
                 }
                 innerScope = newScope;
+                const destroyScope = innerScope; // memorize scope as it is used during destroy
+
                 destroyOff = innerScope.$on('$destroy', function() {
+                    syncListener.dropListeners(destroyScope);
                     if (delayRelease) {
                         scheduleRelease();
                     } else {
@@ -1159,35 +1178,54 @@ function syncProvider($syncMappingProvider) {
              * 
              * returns a function to remove the listener.
              */
-            function onAdd(callback) {
-                return syncListener.on('add', callback);
+            function onAdd(callback, scope) {
+                return syncListener.on('add', callback, scope || innerScope);
             }
 
             /**
+             * Listen to event and run callback
              * 
-             * returns a function to remove the listener.
+             * @param {function} to call on event
+             * @param {Object} angular scope (by default the current attached subscription scope)
+             * 
+             * @returns {function} to remove the listener. Anyway, the listener will be destroyed when scope is destroyed.
              */
-            function onUpdate(callback) {
-                return syncListener.on('update', callback);
+            function onUpdate(callback, scope) {
+                return syncListener.on('update', callback, scope || innerScope);
             }
+
+             /**
+             * Listen to event and run callback
+             * 
+             * @param {function} to call on event
+             * @param {Object} angular scope (by default the current attached subscription scope)
+             * 
+             * @returns {function} to remove the listener. Anyway, the listener will be destroyed when scope is destroyed.
+             */
+            function onRemove(callback, scope) {
+                return syncListener.on('remove', callback, scope || innerScope);
+            }
+
+             /**
+             * Listen to event and run callback
+             * 
+             * @param {function} to call on event
+             * @param {Object} angular scope (by default the current attached subscription scope)
+             * 
+             * @returns {function} to remove the listener. Anyway, the listener will be destroyed when scope is destroyed.
+             */
+            function onReady(callback, scope) {
+                return syncListener.on('ready', callback, scope || innerScope);
+            }
+
 
             /**
+             * Add record to the subscription data
              * 
-             * returns a function to remove the listener.
-             */
-            function onRemove(callback) {
-                return syncListener.on('remove', callback);
-            }
-
-            /**
              * 
-             * returns a function to remove the listener.
+             * @param {Object} record 
+             * @param {boolean} force (let us know if the addition was done by sync, or forcing record manually)
              */
-            function onReady(callback) {
-                return syncListener.on('ready', callback);
-            }
-
-
             function addRecord(record, force) {
                 isLogDebug && logDebug('Sync -> Inserted New record #' + JSON.stringify(record.id) + (force ? ' directly' : ' via sync') + ' for subscription to ' + thisSub); // JSON.stringify(record));
                 getRevision(record); // just make sure we can get a revision before we handle this record
@@ -1202,6 +1240,13 @@ function syncProvider($syncMappingProvider) {
             }
 
 
+            /**
+             * Update record in the subscription data
+             * 
+             * 
+             * @param {Object} record 
+             * @param {boolean} force in the udate to replace any revision in the subscription data 
+             */
             function updateRecord(record, force) {
                 var previous = getRecordState(record);
                 if (!force & getRevision(record) <= getRevision(previous)) {
@@ -1228,7 +1273,13 @@ function syncProvider($syncMappingProvider) {
                 });
             }
 
-
+            /**
+             * Add record to the subscription data
+             * 
+             * 
+             * @param {Object} record 
+             * @param {boolean} force (let us know if the removal was done by sync, or forcing record manually)
+             */
             function removeRecord(record, force) {
                 var previous = getRecordState(record);
 
@@ -1346,12 +1397,23 @@ function syncProvider($syncMappingProvider) {
 
             this.notify = notify;
             this.on = on;
+            this.dropListeners = dropListeners;
+
+            function dropListeners(scope) {
+                _.forEach(events, function(listeners) {
+                    _.forEach(listeners, function(listener, id) {
+                        if (listener.scope===scope) {
+                            delete listeners[id];
+                        }
+                    });
+                });
+            }
 
             function notify(event, data1, data2) {
                 var listeners = events[event];
                 if (listeners) {
-                    _.forEach(listeners, function(callback, id) {
-                        callback(data1, data2);
+                    _.forEach(listeners, function(listener, id) {
+                        listener.notify(data1, data2);
                     });
                 }
             }
@@ -1359,15 +1421,18 @@ function syncProvider($syncMappingProvider) {
             /**
              * @returns handler to unregister listener
              */
-            function on(event, callback) {
+            function on(event, callback, scope) {
                 var listeners = events[event];
                 if (!listeners) {
                     listeners = events[event] = {};
                 }
                 var id = count++;
-                listeners[id] = callback;
+                listeners[id] = {
+                    notify: callback,
+                    scope: scope,
+                };
                 return function() {
-                    delete listeners[id];
+                        delete listeners[id];
                 };
             }
         }

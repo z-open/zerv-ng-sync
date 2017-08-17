@@ -26,7 +26,7 @@ angular
 function syncProvider($syncMappingProvider) {
     var totalSub = 0;
 
-    var benchmark = true, isLogDebug, isLogInfo, defaultReleaseDelay =30;
+    var benchmark = true, isLogDebug, isLogInfo, defaultReleaseDelay = 30, defaultInitializationTimeout = 10;
 
     var latencyInMilliSecs = 0;
 
@@ -39,9 +39,11 @@ function syncProvider($syncMappingProvider) {
         isLogInfo = value === 1;
         isLogDebug = value === 2;
         $syncMappingProvider.setDebug(isLogDebug);
+        return this;
     };
     this.setBenchmark = function(value) {
         benchmark = value;
+        return this;
     };
 
     /**
@@ -52,6 +54,7 @@ function syncProvider($syncMappingProvider) {
      */
     this.setLatency = function(seconds) {
         latencyInMilliSecs = seconds;
+        return this;
     };
 
     /**
@@ -61,6 +64,12 @@ function syncProvider($syncMappingProvider) {
      */
     this.setReleaseDelay = function(seconds) {
         defaultReleaseDelay = seconds*1000;
+        return this;
+    };
+
+    this.setInitializationTimeout = function(seconds) {
+        defaultInitializationTimeout = seconds*1000;
+        return this;
     };
 
     this.$get = function sync($rootScope, $pq, $socketio, $syncGarbageCollector, $syncMapping, sessionUser) {
@@ -236,6 +245,8 @@ function syncProvider($syncMappingProvider) {
 
             var dependentSubscriptions = [];
             var releaseDelay = defaultReleaseDelay;
+            var initializationTimeout = defaultInitializationTimeout;
+
             var releaseTimeout = null;
 
             //  ----public----
@@ -279,6 +290,7 @@ function syncProvider($syncMappingProvider) {
             this.detach = detach;
             this.setDependentSubscriptions = setDependentSubscriptions;
             this.setReleaseDelay = setReleaseDelay;
+            this.setInitializationTimeout = setInitializationTimeout;
             this.destroy = destroy;
 
             this.isExistingStateFor = isExistingStateFor; // for testing purposes
@@ -794,11 +806,32 @@ function syncProvider($syncMappingProvider) {
                 isSyncingOn = true;
                 registerSubscription();
                 readyForListening();
+                setTimeoutOnInitialization();
+
                 return deferredInitialization.promise;
             }
 
             function isSyncing() {
                 return isSyncingOn;
+            }
+
+            function setTimeoutOnInitialization() {
+                if (!initializationTimeout) {
+                    return;
+                }
+                var initializationPromise = deferredInitialization;
+                var completed = false;
+                setTimeout(function() {
+                    if (!completed && deferredInitialization === initializationPromise) {
+                        logError('Failed to load data within '+(initializationTimeout/1000)+'s for '+ thisSub);
+                        initializationPromise.reject('sync timeout');
+                        // give up syncing.
+                        thisSub.syncOff();
+                    }
+                }, initializationTimeout);
+                initializationPromise.promise.then(function() {
+                    completed=true;
+                });
             }
 
             function readyForListening() {
@@ -850,6 +883,11 @@ function syncProvider($syncMappingProvider) {
                 releaseDelay = t * 1000;
             }
 
+            function setInitializationTimeout(t) {
+                initializationTimeout = t * 1000;
+            }
+
+
             /**
              * Schedule this subscription to stop syncing after a lap of time (releaseDelay)
              * 
@@ -866,7 +904,7 @@ function syncProvider($syncMappingProvider) {
                             thisSub.syncOff();
                             releaseTimeout = null;
                         }
-                    }, releaseDelay);
+                    }, Math.max(releaseDelay, initializationTimeout)+500); // to make sure that a release does not happen during initialization
                 }
             }
 
@@ -876,13 +914,10 @@ function syncProvider($syncMappingProvider) {
              * 
              */
             function detach() {
-                // if (innerScope === $rootScope) {
-                //     return;
-                // }
                 isLogDebug && logDebug('Detach subscription(release): ' + thisSub);
                 // if sub was about to be released, keep it.
                 if (releaseTimeout) {
-                    isLogInfo && logInfo('Cancel Release. Reuse subscription: ' + thisSub);
+                    isLogInfo && logInfo('Re-use before release: ' + thisSub);
                     clearTimeout(releaseTimeout);
                     releaseTimeout = null;
                 }
@@ -917,19 +952,22 @@ function syncProvider($syncMappingProvider) {
              *  
              */
             function attach(newScope, delayRelease) {
+                detach();
+
                 if (newScope === innerScope) {
                     return thisSub;
                 }
-                if (innerScope && innerScope !== $rootScope) {
-                    throw new Error('Subscription is already attached to a different scope. Detach first: ' + thisSub);
-                }
-                isLogDebug && logDebug('Attach subscription(release): ' + thisSub);
+                // if (innerScope && innerScope !== $rootScope) {
+                //     // this will never happen due to detach above.
+                //     throw new Error('Subscription is already attached to a different scope. Detach first: ' + thisSub);
+                // }
+                isLogDebug && logDebug('Attach subscription: ' + thisSub);
 
                 if (destroyOff) {
                     destroyOff();
                 }
                 innerScope = newScope;
-                const destroyScope = innerScope; // memorize scope as it is used during destroy
+                var destroyScope = innerScope; // memorize scope as it is used during destroy
 
                 destroyOff = innerScope.$on('$destroy', function() {
                     syncListener.dropListeners(destroyScope);

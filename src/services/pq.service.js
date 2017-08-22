@@ -25,7 +25,7 @@ angular
 
 function pgProvider() {
     var bluebird;
-    this.useBluebird = function () {
+    this.useBluebird = function() {
         bluebird = true;
     };
 
@@ -35,34 +35,34 @@ function pgProvider() {
         }
         console.log('Bluebird');
         return {
-            defer: function () {
+            defer: function() {
                 var pResolve, pReject;
-                var p = new Promise(function (resolve, reject) {
+                var p = new Promise(function(resolve, reject) {
                     pResolve = resolve;
                     pReject = reject;
                 });
                 return {
-                    resolve: function (data) {
+                    resolve: function(data) {
                         return pResolve(data);
                     },
-                    reject: function (data) {
+                    reject: function(data) {
                         return pReject(data);
                     },
-                    promise: p
+                    promise: p,
                 };
             },
 
-            resolve: function (data) {
+            resolve: function(data) {
                 return Promise.resolve(data);
             },
 
-            reject: function (data) {
+            reject: function(data) {
                 return Promise.reject(data);
             },
 
-            all: function (promises) {
+            all: function(promises) {
                 return Promise.all(promises);
-            }
+            },
         };
     };
 }

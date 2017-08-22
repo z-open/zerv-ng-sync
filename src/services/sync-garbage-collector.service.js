@@ -21,12 +21,12 @@ function syncGarbageCollector() {
         dispose: dispose,
         schedule: schedule,
         run: run,
-        getItemCount: getItemCount
+        getItemCount: getItemCount,
     };
 
     return service;
 
-    //////////
+    // ////////
 
     function setSeconds(value) {
         seconds = value;
@@ -43,7 +43,7 @@ function syncGarbageCollector() {
     function dispose(collect) {
         items.push({
             timestamp: Date.now(),
-            collect: collect
+            collect: collect,
         });
         if (!scheduled) {
             service.schedule();
@@ -56,7 +56,7 @@ function syncGarbageCollector() {
             return;
         }
         scheduled = true;
-        setTimeout(function () {
+        setTimeout(function() {
             service.run();
             if (items.length > 0) {
                 schedule();

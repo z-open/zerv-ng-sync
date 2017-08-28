@@ -78,10 +78,11 @@ function syncMappingProvider() {
                 paramsFn: getParamsFn(paramsFn),
                 mapFn: mapFn,
                 single: true,
-                objectClass: options.objectClass,
+                objectClass: options.objectClass || Object,
                 mappings: options.mappings,
                 notifyReady: options.notifyReady,
             });
+            return subscription;
         }
 
         /**
@@ -97,7 +98,7 @@ function syncMappingProvider() {
                 paramsFn: getParamsFn(paramsFn),
                 mapFn: mapFn,
                 single: false,
-                objectClass: options.objectClass,
+                objectClass: options.objectClass || Object,
                 mappings: options.mappings,
                 notifyReady: options.notifyReady,
 

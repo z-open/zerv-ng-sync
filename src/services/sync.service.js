@@ -63,12 +63,12 @@ function syncProvider($syncMappingProvider) {
      *  @param <number> seconds
      */
     this.setReleaseDelay = function(seconds) {
-        defaultReleaseDelay = seconds*1000;
+        defaultReleaseDelay = seconds * 1000;
         return this;
     };
 
     this.setInitializationTimeout = function(seconds) {
-        defaultInitializationTimeout = seconds*1000;
+        defaultInitializationTimeout = seconds * 1000;
         return this;
     };
 
@@ -233,7 +233,7 @@ function syncProvider($syncMappingProvider) {
             var reconnectOff, publicationListenerOff, destroyOff;
             var ObjectClass;
             var subscriptionId;
-            var mapDataFn;
+            var mapDataFn, mapPropertyFns = [];
 
             var thisSub = this;
             thisSub.$dependentSubscriptionDefinitions = [];
@@ -297,8 +297,11 @@ function syncProvider($syncMappingProvider) {
 
             this.map = map;
             this.mapData = mapData;
+            this.mapProperty = mapProperty;
             this.mapObjectDs = mapObjectDs;
             this.mapArrayDs = mapArrayDs;
+
+            this.refreshMapping = refreshMapping;
 
             this.$notifyUpdateWithinDependentSubscription = $notifyUpdateWithinDependentSubscription;
             this.$createDependentSubscription = $createDependentSubscription;
@@ -398,8 +401,12 @@ function syncProvider($syncMappingProvider) {
              * @param classValue
              */
             function setObjectClass(classValue) {
-                if (!classValue || deferredInitialization) {
+                if (deferredInitialization) {
                     return thisSub;
+                }
+
+                if (!classValue) {
+                    throw new Error('Object class cannot be null for subscription to ' + publication);
                 }
 
                 ObjectClass = classValue;
@@ -478,15 +485,87 @@ function syncProvider($syncMappingProvider) {
             /**
              * provide a function that will map some data/lookup to the provided object
              * 
+             * This mapping is executed after all other mappings have completed. So the object has his properties mapped.
+             * 
+             * 
              * ex fn = function(obj) {
              *      obj.city = someCacheLookup(obj.cityId)
              * }
              * 
              */
-            function mapData(fn) {
-                mapDataFn = fn;
+            function mapData(mapFn) {
+                if (mapDataFn) {
+                    throw new Error('mapData has already been provided and can only be defined once.');
+                }
+                mapDataFn = mapFn;
                 return thisSub;
             }
+
+            /**
+             * provide the property that will be mapped to the object fetched.
+             * 
+             * sub.mapObject('city',fetchCity,'cityId')
+             * when subscription receives data (obj), it will run fetchCity(obj.cityId) which would save the object in obj.city when it resolves
+             * @param {String} propertyName is the property that will received the fetched value
+             * @param {Function} fetchFn might return a promise resolving with a value or the value directly, 
+             *                      if fetchFn is a datasource, it will be set with the idProperty during mapping (only works if this subscription is single)
+             * @param {String} idProperty is the property that hold the id used to run fetchFn
+             */
+            function mapProperty(propertyName, fetchFn, idProperty) {
+                if (_.isNil(propertyName) || _.isNil(idProperty)) {
+                    throw new Error('Invalid mapping to property ' + propertyName + ' in subscription to ' + publication);
+                }
+                if (_.isNil(fetchFn)) {
+                    throw new Error('Invalid fetch function in mapping to property ' + propertyName + ' in subscription to ' + publication);
+                }
+                if (fetchFn instanceof Subscription) {
+                    mapExternalSubscriptionToProperty(propertyName, fetchFn, idProperty);
+                } else {
+                    mapPromisedDataToProperty(propertyName, fetchFn, idProperty);
+                }
+                return thisSub;
+            }
+
+            function mapExternalSubscriptionToProperty(propertyName, fetchFn, idProperty) {
+                dependentSubscriptions.push(fetchFn);
+                mapPropertyFns.push(function(obj) {
+                    if (typeof obj[idProperty] === 'undefined') {
+                        throw new Error('Undefined property ' + idProperty + ' of data received from subscription to ' + publication);
+                    }
+                    var fetchParams = {};
+                    fetchParams.id = obj[idProperty];
+                    return fetchFn
+                        .setParameters(fetchParams)
+                        .waitForDataReady()
+                        .then(function(object) {
+                            obj[propertyName] = object;
+                        });
+                });
+            }
+
+            function mapPromisedDataToProperty(propertyName, fetchFn, idProperty) {
+                mapPropertyFns.push(function(obj) {
+                    if (typeof obj[idProperty] === 'undefined') {
+                        console.log(obj);
+                        throw new Error('Undefined property ' + idProperty + ' of data received from subscription to ' + publication);
+                    }
+                    var result = fetchFn(obj[idProperty]);
+                    if (result && result.then) {
+                        return result.then(function(value) {
+                            obj[propertyName] = value;
+                        });
+                    }
+                    return result;
+                });
+            }
+
+            // function mapPropertyDs(propertyName, externalDs, idProperty) {
+            //     dependentSubscriptions.push(externalDs);
+            //     var onReadyOff = externalDs.onReady(function() {
+            //         dependentSub.invalid = true; // means the external sub data has changed, making this subscription obj potentially mapped to wrong data
+            //     });
+            // }
+
 
             /** 
              *  this function allows to add to the subscription multiple mapping strategies at the same time
@@ -548,7 +627,16 @@ function syncProvider($syncMappingProvider) {
                     }
                 }
             }
-
+            /**
+             * This refreshes the mapping of an object
+             * @param {Object} obj 
+             */
+            function refreshMapping(obj) {
+                if (obj.removed) {
+                    return obj;
+                }
+                return mapAllDataToObject(obj);
+            }
 
             /**
              * map static data or subscription based data to the provided object
@@ -586,16 +674,38 @@ function syncProvider($syncMappingProvider) {
              * 
              */
             function mapDataToOject(obj, operation) {
-                if (mapDataFn) {
-                    var result = mapDataFn(obj, operation);
-                    if (result && result.then) {
-                        return result
-                            .then(function() {
-                                return obj;
-                            });
-                    }
-                }
-                return $pq.resolve(obj);
+                return $pq
+                    .all(_.map(mapPropertyFns, function(mapPropertyFn) {
+                        var result = mapPropertyFn(obj, operation);
+                        if (result && result.then) {
+                            return result
+                                .then(function() {
+                                    return obj;
+                                });
+                        }
+                    }))
+                    .then(function() {
+                        if (mapDataFn) {
+                            var result = mapDataFn(obj, operation);
+                            if (result && result.then) {
+                                return result
+                                    .then(function() {
+                                        return obj;
+                                    });
+                            }
+                            return obj;
+                        }
+                    });
+                // if (mapDataFn) {
+                //     var result = mapDataFn(obj, operation);
+                //     if (result && result.then) {
+                //         return result
+                //             .then(function() {
+                //                 return obj;
+                //             });
+                //     }
+                // }
+                // return $pq.resolve(obj);
             }
 
 
@@ -796,7 +906,23 @@ function syncProvider($syncMappingProvider) {
              * @returns a promise that will be resolved when the data is ready.
              */
             function startSyncing() {
+                if (dependentSubscriptions.length && !isSingle()) {
+                    throw new Error('Mapping to an external datasource can only be used when subscribing to a single object.');
+                }
+
                 if (isSyncingOn) {
+                    // Temporary fix to for remapping
+                    // ------------------------------
+                    // if a mapping is against an existing subscription, and the existing subscription params were changed externally, no by the mapping
+                    // the synced object would have mapped incorrectly, this force the re-mapping.
+                    // when the function setParams, waitForDataReady, syncOn are called
+                    // better solution would be that the external subscription let know this subscription that is params has been modified, then only we would refresh
+                    // the mapping.
+                    if (dependentSubscriptions.length) {
+                        deferredInitialization.promise.then(function(data) {
+                            refreshMapping(getData());
+                        });
+                    }
                     return deferredInitialization.promise;
                 }
                 deferredInitialization = $pq.defer();
@@ -823,14 +949,14 @@ function syncProvider($syncMappingProvider) {
                 var completed = false;
                 setTimeout(function() {
                     if (!completed && deferredInitialization === initializationPromise) {
-                        logError('Failed to load data within '+(initializationTimeout/1000)+'s for '+ thisSub);
+                        logError('Failed to load data within ' + (initializationTimeout / 1000) + 's for ' + thisSub);
                         initializationPromise.reject('sync timeout');
                         // give up syncing.
                         thisSub.syncOff();
                     }
                 }, initializationTimeout);
                 initializationPromise.promise.then(function() {
-                    completed=true;
+                    completed = true;
                 });
             }
 
@@ -904,7 +1030,7 @@ function syncProvider($syncMappingProvider) {
                             thisSub.syncOff();
                             releaseTimeout = null;
                         }
-                    }, Math.max(releaseDelay, initializationTimeout)+500); // to make sure that a release does not happen during initialization
+                    }, Math.max(releaseDelay, initializationTimeout) + 500); // to make sure that a release does not happen during initialization
                 }
             }
 
@@ -1232,26 +1358,26 @@ function syncProvider($syncMappingProvider) {
                 return syncListener.on('update', callback, scope || innerScope);
             }
 
-             /**
-             * Listen to event and run callback
-             * 
-             * @param {function} to call on event
-             * @param {Object} angular scope (by default the current attached subscription scope)
-             * 
-             * @returns {function} to remove the listener. Anyway, the listener will be destroyed when scope is destroyed.
-             */
+            /**
+            * Listen to event and run callback
+            * 
+            * @param {function} to call on event
+            * @param {Object} angular scope (by default the current attached subscription scope)
+            * 
+            * @returns {function} to remove the listener. Anyway, the listener will be destroyed when scope is destroyed.
+            */
             function onRemove(callback, scope) {
                 return syncListener.on('remove', callback, scope || innerScope);
             }
 
-             /**
-             * Listen to event and run callback
-             * 
-             * @param {function} to call on event
-             * @param {Object} angular scope (by default the current attached subscription scope)
-             * 
-             * @returns {function} to remove the listener. Anyway, the listener will be destroyed when scope is destroyed.
-             */
+            /**
+            * Listen to event and run callback
+            * 
+            * @param {function} to call on event
+            * @param {Object} angular scope (by default the current attached subscription scope)
+            * 
+            * @returns {function} to remove the listener. Anyway, the listener will be destroyed when scope is destroyed.
+            */
             function onReady(callback, scope) {
                 return syncListener.on('ready', callback, scope || innerScope);
             }
@@ -1440,7 +1566,7 @@ function syncProvider($syncMappingProvider) {
             function dropListeners(scope) {
                 _.forEach(events, function(listeners) {
                     _.forEach(listeners, function(listener, id) {
-                        if (listener.scope===scope) {
+                        if (listener.scope === scope) {
                             delete listeners[id];
                         }
                     });
@@ -1470,7 +1596,7 @@ function syncProvider($syncMappingProvider) {
                     scope: scope,
                 };
                 return function() {
-                        delete listeners[id];
+                    delete listeners[id];
                 };
             }
         }
@@ -1513,7 +1639,7 @@ function syncProvider($syncMappingProvider) {
     }
 
     function logError(msg, e) {
-            console.error('SYNC(error): ' + msg, e);
+        console.error('SYNC(error): ' + msg, e);
     }
 
     function getCurrentSubscriptionCount() {

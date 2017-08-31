@@ -342,28 +342,29 @@ function syncProvider($syncMappingProvider) {
             }
 
 
-            /** this will be called when data is available 
+            /** 
+             *  this will be called when data is available 
              *  it means right after each sync!
              * 
-             * 
+             *  @param {Function} callback receiving an array with all records of the cache if the subscription is to an array, otherwise the single object if the subscription is to a single object.
              */
             function setOnReady(callback) {
                 if (onReadyOff) {
-                    onReadyOff();
+                    throw new Error('setOnReady is already set in subscription to ' + publication+ '. It cannot be resetted to prevent bad practice leading to potential memory leak . Consider using setOnReady when subscription is instantiated. Alternative is using onReady to set the callback but do not forget to remove the listener when no longer needed (usually at scope destruction).');
                 }
                 // this onReady is not attached to any scope and will only be gone when the sub is destroyed
                 onReadyOff = syncListener.on('ready', callback, null);
                 return thisSub;
             }
 
-            /** this will be called when data is available 
-             *  it means right after each sync!
-             * 
-             * 
+            /** 
+             *  this will be called when a record is updated
+             *  @param {Function} callback receiving with updated record.
+             *           
              */
             function setOnUpdate(callback) {
                 if (onUpdateOff) {
-                    onUpdateOff();
+                    throw new Error('setOnUpdate is already set in subscription to ' + publication+ '. It cannot be resetted to prevent bad practice leading to potential memory leak . Consider using setOnUpdate when subscription is instantiated. Alternative is using onUpdate to set the callback but do not forget to remove the listener when no longer needed (usually at scope destruction).');
                 }
                 // this onUpdateOff is not attached to any scope and will only be gone when the sub is destroyed
                 onUpdateOff = syncListener.on('update', callback, null);

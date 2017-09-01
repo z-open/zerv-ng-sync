@@ -227,8 +227,8 @@ function syncProvider($syncMappingProvider) {
          */
 
         function Subscription(publication, scope) {
-            var isSyncingOn = false, destroyed,
-                isSingleObjectCache, updateDataStorage, cache, isInitialPushCompleted, initialStartTime, deferredInitialization;
+            var isSyncingOn = false;
+            var destroyed, isSingleObjectCache, updateDataStorage, cache, orderByFn, isInitialPushCompleted, initialStartTime, deferredInitialization;
             var onReadyOff, onUpdateOff, formatRecord;
             var reconnectOff, publicationListenerOff, destroyOff;
             var ObjectClass;
@@ -258,6 +258,7 @@ function syncProvider($syncMappingProvider) {
             this.syncOff = syncOff;
             this.setOnReady = setOnReady;
             this.setOnUpdate = setOnUpdate;
+            this.orderBy = orderBy;
 
             this.resync = resync;
 
@@ -1258,6 +1259,26 @@ function syncProvider($syncMappingProvider) {
                 return matching;
             }
 
+            /**
+             * Define the maintained sort and order in the synced data source
+             * It is based on lodash
+             * 
+             * _.orderBy(..., [iteratees=[_.identity]], [orders])
+             * @param {*} fields which is [iteratees=[_.identity]]
+             * @param {*} orders [order]
+             */
+            function orderBy(fields, orders) {
+                orderByFn = function() {
+                    if (!isSingle()) {
+                        var orderedCache = _.orderBy(data, fields, orders);
+                        cache.length = 0;
+                        _.forEach(orderedCache, function(rec) {
+                            cache.push(rec);
+                        });
+                    }
+                };
+            }
+
             /** 
              * Force the provided records into the cache
              * And activate the call backs (ready, add,update,remove)
@@ -1302,6 +1323,10 @@ function syncProvider($syncMappingProvider) {
                                 }
                             });
                             return $pq.all(promises).then(function() {
+                                // if order alterered, re-order
+                                if (newDataArray.length && orderByFn) {
+                                    orderByFn();
+                                }
                                 return newDataArray;
                             });
                         } catch (err) {

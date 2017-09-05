@@ -41,7 +41,8 @@ SyncOn starts the syncing.
             
 The data contains an object that remains in sync.
 SetParameters defines the parameters that the publication expects.
-setParameters starts the syncing so syncOn is not needed.
+
+setParameters starts the syncing, so syncOn is not needed.
 
 ### Example: Syncing an object
 
@@ -56,6 +57,41 @@ setParameters starts the syncing so syncOn is not needed.
 The setObjectClass defines the class of each object in the array.
 The waitForDataReady starts the syncing. The promise resolves when the initial data is received.
 
+### Example: start or stop syncing
+
+There are multiple ways for a subscription to start syncing
+- setParameters(object): Provide the parameters and the subscription will start syncing
+- waitForDataReady(): the subscription will start syncing if it is not already syncing. This returns a promise resolving with the data
+- syncOn(): the subscription will start syncing if it is not already syncing
+
+In order to stop a subscription
+- syncOff(): this will stop the subscription and release resources on the server
+- destroy(): This will also destroy the subscription.
+- attach($scope): This will destroy the subscription when the scope is destroyed.
+
+Ex:
+
+     sds = $sync.subscribe('people.sync')
+           .setOnReady(
+     
+     // sds starts syncing after waitForDataReady since no setParameters was provided.
+     sds.waitForDataReady().then(function(data){
+          console.log('subscription is now initialed with data.');
+     });
+     
+     // 10s later it stops
+     setTimeout(function() {
+          sds.syncOff();
+      
+     }, 10000);
+     
+     // 20s later it restarts
+     setTimeout(function() {
+          sds.syncOn();
+     }, 20000);
+    
+    
+
 ### Example: Syncing from a view state only or limited scope
 
 TBD: using attach(scope)
@@ -63,8 +99,49 @@ TBD: using attach(scope)
 ### Example: Syncing from a service
 
 TBD: No scope, but be aware to release listeners (onUpdate, onReady, onDelete, onAdd) if defined in a state or component.
-
     
+    
+### Example: listeners 
+
+There are 4 listeners that can be set up: 
+- onReady:   Each time the data is ready
+- onUpdate:  Each time a single record is updated
+- onRemove:  Each time a single record is removed
+- onAdd: Each time a record is added.
+
+Ex: 
+to set up a function to be called when data is ready (each time data is received)
+
+
+
+    off = sds.onReady(function(arrayOrObject) {
+          console.log(arrayOrObject);
+    });
+    
+    
+    
+to remove the listener
+
+    off()
+    
+    
+Ex: 
+to set up a function to be called when data is removed
+
+
+
+    off = sds.onRemove(function(object) {
+          console.log('Removed object '+ object.id);
+    });
+    
+and to remove the listener
+
+
+    off()
+    
+ 
+    
+ 
 ### Example: syncing with simple mapping
 
 Prerequisite:
@@ -77,8 +154,9 @@ Ex:
                 .mapData(
                     function (person) {
                          person.city = _.find(cityList,{id:person.cityId});
-                    })
-                .waitForSubscriptionReady();
+                    });
+    // the following starts the subscription since setParameters was not provided
+    sds.syncOn();
          
 
 In the above example, each time a person is synced (updated or added), the city object will be looked up in an array (using lodash).
@@ -98,7 +176,8 @@ Ex:
                              }
                          ) 
                     })
-                .waitForSubscriptionReady();
+                 .syncOn();
+    
          
 
 In the above example, each time a person is synced (updated or added), myRestService.fetchFriends will also be called. There is no sync on friends data since it is not a subscription.
@@ -123,7 +202,7 @@ Ex:
                            person.addOrUpdate(friend);
                         }
                     })
-                .waitForSubscriptionReady();
+                 .syncOn();
          
 
 if you render sds.getData() in your angular app, any change to a person friend (added/deleted/updated) or a person in people will be displayed.
@@ -143,21 +222,12 @@ Ex:
                     function (address, person) {
                         person.address = address;
                     })
-                .waitForSubscriptionReady();
+                .syncOn();
 
 if you render sds.getData() in your angular app, any change to a person address or a person in people will be displayed.
 
 Notice here that a function is called to set the personId parameter on the dependent subscription.
 
-### Example: Multi syncing with schema
-
-    sds = $sync.subscribe('people.sync')
-           .setSchema(personWithAddressAndFriendsAndEventsWithAttendsSchemaDefinition)
-           .setParams(family:'myFamily');
-
-if the schema is defined properly, person object will have all its contents in sync from different syncs.
-
-TODO: provide specifics.
 
 ### Unit testing
 
@@ -187,7 +257,7 @@ The library must be set up in your test runner beforehand in addition of dist/ze
             spec.r3 = { id: 3, description: 'person3', revision: 5 };
             spec.subParams = { publication: 'myPub', params: {} };
 
-            backend.setData(spec.subParams, [spec.r1,spec.r2]);
+            backend.publishArray(spec.subParams, [spec.r1,spec.r2]);
             spec.sds = spec.$sync.subscribe('myPub').setParams({});
             // Calling digest will run the syncing process to get the data from the backend.
             $rootScope.$digest();
@@ -239,10 +309,7 @@ The library must be set up in your test runner beforehand in addition of dist/ze
 Multisync creates a subscription for each record which would lead to performance impact on the back end and front end
 
 - front end could resuse dependent subscription is the setParameters is the same to prevent creating new subscription to the server and release the subscription if no record needs it.
+
 - backend could cache data, so if multiple subscriptions request same data from in a short time there is no access to the db.
 Cache size could depends on time (life expectancy or memory size or fixed size)
 
-In addition,
-
-- notify creation, update and removals of multiple objects at once (back end change)
-- Buffer data notifications on the backend to decrease number of pushes thru the socket 

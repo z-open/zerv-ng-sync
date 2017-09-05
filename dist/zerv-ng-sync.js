@@ -839,6 +839,162 @@ function syncProvider($syncMappingProvider) {
                 delete listeners[uid];
             };
         }
+
+
+        /**
+         * The filtered dataset is a subset of a subscription cache.
+         * 
+         * 
+         * @param {*} ds 
+         * @param {*} filter 
+         * @param {*} scope 
+         * @param {*} onDestroyFn 
+         */
+        function FilteredDataSet( ds, filter, scope, onDestroyFn) {
+            var orderByFn;
+            var cache = [];
+
+            this.attach = attach;
+            this.waitForDataReady = waitForDataReady;
+            this.getData = getData;
+            this.getOne = getOne;
+            this.getAll = getAll;
+            this.sort = sort;
+            this.orderBy = orderBy;
+            this.destroy = destroy;
+
+            // when the subscription data is updated, the subset updates its own cache.
+            var offs = [
+                ds.onUpdate(updateCache),
+                ds.onAdd(updateCache),
+                ds.onRemove(deleteCache),
+                ds.onReady(function() {
+                    if (orderByFn) {
+                        orderByFn();
+                    }
+                }),
+            ];
+
+            if (scope) {
+                attach(scope);
+            }
+
+            function attach(newScope) {
+                if (scope) {
+                    throw new Error('Filtered dataset is already attached to a scope');
+                }
+                scope = newScope;
+                scope.$on('$destroy', function() {
+                    destroy();
+                });
+                return this;
+            }
+
+            function waitForDataReady() {
+                return ds.waitForDataReady().then(updateAllCache);
+            }
+
+            function updateAllCache(data) {
+                // is cache not initialied yet?
+                if (!cache.length) {
+                    data = _.filter( data, filter);
+                    cache.length = 0;
+                    for (var n=0; n<data.length; n++) {
+                    cache.push(data[n]);
+                    }
+                }
+                return cache;
+            }
+
+            function updateCache(rec) {
+                if (filter(rec)) {
+                    _.remove( cache, {id: rec.id});
+                    cache.push(rec);
+                }
+            }
+
+            function deleteCache(rec) {
+                _.remove( cache, {id: rec.id});
+            }
+
+            function destroy() {
+                onDestroyFn(this);
+                _.forEach(offs, function(off) {
+                    off();
+                });
+            }
+
+            function getData() {
+                return cache;
+            }
+
+            /**
+             * return single record maching condition when the data is ready
+             * 
+             * @param {*} condition (Lodash)
+             * @returns {Promise} resolved with found record
+             */            
+            function getOne(args) {
+                if (_.isNil(args)) {
+                    throw new Error('GetOne requires parameters');
+                }
+                args = _.concat([cache], arguments);
+                return waitForDataReady().then(
+                    function() {
+                        return _.find.apply(this, args);
+                    });
+            }
+
+            /**
+             * return all records when the data is ready
+             * 
+             *  @returns {Promise} returns with all data
+             */
+            function getAll() {
+                return waitForDataReady().then(
+                    function() {
+                        return cache;
+                    });
+            }
+
+                       /**
+             * Define the maintained sort and order in the synced data source
+             * It is based on lodash
+             * 
+             * _.orderBy(..., [iteratees=[_.identity]], [orders])
+             * @param {*} fields which is [iteratees=[_.identity]]
+             * @param {*} orders [order]
+             */
+            function orderBy(fields, orders) {
+                orderByFn = function() {
+                    var orderedCache = _.orderBy(cache, fields, orders);
+                    cache.length = 0;
+                    _.forEach(orderedCache, function(rec) {
+                            cache.push(rec);
+                    });
+                };
+                return this;
+            }
+
+            /**
+             * Define the maintained sort and order in the synced data source
+             * It is based on js array.sort(compareFn)
+             * 
+             * @param {Function} comparefn
+             */
+            function sort(compareFn) {
+                orderByFn = function() {
+                    var orderedCache = cache.sort(compareFn);
+                    cache.length = 0;
+                    _.forEach(orderedCache, function(rec) {
+                            cache.push(rec);
+                    });
+                };
+                return this;
+            }
+        }
+
+
         // ------------------------------------------------------
         // Subscription object
         // ------------------------------------------------------
@@ -870,6 +1026,7 @@ function syncProvider($syncMappingProvider) {
             var ObjectClass;
             var subscriptionId;
             var mapDataFn, mapPropertyFns = [];
+            var filteredDataSets = [];
 
             var thisSub = this;
             thisSub.$dependentSubscriptionDefinitions = [];
@@ -898,6 +1055,8 @@ function syncProvider($syncMappingProvider) {
             this.orderBy = orderBy;
             this.sort = sort;
 
+            this.createFilteredDataSet = createFilteredDataSet;
+
             this.resync = resync;
 
             this.onReady = onReady;
@@ -906,6 +1065,8 @@ function syncProvider($syncMappingProvider) {
             this.onRemove = onRemove;
 
             this.getData = getData;
+            this.getOne = getOne;
+            this.getAll = getAll;
             this.setParameters = setParameters;
             this.getParameters = getParameters;
             this.refresh = refresh;
@@ -955,6 +1116,41 @@ function syncProvider($syncMappingProvider) {
                 return subscriptionId;
             }
 
+            /**
+             * return single record maching condition when the data is ready
+             * 
+             * @param {*} condition (Lodash)
+             * @returns {Promise} resolved with found record
+             */            
+            function getOne(args) {
+                if (isSingle() && !_.isNil(args)) {
+                    throw new Error('GetOne is only applicable to an array subscription.');
+                }
+                if (_.isNil(args)) {
+                    throw new Error('GetOne requires parameters');
+                }
+                args = _.concat([getData()], arguments);
+                return waitForDataReady().then(
+                    function() {
+                        return _.find.apply(this, args);
+                    });
+            }
+
+            /**
+             * return all records when the data is ready
+             * 
+             *  @returns {Promise} returns with all data
+             */
+            function getAll() {
+                if (isSingle()) {
+                    throw new Error('GetOne is only applicable to an array subscription.');
+                }
+                return waitForDataReady().then(
+                    function() {
+                        return getData();
+                    });
+            }
+
             function getPublication() {
                 return publication;
             }
@@ -970,6 +1166,10 @@ function syncProvider($syncMappingProvider) {
                     return;
                 }
                 destroyed = true;
+                _.forEach(filteredDataSets, function(ds) {
+                    ds.destroy();
+                });
+
                 if (thisSub.$parentSubscription) {
                     isLogDebug && logDebug('Destroying Sub Subscription(s) to ' + thisSub);
                 } else {
@@ -978,6 +1178,14 @@ function syncProvider($syncMappingProvider) {
                 syncOff();
                 $syncMapping.destroyDependentSubscriptions(thisSub);
                 isLogDebug && logDebug('Subscription to ' + thisSub + ' destroyed.');
+            }
+
+            function createFilteredDataSet( filter, scope) {
+                var fds = new FilteredDataSet( thisSub, filter, scope, function() {
+                    _.remove( filteredDataSets, fds);
+                });
+                filteredDataSets.push(fds);
+                return fds;
             }
 
 
@@ -1901,7 +2109,7 @@ function syncProvider($syncMappingProvider) {
              * Define the maintained sort and order in the synced data source
              * It is based on lodash
              * 
-             * This has only effect on subscription on a datasource
+             * This has only effect on subscription on an array datasource
              * 
              * _.orderBy(..., [iteratees=[_.identity]], [orders])
              * @param {*} fields which is [iteratees=[_.identity]]
@@ -1924,7 +2132,7 @@ function syncProvider($syncMappingProvider) {
              * Define the maintained sort and order in the synced data source
              * It is based on js array.sort(compareFn)
              * 
-             * This has only effect on subscription on a datasource
+             * This has only effect on subscription on a array datasource
              * 
              * @param {Function} comparefn
              */

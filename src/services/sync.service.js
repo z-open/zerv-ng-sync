@@ -258,7 +258,9 @@ function syncProvider($syncMappingProvider) {
             this.syncOff = syncOff;
             this.setOnReady = setOnReady;
             this.setOnUpdate = setOnUpdate;
+
             this.orderBy = orderBy;
+            this.sort = sort;
 
             this.resync = resync;
 
@@ -1263,6 +1265,8 @@ function syncProvider($syncMappingProvider) {
              * Define the maintained sort and order in the synced data source
              * It is based on lodash
              * 
+             * This has only effect on subscription on a datasource
+             * 
              * _.orderBy(..., [iteratees=[_.identity]], [orders])
              * @param {*} fields which is [iteratees=[_.identity]]
              * @param {*} orders [order]
@@ -1270,15 +1274,36 @@ function syncProvider($syncMappingProvider) {
             function orderBy(fields, orders) {
                 orderByFn = function() {
                     if (!isSingle()) {
-                        var orderedCache = _.orderBy(data, fields, orders);
+                        var orderedCache = _.orderBy(cache, fields, orders);
                         cache.length = 0;
                         _.forEach(orderedCache, function(rec) {
                             cache.push(rec);
                         });
                     }
                 };
+                return thisSub;
             }
 
+            /**
+             * Define the maintained sort and order in the synced data source
+             * It is based on js array.sort(compareFn)
+             * 
+             * This has only effect on subscription on a datasource
+             * 
+             * @param {Function} comparefn
+             */
+            function sort(compareFn) {
+                orderByFn = function() {
+                    if (!isSingle()) {
+                        var orderedCache = cache.sort(compareFn);
+                        cache.length = 0;
+                        _.forEach(orderedCache, function(rec) {
+                            cache.push(rec);
+                        });
+                    }
+                };
+                return thisSub;
+            }
             /** 
              * Force the provided records into the cache
              * And activate the call backs (ready, add,update,remove)

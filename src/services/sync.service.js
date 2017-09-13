@@ -348,11 +348,12 @@ function syncProvider($syncMappingProvider) {
              */
             function sort(compareFn) {
                 orderByFn = function() {
-                    var orderedCache = cache.sort(compareFn);
-                    cache.length = 0;
-                    _.forEach(orderedCache, function(rec) {
-                            cache.push(rec);
-                    });
+                    cache.sort(compareFn);
+                    // var orderedCache = cache.sort(compareFn);
+                    // cache.length = 0;
+                    // _.forEach(orderedCache, function(rec) {
+                    //         cache.push(rec);
+                    // });
                 };
                 return this;
             }
@@ -719,6 +720,7 @@ function syncProvider($syncMappingProvider) {
              * sub.mapObject('city',fetchCity,'cityId')
              * when subscription receives data (obj), it will run fetchCity(obj.cityId) which would save the object in obj.city when it resolves
              * @param {String} propertyName is the property that will received the fetched value
+             *              propertyName can also be 'arrayPropertyNmae.propertyName'. propertyName of objects of arrayPropertyName would be mapped. 
              * @param {Function} fetchFn might return a promise resolving with a value or the value directly, 
              *                      if fetchFn is a datasource, it will be set with the idProperty during mapping (only works if this subscription is single)
              * @param {String} idProperty is the property that hold the id used to run fetchFn
@@ -757,6 +759,26 @@ function syncProvider($syncMappingProvider) {
 
             function mapPromisedDataToProperty(propertyName, fetchFn, idProperty) {
                 mapPropertyFns.push(function(obj) {
+                    var dot = propertyName.indexOf('.');
+                    if (dot !== -1) {
+                        var arrayName = propertyName.substring( 0, dot);
+                        var itemPropertyName = propertyName.substring( dot+1);
+                        if (!_.isArray(obj[arrayName])) {
+                            throw new Error(arrayName+' is not an array in data received from subscription to ' + publication);
+                        }
+                        return $pq.all(_.map(obj[arrayName], function(item) {
+                            if (typeof item[idProperty] === 'undefined') {
+                                throw new Error('Undefined property ' + idProperty + ' in array '+propertyName+' of data received from subscription to ' + publication);
+                            }
+                            var result = fetchFn(item[idProperty]);
+                            if (result && result.then) {
+                                return result.then(function(value) {
+                                    item[itemPropertyName] = value;
+                                });
+                            }
+                        }));
+                    }
+
                     if (typeof obj[idProperty] === 'undefined') {
                         console.log(obj);
                         throw new Error('Undefined property ' + idProperty + ' of data received from subscription to ' + publication);
@@ -767,6 +789,7 @@ function syncProvider($syncMappingProvider) {
                             obj[propertyName] = value;
                         });
                     }
+
                     return result;
                 });
             }
@@ -888,6 +911,10 @@ function syncProvider($syncMappingProvider) {
             function mapDataToOject(obj, operation) {
                 return $pq
                     .all(_.map(mapPropertyFns, function(mapPropertyFn) {
+                        // property mapping does not need to clear the mapping be cache is cleaned.
+                        if (operation==='clear') {
+                            return;
+                        }
                         var result = mapPropertyFn(obj, operation);
                         if (result && result.then) {
                             return result
@@ -1433,7 +1460,7 @@ function syncProvider($syncMappingProvider) {
                 _.forEach(cache, function(obj) {
                     $syncMapping.removePropertyMappers(thisSub, obj);
                     obj.removed = true;
-                    promises.push(mapDataToOject(obj));
+                    promises.push(mapDataToOject(obj, 'clear'));
                 });
                 return $pq.all(promises).finally(function() {
                     recordStates = {};
@@ -1445,7 +1472,7 @@ function syncProvider($syncMappingProvider) {
                 $syncMapping.removePropertyMappers(thisSub, cache);
                 cache.removed = true;
                 recordStates = {};
-                return mapDataToOject(cache);
+                return mapDataToOject(cache, 'clear');
             }
             /**
              * if the params of the dataset matches the notification, it means the data needs to be collect to update array.
@@ -1503,11 +1530,12 @@ function syncProvider($syncMappingProvider) {
             function sort(compareFn) {
                 orderByFn = function() {
                     if (!isSingle()) {
-                        var orderedCache = cache.sort(compareFn);
-                        cache.length = 0;
-                        _.forEach(orderedCache, function(rec) {
-                            cache.push(rec);
-                        });
+                        cache.sort(compareFn);
+                        // var orderedCache = cache.sort(compareFn);
+                        // cache.length = 0;
+                        // _.forEach(orderedCache, function(rec) {
+                        //     cache.push(rec);
+                        // });
                     }
                 };
                 return thisSub;

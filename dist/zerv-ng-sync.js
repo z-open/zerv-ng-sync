@@ -1356,6 +1356,7 @@ function syncProvider($syncMappingProvider) {
              * sub.mapObject('city',fetchCity,'cityId')
              * when subscription receives data (obj), it will run fetchCity(obj.cityId) which would save the object in obj.city when it resolves
              * @param {String} propertyName is the property that will received the fetched value
+             *              propertyName can also be 'arrayPropertyNmae.propertyName'. propertyName of objects of arrayPropertyName would be mapped. 
              * @param {Function} fetchFn might return a promise resolving with a value or the value directly, 
              *                      if fetchFn is a datasource, it will be set with the idProperty during mapping (only works if this subscription is single)
              * @param {String} idProperty is the property that hold the id used to run fetchFn
@@ -1397,36 +1398,46 @@ function syncProvider($syncMappingProvider) {
                     var dot = propertyName.indexOf('.');
                     if (dot !== -1) {
                         var arrayName = propertyName.substring( 0, dot);
-                        var itemPropertyName = propertyName.substring( dot+1);
-                        if (!_.isArray(obj[arrayName])) {
-                            throw new Error(arrayName+' is not an array in data received from subscription to ' + publication);
+
+                        if (!_.isObject(obj[arrayName])) {
+                            throw new Error(arrayName+' is not an array or object in data received from subscription to ' + publication);
                         }
+                        var itemPropertyName = propertyName.substring( dot+1);
+                        
+                        if (!_.isArray(obj[arrayName])) {
+                            obj = obj[arrayName];
+                            if (typeof obj[idProperty] === 'undefined') {
+                                throw new Error('Undefined property ' + idProperty + ' in ' + arrayName + ' of data received from subscription to ' + publication);
+                            }
+                            return fetchAndSet(obj, idProperty, itemPropertyName);
+                        }
+
+                        
                         return $pq.all(_.map(obj[arrayName], function(item) {
                             if (typeof item[idProperty] === 'undefined') {
                                 throw new Error('Undefined property ' + idProperty + ' in array '+propertyName+' of data received from subscription to ' + publication);
                             }
-                            var result = fetchFn(item[idProperty]);
-                            if (result && result.then) {
-                                return result.then(function(value) {
-                                    item[itemPropertyName] = value;
-                                });
-                            }
+                            return fetchAndSet(item, idProperty, itemPropertyName);
                         }));
                     }
 
                     if (typeof obj[idProperty] === 'undefined') {
-                        console.log(obj);
-                        throw new Error('Undefined property ' + idProperty + ' of data received from subscription to ' + publication);
+                        throw new Error('Undefined property' + idProperty + ' in data received from subscription to ' + publication);
                     }
+                    return fetchAndSet(obj, idProperty, propertyName);
+                });
+
+                function fetchAndSet(obj, idProperty, propertyName) {
                     var result = fetchFn(obj[idProperty]);
                     if (result && result.then) {
                         return result.then(function(value) {
                             obj[propertyName] = value;
+                        }, function(err) {
+                            throw new Error('Fetching error for property mapping ' + idProperty + ' in data received from subscription to ' + publication+'. err: '+err);
                         });
                     }
-
                     return result;
-                });
+                }
             }
 
             // function mapPropertyDs(propertyName, externalDs, idProperty) {

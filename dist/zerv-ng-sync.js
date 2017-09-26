@@ -891,25 +891,30 @@ function syncProvider($syncMappingProvider) {
             }
 
             function waitForDataReady() {
-                return ds.waitForDataReady().then(updateAllCache);
+                return ds.waitForDataReady();
+                //.then(updateAllCache);
             }
 
-            function updateAllCache(data) {
-                // is cache not initialied yet?
-                if (!cache.length) {
-                    data = _.filter( data, filter);
-                    cache.length = 0;
-                    for (var n=0; n<data.length; n++) {
-                    cache.push(data[n]);
-                    }
-                }
-                return cache;
-            }
+            // function updateAllCache(data) {
+            //     // is cache not initialied yet?
+            //     // if (!cache.length) {
+            //     //     data = _.filter( cache, filter);
+            //     //     cache.length = 0;
+            //     //     for (var n=0; n<data.length; n++) {
+            //     //     cache.push(data[n]);
+            //     //     }
+            //     // }
+            //     return cache;
+            // }
 
             function updateCache(rec) {
                 if (filter(rec)) {
-                    _.remove( cache, {id: rec.id});
-                    cache.push(rec);
+                    var i = _.findIndex( cache, {id: rec.id});
+                    if (i !==-1) {
+                        cache[i]=rec;
+                    } else {
+                        cache.push(rec);
+                    }
                 }
             }
 
@@ -936,7 +941,11 @@ function syncProvider($syncMappingProvider) {
              */            
             function getOne(args) {
                 if (_.isNil(args)) {
-                    throw new Error('GetOne requires parameters');
+                    // throw new Error('GetOne requires parameters');
+                    return waitForDataReady().then(
+                        function() {
+                            return null;
+                        });
                 }
                 args = _.concat([cache], arguments);
                 return waitForDataReady().then(
@@ -1096,6 +1105,9 @@ function syncProvider($syncMappingProvider) {
 
             this.isExistingStateFor = isExistingStateFor; // for testing purposes
 
+            this.setVar = setVar;
+            this.getVars = getVars;
+
             this.map = map;
             this.mapData = mapData;
             this.mapProperty = mapProperty;
@@ -1117,6 +1129,21 @@ function syncProvider($syncMappingProvider) {
                 return subscriptionId;
             }
 
+            var globalVars = [];
+
+            function getVars() {
+                var varObject = {};
+                _.forEach(globalVars, function(item) {
+                    varObject[item.name] = item.value;
+                });
+                return varObject;
+            }
+
+            function setVar(name, fetchFn) {
+                globalVars.push({name: name, fetchFn: fetchFn});
+                return thisSub;
+            }
+
             /**
              * return single record maching condition when the data is ready
              * 
@@ -1128,7 +1155,11 @@ function syncProvider($syncMappingProvider) {
                     throw new Error('GetOne is only applicable to an array subscription.');
                 }
                 if (_.isNil(args)) {
-                    throw new Error('GetOne requires parameters');
+                    return waitForDataReady().then(
+                        function() {
+                            return null;
+                        });
+                    // throw new Error('GetOne requires parameters');
                 }
                 args = _.concat([getData()], arguments);
                 return waitForDataReady().then(
@@ -1403,7 +1434,7 @@ function syncProvider($syncMappingProvider) {
                             throw new Error(arrayName+' is not an array or object in data received from subscription to ' + publication);
                         }
                         var itemPropertyName = propertyName.substring( dot+1);
-                        
+
                         if (!_.isArray(obj[arrayName])) {
                             obj = obj[arrayName];
                             if (typeof obj[idProperty] === 'undefined') {
@@ -1412,7 +1443,7 @@ function syncProvider($syncMappingProvider) {
                             return fetchAndSet(obj, idProperty, itemPropertyName);
                         }
 
-                        
+
                         return $pq.all(_.map(obj[arrayName], function(item) {
                             if (typeof item[idProperty] === 'undefined') {
                                 throw new Error('Undefined property ' + idProperty + ' in array '+propertyName+' of data received from subscription to ' + publication);
@@ -1422,7 +1453,7 @@ function syncProvider($syncMappingProvider) {
                     }
 
                     if (typeof obj[idProperty] === 'undefined') {
-                        throw new Error('Undefined property' + idProperty + ' in data received from subscription to ' + publication);
+                        throw new Error('Undefined property ' + idProperty + ' in data received from subscription to ' + publication);
                     }
                     return fetchAndSet(obj, idProperty, propertyName);
                 });
@@ -1531,14 +1562,21 @@ function syncProvider($syncMappingProvider) {
              * @returns <Promise> returns a promise that is resolved when the object is completely mapped
              */
             function mapAllDataToObject(obj, operation) {
+                return $pq.all(_.map(globalVars, function(varObj) {
+                    return varObj.fetchFn().then(function(data) {
+                        varObj.value = data;
+                    });
+                }))
+                .then(function() {
                 return $syncMapping.mapObjectPropertiesToSubscriptionData(thisSub, obj)
-                    .then(function(obj, operation) {
+                    .then(function(obj) { // , operation) {
                         return mapDataToOject(obj, operation);
                     })
                     .catch(function(err) {
                         logError('Error when mapping received object.', err);
                         $pq.reject(err);
                     });
+                });
             }
 
             /** 
@@ -1571,7 +1609,7 @@ function syncProvider($syncMappingProvider) {
                     }))
                     .then(function() {
                         if (mapDataFn) {
-                            var result = mapDataFn(obj, operation);
+                            var result = mapDataFn(obj, operation, getVars());
                             if (result && result.then) {
                                 return result
                                     .then(function() {
@@ -1691,7 +1729,7 @@ function syncProvider($syncMappingProvider) {
                         if (record.timestamp) {
                             record.timestamp.$sync = thisSub;
                         }
-                        updateFn(record);
+                        return updateFn(record);
                     } catch (e) {
                         e.message = 'Received Invalid object from publication [' + publication + ']: ' + JSON.stringify(record) + '. DETAILS: ' + e.message;
                         throw e;
@@ -2033,6 +2071,10 @@ function syncProvider($syncMappingProvider) {
             /**
              * each subscription listens to any data coming from the sync socket channel
              * If any is related to it, it will process to update the internal cache
+             * 
+             * Note: Potential issue
+             * If consecutive syncs for a same record come for the sub, we should queue them as potential issue might rise such as
+             * - the old revision updates the cache because the mapping was not completed before the new rev was updated in cache.
              *
              */
             function processPublicationData(batch) {
@@ -2330,7 +2372,7 @@ function syncProvider($syncMappingProvider) {
                 var obj = formatRecord ? formatRecord(record) : record;
 
                 return mapAllDataToObject(obj, 'add').then(function() {
-                    updateDataStorage(obj);
+                    obj = updateDataStorage(obj);
                     syncListener.notify('add', obj);
                     return obj;
                 });
@@ -2364,7 +2406,7 @@ function syncProvider($syncMappingProvider) {
                 obj = formatRecord ? formatRecord(record) : record;
 
                 return mapAllDataToObject(obj, 'update').then(function() {
-                    updateDataStorage(obj);
+                    obj = updateDataStorage(obj);
                     syncListener.notify('update', obj);
                     return obj;
                 });
@@ -2438,6 +2480,7 @@ function syncProvider($syncMappingProvider) {
                 } else {
                     clearObject(cache);
                 }
+                return cache;
             }
 
             function updateSyncedArray(record) {
@@ -2455,6 +2498,7 @@ function syncProvider($syncMappingProvider) {
                         cache.splice(cache.indexOf(existing), 1);
                     }
                 }
+                return existing;
             }
 
             function merge(destination, source) {

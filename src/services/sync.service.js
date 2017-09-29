@@ -1758,7 +1758,7 @@ function syncProvider($syncMappingProvider) {
 
                 // has Sync received a record whose version was originated locally?
                 var obj = isSingleObjectCache ? cache : previous;
-                if (isLocalChange(obj, record)) {
+                if (_.isNil(force) && isLocalChange(obj, record)) {
                     isLogDebug && logDebug('Sync -> Updated own record #' + JSON.stringify(record.id) + ' for subscription to ' + thisSub);
                     _.assign(obj.timestamp, record.timestamp);
                     obj.revision = record.revision;

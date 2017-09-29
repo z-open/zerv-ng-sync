@@ -46,7 +46,6 @@ var mockFiles = [
 // Tasks
 // ////////////////////////////////////////////
 
-// wrap all angular code in bracket and add useStrict, and add sourcemap in dev
 gulp.task('lib', function() {
     return gulp.src(appFiles)
         .pipe(iife({

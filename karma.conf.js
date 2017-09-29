@@ -1,7 +1,7 @@
 // Karma configuration
 // Generated on Wed Aug 05 2015 15:38:51 GMT-0500 (CDT)
 
-module.exports = function (config) {
+module.exports = function(config) {
     config.set({
 
         // base path that will be used to resolve all patterns (eg. files, exclude)
@@ -18,29 +18,28 @@ module.exports = function (config) {
         files: [
             // necessary to make karma work with angular 1.5
             './node_modules/phantomjs-polyfill/bind-polyfill.js',
-           // 'libraries/bluebird/js/browser/bluebird.core.js',
-            'libraries/angular/angular.js',
-            'libraries/angular-mocks/angular-mocks.js',
-            'libraries/lodash/dist/lodash.js',
-            'libraries//simple-uuid/uuid.js',
-            'libraries/zerv-ng-core/dist/zerv-ng-core.js',
+            // './node_modules/bluebird/js/browser/bluebird.core.js',
+            './node_modules/angular/angular.js',
+            './node_modules/angular-mocks/angular-mocks.js',
+            './node_modules/lodash/lodash.js',
+            './node_modules/zerv-ng-core/dist/zerv-ng-core.js',
             'src/sync.module.js',
             'src/**/*.*.js',
             'test/helpers/**/*.module.js',
             'test/helpers/**/*.*.js',
-            'test/specs/**/*.*.js'
+            'test/specs/**/*.*.js',
         ],
 
         // preprocess matching files before serving them to the browser
         // available preprocessors: https://npmjs.org/browse/keyword/karma-preprocessor
         preprocessors: {
             // this is necessary since we do not wrap any longer the angular code as it is in the build (in gulp we do it too)
-            'dist/**/*.js': ['wrap']
+            'dist/**/*.js': ['wrap'],
         },
 
         wrapPreprocessor: {
             // Example: wrap each file in an IIFE
-            template: '(function () { <%= contents %> })()'
+            template: '(function () { <%= contents %> })()',
         },
 
 
@@ -71,6 +70,6 @@ module.exports = function (config) {
 
         // Continuous Integration mode
         // if true, Karma captures browsers, runs the tests and exits
-        singleRun: false
+        singleRun: false,
     });
 };

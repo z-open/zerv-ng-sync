@@ -5,6 +5,8 @@
 // the main gulp reference
 var gulp = require('gulp');
 
+const babel = require('gulp-babel');
+
 // deletes files used during build (https://www.npmjs.com/package/gulp-clean)
 var clean = require('gulp-clean');
 
@@ -53,6 +55,9 @@ gulp.task('lib', function() {
             trimCode: true,
             prependSemicolon: false,
             bindThis: false,
+        }))
+        .pipe(babel({
+            presets: ['env'],
         }))
         .pipe(concat('zerv-ng-sync.js'))
         .pipe(annotate())

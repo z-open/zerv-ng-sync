@@ -256,7 +256,7 @@ function syncProvider($syncMappingProvider) {
 
             function waitForDataReady() {
                 return ds.waitForDataReady();
-                //.then(updateAllCache);
+                // .then(updateAllCache);
             }
 
             // function updateAllCache(data) {

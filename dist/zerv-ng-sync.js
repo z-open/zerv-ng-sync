@@ -645,7 +645,8 @@
     angular.module('zerv.sync').provider('$sync', syncProvider);
 
     function syncProvider($syncMappingProvider) {
-        var totalSub = 0;
+        var totalSub = 0,
+            strictCode = false;
 
         var benchmark = true,
             isLogDebug = void 0,
@@ -668,6 +669,11 @@
         };
         this.setBenchmark = function (value) {
             benchmark = value;
+            return this;
+        };
+
+        this.setStrictCode = function (value) {
+            strictCode = value;
             return this;
         };
 
@@ -1210,7 +1216,7 @@
                  *  @param {Function} callback receiving an array with all records of the cache if the subscription is to an array, otherwise the single object if the subscription is to a single object.
                  */
                 function setOnReady(callback) {
-                    if (onReadyOff) {
+                    if (strictCode && onReadyOff) {
                         throw new Error('setOnReady is already set in subscription to ' + publication + '. It cannot be resetted to prevent bad practice leading to potential memory leak . Consider using setOnReady when subscription is instantiated. Alternative is using onReady to set the callback but do not forget to remove the listener when no longer needed (usually at scope destruction).');
                     }
                     // this onReady is not attached to any scope and will only be gone when the sub is destroyed
@@ -1224,7 +1230,7 @@
                  *           
                  */
                 function setOnUpdate(callback) {
-                    if (onUpdateOff) {
+                    if (strictCode && onUpdateOff) {
                         throw new Error('setOnUpdate is already set in subscription to ' + publication + '. It cannot be resetted to prevent bad practice leading to potential memory leak . Consider using setOnUpdate when subscription is instantiated. Alternative is using onUpdate to set the callback but do not forget to remove the listener when no longer needed (usually at scope destruction).');
                     }
                     // this onUpdateOff is not attached to any scope and will only be gone when the sub is destroyed
@@ -1355,7 +1361,7 @@
                  * 
                  */
                 function mapData(mapFn) {
-                    if (mapDataFn) {
+                    if (strictCode && mapDataFn) {
                         throw new Error('mapData has already been provided and can only be defined once.');
                     }
                     mapDataFn = mapFn;
@@ -1686,7 +1692,11 @@
                     isSingleObjectCache = value;
                     if (value) {
                         updateFn = updateSyncedObject;
-                        cache = ObjectClass ? new ObjectClass({}) : {};
+                        cache = ObjectClass ? clearObject(new ObjectClass({})) : {};
+                        cache.timestamp = {
+                            $empty: true,
+                            $sync: thisSub
+                        };
                     } else {
                         updateFn = updateSyncedArray;
                         cache = [];
@@ -2041,20 +2051,10 @@
                 function processPublicationData(batch) {
                     // cannot only listen to subscriptionId yet...because the registration might have answer provided its id yet...but started broadcasting changes...@TODO can be improved...
                     if (subscriptionId === batch.subscriptionId || !subscriptionId && checkDataSetParamsIfMatchingBatchParams(batch.params)) {
-                        var applyPromise = void 0;
-
                         var startTime = Date.now();
                         var size = benchmark && isLogInfo ? JSON.stringify(batch.records).length : null;
 
-                        if (!batch.diff && isDataCached()) {
-                            // Clear the cache to rebuild it if all data was received.
-                            applyPromise = clearCache().then(function () {
-                                return applyChanges(batch.records);
-                            });
-                        } else {
-                            applyPromise = applyChanges(batch.records);
-                        }
-                        return applyPromise.then(function () {
+                        return cleanCache(batch.records, !batch.diff).then(_.partial(applyChanges, batch.records)).then(function () {
                             if (!isInitialPushCompleted) {
                                 isInitialPushCompleted = true;
 
@@ -2063,7 +2063,6 @@
                                     var timeToProcess = Date.now() - startTime;
                                     isLogInfo && logInfo('Initial sync total time for ' + publication + ': ' + (timeToReceive + timeToProcess) + 'ms - Data Received in: ' + timeToReceive + 'ms, applied in: ' + timeToProcess + 'ms - Estimated size: ' + formatSize(size) + ' - Records: ' + batch.records.length + ' - Avg size/time: ' + formatSize(size / (batch.records.length || 1)) + '/' + roundNumber(timeToProcess / (batch.records.length || 1), 2) + 'ms');
                                 }
-
                                 deferredInitialization.resolve(getData());
                             }
                         });
@@ -2079,41 +2078,79 @@
                     return Object.keys(recordStates).length > 0;
                 }
 
+                function findRecordsPresentInCacheOnly(records) {
+                    var deletedRecords = [];
+                    _.forEach(recordStates, function (cachedRecord, id) {
+                        if (!_.find(records, function (record) {
+                            return id === getIdValue(record.id);
+                        })) {
+                            deletedRecords.push(cachedRecord);
+                            cachedRecord.toRemove = true;
+                        }
+                    });
+                    return deletedRecords;
+                }
+
                 /**
-                 * this releases all objects currently in the cache 
+                 * Removed the following records from the cache, they do no longer exist.
+                 * 
+                 * @param {*} records 
+                 */
+                function cleanArrayCache(records) {
+                    var promises = [];
+                    _.forEach(records, function (obj) {
+                        $syncMapping.removePropertyMappers(thisSub, obj);
+                        obj.removed = true;
+                        promises.push(mapDataToOject(obj, 'clear'));
+                        delete recordStates[getIdValue(obj)];
+                    });
+                    return $pq.all(promises).catch(function (err) {
+                        logError('Error clearing subscription cache - ' + err);
+                    });
+                }
+
+                /**
+                 * this releases all objects that do no longer exist within the cache 
+                 * 
+                 * this can be necessary:
+                 * - after a network reconnection, all data is sent to the client, but the cache might have data that are no longer present in the initial fetch
+                 *
                  * 
                  * if they have dependent subscriptions, they will be released.
                  * 
                  * the mapAllDataObject will be called on each object to make sure object can unmapped if necessary
                  * 
-                 * 
+                 *  
                  */
-                function clearCache() {
+                function cleanCache(records, force) {
                     var result = void 0;
+                    if (!force || !isDataCached()) {
+                        return $pq.resolve();
+                    }
                     if (!isSingleObjectCache) {
-                        result = clearArrayCache();
+                        result = cleanArrayCache(findRecordsPresentInCacheOnly(records));
                     } else {
-                        result = clearObjectCache();
+                        result = cleanObjectCache();
                     }
                     return result.catch(function (err) {
                         logError('Error clearing subscription cache - ' + err);
                     });
                 }
 
-                function clearArrayCache() {
-                    var promises = [];
-                    _.forEach(cache, function (obj) {
-                        $syncMapping.removePropertyMappers(thisSub, obj);
-                        obj.removed = true;
-                        promises.push(mapDataToOject(obj, 'clear'));
-                    });
-                    return $pq.all(promises).finally(function () {
-                        recordStates = {};
-                        cache.length = 0;
-                    });
-                }
+                // function clearArrayCache() {
+                //     const promises = [];
+                //     _.forEach(cache, function(obj) {
+                //         $syncMapping.removePropertyMappers(thisSub, obj);
+                //         obj.removed = true;
+                //         promises.push(mapDataToOject(obj, 'clear'));
+                //     });
+                //     return $pq.all(promises).finally(function() {
+                //         recordStates = {};
+                //         cache.length = 0;
+                //     });
+                // }
 
-                function clearObjectCache() {
+                function cleanObjectCache() {
                     $syncMapping.removePropertyMappers(thisSub, cache);
                     cache.removed = true;
                     recordStates = {};
@@ -2176,11 +2213,6 @@
                     orderByFn = function orderByFn() {
                         if (!isSingle()) {
                             cache.sort(compareFn);
-                            // var orderedCache = cache.sort(compareFn);
-                            // cache.length = 0;
-                            // _.forEach(orderedCache, function(rec) {
-                            //     cache.push(rec);
-                            // });
                         }
                     };
                     return thisSub;
@@ -2431,6 +2463,7 @@
                         merge(cache, record);
                     } else {
                         clearObject(cache);
+                        cache.timestamp = { $empty: true };
                     }
                     return cache;
                 }
@@ -2467,6 +2500,7 @@
                     Object.keys(object).forEach(function (key) {
                         delete object[key];
                     });
+                    return object;
                 }
 
                 function getRevision(record) {

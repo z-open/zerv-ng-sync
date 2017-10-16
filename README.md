@@ -304,12 +304,3 @@ The library must be set up in your test runner beforehand in addition of dist/ze
     The notify functions do run internally a digest cycle.
 
 
-### Future Enhancements
-
-Multisync creates a subscription for each record which would lead to performance impact on the back end and front end
-
-- front end could resuse dependent subscription is the setParameters is the same to prevent creating new subscription to the server and release the subscription if no record needs it.
-
-- backend could cache data, so if multiple subscriptions request same data from in a short time there is no access to the db.
-Cache size could depends on time (life expectancy or memory size or fixed size)
-

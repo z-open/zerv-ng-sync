@@ -2426,7 +2426,7 @@
                             $syncMapping.removePropertyMappers(thisSub, record);
                             syncListener.notify('remove', record);
                             dispose(record);
-                            return mapDataToOject(previous, true);
+                            return mapDataToOject(previous, 'remove');
                         }
                     }
                     return $pq.resolve(record);

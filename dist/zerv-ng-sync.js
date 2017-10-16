@@ -835,7 +835,8 @@
              * @param {*} onDestroyFn 
              */
             function FilteredDataSet(ds, filter, scope, onDestroyFn) {
-                var orderByFn = void 0;
+                var orderByFn = void 0,
+                    onReadyFn = void 0;
                 var cache = [];
 
                 this.attach = attach;
@@ -846,11 +847,15 @@
                 this.sort = sort;
                 this.orderBy = orderBy;
                 this.destroy = destroy;
+                this.setOnReady = setOnReady;
 
                 // when the subscription data is updated, the subset updates its own cache.
                 var offs = [ds.onUpdate(updateCache), ds.onAdd(updateCache), ds.onRemove(deleteCache), ds.onReady(function () {
                     if (orderByFn) {
                         orderByFn();
+                    }
+                    if (onReadyFn) {
+                        onReadyFn(getData());
                     }
                 })];
 
@@ -1219,6 +1224,7 @@
                     if (strictCode && onReadyOff) {
                         throw new Error('setOnReady is already set in subscription to ' + publication + '. It cannot be resetted to prevent bad practice leading to potential memory leak . Consider using setOnReady when subscription is instantiated. Alternative is using onReady to set the callback but do not forget to remove the listener when no longer needed (usually at scope destruction).');
                     }
+                    onReadyOff && onReadyOff();
                     // this onReady is not attached to any scope and will only be gone when the sub is destroyed
                     onReadyOff = syncListener.on('ready', callback, null);
                     return thisSub;
@@ -1233,6 +1239,7 @@
                     if (strictCode && onUpdateOff) {
                         throw new Error('setOnUpdate is already set in subscription to ' + publication + '. It cannot be resetted to prevent bad practice leading to potential memory leak . Consider using setOnUpdate when subscription is instantiated. Alternative is using onUpdate to set the callback but do not forget to remove the listener when no longer needed (usually at scope destruction).');
                     }
+                    onUpdateOff && onUpdateOff();
                     // this onUpdateOff is not attached to any scope and will only be gone when the sub is destroyed
                     onUpdateOff = syncListener.on('update', callback, null);
                     return thisSub;
@@ -1570,7 +1577,7 @@
                  * @param obj
                  * @param <String> operation (add or update or remove)
                  * @returns <Promise> the promise resolves when the mapping as completed
-                      * 
+                  * 
                  */
                 function mapDataToOject(obj, operation) {
                     return $pq.all(_.map(mapPropertyFns, function (mapPropertyFn) {

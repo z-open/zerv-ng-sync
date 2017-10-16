@@ -252,6 +252,20 @@ this.$get = function sync($rootScope, $pq, $socketio, $syncGarbageCollector, $sy
             attach(scope);
         }
 
+        /**
+         * The callback will be called each time the data is ready
+         * 
+         * @param {Function} callback 
+         */
+        function setOnReady(callback) {
+            onReadyFn = callback;
+        }
+
+        /**
+         * Attach this dataset, it will be released (no longer updating on sync) when the scope is destroyed;
+         * 
+         * @param {*} newScope 
+         */
         function attach(newScope) {
             if (scope) {
                 throw new Error('Filtered dataset is already attached to a scope');
@@ -744,14 +758,30 @@ this.$get = function sync($rootScope, $pq, $socketio, $syncGarbageCollector, $sy
 
 
         /**
-         * provide a function that will map some data/lookup to the provided object
+         * This provides a function that will map some data/lookup to the provided object.
+         * This mapping is executed after all other potential mappings (mapDsObject, mapDsArray) have completed. 
          * 
-         * This mapping is executed after all other mappings have completed. So the object has his properties mapped.
+         * 
+         * ex mapData(function (obj, operation, lookupVars) {
+         *      obj.city = getSomeCacheLookup(obj.cityId);
+         *      obj.state = _.find(lookupVars.states, {code:obj.stateCode});
+         * })
          * 
          * 
-         * ex fn = function(obj) {
-         *      obj.city = someCacheLookup(obj.cityId)
-         * }
+         * but avoid or use the following simple manner carefully:
+         * ex mapData(function(house, operation, lookupVars) {
+         *      if (operation === 'add') {   houseInWorld.push(house)}
+         *      if (operation === 'remove') {   houseInWorld.remove(house)}
+         * })
+         * This will could create unpredicable behavior when the setParams is changed.
+         * 
+         * @param {Function} mapFn;
+         *    function mapFn(record, operation, lookupVars) 
+         *    - record: The object whose properties need mapping
+         *    - operation: 'add', 'update' and 'remove' indicate what type of mapping is being applied
+         *    - lookupsVars: object which contains properties initialized with setVar
+         * 
+         * @returns {Subscription} 
          * 
          */
         function mapData(mapFn) {
@@ -961,9 +991,9 @@ this.$get = function sync($rootScope, $pq, $socketio, $syncGarbageCollector, $sy
         }
 
         /** 
-         * map data to the object,
+         * map data to the object calling their map function (mapData)
          * 
-         * might also be used to map this object to the parent subscription object
+         * This is also used to map this object to the parent subscription object
          * 
          * if the mapping fails, the new object version will not be merged
          * 
@@ -976,10 +1006,17 @@ this.$get = function sync($rootScope, $pq, $socketio, $syncGarbageCollector, $sy
         function mapDataToOject(obj, operation) {
             return $pq
                 .all(_.map(mapPropertyFns, function(mapPropertyFn) {
-                    // property mapping does not need to clear the mapping be cache is cleaned.
+                    // property mapping does not need to clear the property mapping when cache is cleaned.
+                    // -> means mapData will no be called in case on cache cleaning.
+                    // this is not a problem except if the developer uses mapData function for other thing that mapping data. 
+                    // ex pushing the data to be mapped in an external object or array.
+                    // ex mapData(function(house,operation) {
+                    //       if (operation === 'remove') {   removeFromWorldHouseCount(house)}
+                    // })
                     if (operation==='clear') {
                         return;
                     }
+
                     const result = mapPropertyFn(obj, operation);
                     if (result && result.then) {
                         return result
@@ -1494,38 +1531,6 @@ this.$get = function sync($rootScope, $pq, $socketio, $syncGarbageCollector, $sy
             return Object.keys(recordStates).length > 0;
         }
 
-        function findRecordsPresentInCacheOnly(records) {
-            const deletedRecords = [];
-            _.forEach(recordStates, function(cachedRecord, id) {
-                if (!_.find(records, function(record) {
-                    return id === getIdValue(record.id);
-                })) {
-                    deletedRecords.push( cachedRecord );
-                    cachedRecord.toRemove = true;
-                }
-            });
-            return deletedRecords;
-        }
-
-        /**
-         * Removed the following records from the cache, they do no longer exist.
-         * 
-         * @param {*} records 
-         */
-        function cleanArrayCache(records) {
-            const promises = [];
-            _.forEach(records, function(obj) {
-                $syncMapping.removePropertyMappers(thisSub, obj);
-                obj.removed = true;
-                promises.push(mapDataToOject(obj, 'clear'));
-                delete recordStates[getIdValue(obj)];
-            });
-            return $pq.all(promises)
-            .catch(function(err) {
-                logError('Error clearing subscription cache - ' + err);
-            });
-        }
-
         /**
          * this releases all objects that do no longer exist within the cache 
          * 
@@ -1554,18 +1559,46 @@ this.$get = function sync($rootScope, $pq, $socketio, $syncGarbageCollector, $sy
             });
         }
 
-        // function clearArrayCache() {
-        //     const promises = [];
-        //     _.forEach(cache, function(obj) {
-        //         $syncMapping.removePropertyMappers(thisSub, obj);
-        //         obj.removed = true;
-        //         promises.push(mapDataToOject(obj, 'clear'));
-        //     });
-        //     return $pq.all(promises).finally(function() {
-        //         recordStates = {};
-        //         cache.length = 0;
-        //     });
-        // }
+        /**
+         * Determine the records that are in the cache but not in the data that needs to replace the cache content.
+         * These records will need removing from the cache since they are not part of the data received, and do not need updating.
+         * 
+         * @param {*} receivedRecordsToBeSynced contains all records that the cache should contain after a sync
+         * 
+         * @returns {array} records 
+         */
+        function findRecordsPresentInCacheOnly(receivedRecordsToBeSynced) {
+            const deletedRecords = [];
+            _.forEach(recordStates, function(cachedRecord, id) {
+                if (!_.find(receivedRecordsToBeSynced, function(record) {
+                    return id === getIdValue(record.id);
+                })) {
+                    deletedRecords.push( cachedRecord );
+                }
+            });
+            return deletedRecords;
+        }
+
+        /**
+         * Removed the following records from the cache, they do no longer exist.
+         * 
+         * @param {*} records 
+         * @returns {Promise} resolve when the cache is cleaned.
+         */
+        function cleanArrayCache(records) {
+            const promises = [];
+            _.forEach(records, function(obj) {
+                $syncMapping.removePropertyMappers(thisSub, obj);
+                obj.removed = true;
+                promises.push(mapDataToOject(obj, 'clear'));
+                delete recordStates[getIdValue(obj.id)];
+            });
+            return $pq.all(promises)
+            .catch(function(err) {
+                logError('Error clearing subscription cache - ' + err);
+            });
+        }
+
 
         function cleanObjectCache() {
             $syncMapping.removePropertyMappers(thisSub, cache);

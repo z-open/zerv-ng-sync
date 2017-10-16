@@ -24,13 +24,13 @@ angular
     .provider('$sync', syncProvider);
 
 function syncProvider($syncMappingProvider) {
-    var totalSub = 0;
+    let totalSub = 0, strictCode = false;
 
-    var benchmark = true, isLogDebug, isLogInfo, defaultReleaseDelay = 30, defaultInitializationTimeout = 10;
+    let benchmark = true, isLogDebug, isLogInfo, defaultReleaseDelay = 30, defaultInitializationTimeout = 10;
 
-    var latencyInMilliSecs = 0;
+    let latencyInMilliSecs = 0;
 
-    var deserialize = _.isNil(window.ZJSONBIN) || window.ZJSONBIN.disabled ? noop : window.ZJSONBIN.deserialize;
+    const deserialize = _.isNil(window.ZJSONBIN) || window.ZJSONBIN.disabled ? noop : window.ZJSONBIN.deserialize;
     function noop(r) {
         return r;
     }
@@ -43,6 +43,11 @@ function syncProvider($syncMappingProvider) {
     };
     this.setBenchmark = function(value) {
         benchmark = value;
+        return this;
+    };
+
+    this.setStrictCode = function(value) {
+        strictCode = value;
         return this;
     };
 
@@ -63,24 +68,24 @@ function syncProvider($syncMappingProvider) {
      *  @param <number> seconds
      */
     this.setReleaseDelay = function(seconds) {
-        defaultReleaseDelay = seconds*1000;
+        defaultReleaseDelay = seconds * 1000;
         return this;
     };
 
     this.setInitializationTimeout = function(seconds) {
-        defaultInitializationTimeout = seconds*1000;
+        defaultInitializationTimeout = seconds * 1000;
         return this;
     };
 
     this.$get = function sync($rootScope, $pq, $socketio, $syncGarbageCollector, $syncMapping, sessionUser) {
-        var publicationListeners = {},
-            lastPublicationListenerUid = 0;
-        var GRACE_PERIOD_IN_SECONDS = 8;
-        var SYNC_VERSION = '1.2';
+        const publicationListeners = {};
+        let lastPublicationListenerUid = 0;
+        let GRACE_PERIOD_IN_SECONDS = 8;
+        const SYNC_VERSION = '1.2';
 
         listenToPublicationNotification();
 
-        var service = {
+        const service = {
             subscribe: subscribe,
             subscribeObject: subscribeObject,
             resolveSubscription: resolveSubscription,
@@ -103,11 +108,11 @@ function syncProvider($syncMappingProvider) {
          * to get the data from the dataSet, just dataSet.getData()
          */
         function resolveSubscription(publicationName, params, objectClass) {
-            var deferred = $pq.defer();
-            var sDs = subscribe(publicationName).setObjectClass(objectClass);
+            const deferred = $pq.defer();
+            const sDs = subscribe(publicationName).setObjectClass(objectClass);
 
             // give a little time for subscription to fetch the data...otherwise give up so that we don't get stuck in a resolve waiting forever.
-            var gracePeriod = setTimeout(function() {
+            const gracePeriod = setTimeout(function() {
                 if (!sDs.ready) {
                     sDs.destroy();
                     isLogInfo && logInfo('Attempt to subscribe to publication ' + publicationName + ' failed');
@@ -129,7 +134,7 @@ function syncProvider($syncMappingProvider) {
         }
 
         function subscribeObject(schema, id) {
-            var options = _.assign({}, schema.options);
+            const options = _.assign({}, schema.options);
             return subscribe(schema.publication)
                 .setSingle(true)
                 .setObjectClass(options.objectClass)
@@ -165,13 +170,13 @@ function syncProvider($syncMappingProvider) {
             $socketio.on(
                 'SYNC_NOW',
                 function(serializedObj, fn) {
-                    var subNotification = deserialize(serializedObj);
+                    const subNotification = deserialize(serializedObj);
 
                     isLogInfo && logInfo('Syncing with [' + subNotification.name + ', id:' + subNotification.subscriptionId + ' , params:' + JSON.stringify(subNotification.params) + ']. Records:' + subNotification.records.length + '[' + (subNotification.diff ? 'Diff' : 'All') + ']');
-                    var listeners = publicationListeners[subNotification.name];
-                    var processed = [];
+                    const listeners = publicationListeners[subNotification.name];
+                    const processed = [];
                     if (listeners) {
-                        for (var listener in listeners) {
+                        for (let listener in listeners) {
                             if (listeners.hasOwnProperty(listener)) {
                                 processed.push(listeners[listener](subNotification));
                             }
@@ -187,8 +192,8 @@ function syncProvider($syncMappingProvider) {
 
         // this allows a dataset to listen to any SYNC_NOW event..and if the notification is about its data.
         function addPublicationListener(streamName, callback) {
-            var uid = lastPublicationListenerUid++;
-            var listeners = publicationListeners[streamName];
+            const uid = lastPublicationListenerUid++;
+            let listeners = publicationListeners[streamName];
             if (!listeners) {
                 publicationListeners[streamName] = listeners = {};
             }
@@ -203,6 +208,172 @@ function syncProvider($syncMappingProvider) {
                 delete listeners[uid];
             };
         }
+
+
+        /**
+         * The filtered dataset is a subset of a subscription cache.
+         * 
+         * 
+         * @param {*} ds 
+         * @param {*} filter 
+         * @param {*} scope 
+         * @param {*} onDestroyFn 
+         */
+        function FilteredDataSet( ds, filter, scope, onDestroyFn) {
+            let orderByFn;
+            const cache = [];
+
+            this.attach = attach;
+            this.waitForDataReady = waitForDataReady;
+            this.getData = getData;
+            this.getOne = getOne;
+            this.getAll = getAll;
+            this.sort = sort;
+            this.orderBy = orderBy;
+            this.destroy = destroy;
+
+            // when the subscription data is updated, the subset updates its own cache.
+            const offs = [
+                ds.onUpdate(updateCache),
+                ds.onAdd(updateCache),
+                ds.onRemove(deleteCache),
+                ds.onReady(function() {
+                    if (orderByFn) {
+                        orderByFn();
+                    }
+                }),
+            ];
+
+            if (scope) {
+                attach(scope);
+            }
+
+            function attach(newScope) {
+                if (scope) {
+                    throw new Error('Filtered dataset is already attached to a scope');
+                }
+                scope = newScope;
+                scope.$on('$destroy', function() {
+                    destroy();
+                });
+                return this;
+            }
+
+            function waitForDataReady() {
+                return ds.waitForDataReady();
+                // .then(updateAllCache);
+            }
+
+            // function updateAllCache(data) {
+            //     // is cache not initialied yet?
+            //     // if (!cache.length) {
+            //     //     data = _.filter( cache, filter);
+            //     //     cache.length = 0;
+            //     //     for (var n=0; n<data.length; n++) {
+            //     //     cache.push(data[n]);
+            //     //     }
+            //     // }
+            //     return cache;
+            // }
+
+            function updateCache(rec) {
+                if (filter(rec)) {
+                    const i = _.findIndex( cache, {id: rec.id});
+                    if (i !==-1) {
+                        cache[i]=rec;
+                    } else {
+                        cache.push(rec);
+                    }
+                }
+            }
+
+            function deleteCache(rec) {
+                _.remove( cache, {id: rec.id});
+            }
+
+            function destroy() {
+                onDestroyFn(this);
+                _.forEach(offs, function(off) {
+                    off();
+                });
+            }
+
+            function getData() {
+                return cache;
+            }
+
+            /**
+             * return single record maching condition when the data is ready
+             * 
+             * @param {*} condition (Lodash)
+             * @returns {Promise} resolved with found record
+             */            
+            function getOne(args) {
+                if (_.isNil(args)) {
+                    // throw new Error('GetOne requires parameters');
+                    return waitForDataReady().then(
+                        function() {
+                            return null;
+                        });
+                }
+                args = _.concat([cache], arguments);
+                return waitForDataReady().then(
+                    function() {
+                        return _.find.apply(this, args);
+                    });
+            }
+
+            /**
+             * return all records when the data is ready
+             * 
+             *  @returns {Promise} returns with all data
+             */
+            function getAll() {
+                return waitForDataReady().then(
+                    function() {
+                        return cache;
+                    });
+            }
+
+                       /**
+             * Define the maintained sort and order in the synced data source
+             * It is based on lodash
+             * 
+             * _.orderBy(..., [iteratees=[_.identity]], [orders])
+             * @param {*} fields which is [iteratees=[_.identity]]
+             * @param {*} orders [order]
+             */
+            function orderBy(fields, orders) {
+                orderByFn = function() {
+                    const orderedCache = _.orderBy(cache, fields, orders);
+                    cache.length = 0;
+                    _.forEach(orderedCache, function(rec) {
+                            cache.push(rec);
+                    });
+                };
+                return this;
+            }
+
+            /**
+             * Define the maintained sort and order in the synced data source
+             * It is based on js array.sort(compareFn)
+             * 
+             * @param {Function} comparefn
+             */
+            function sort(compareFn) {
+                orderByFn = function() {
+                    cache.sort(compareFn);
+                    // var orderedCache = cache.sort(compareFn);
+                    // cache.length = 0;
+                    // _.forEach(orderedCache, function(rec) {
+                    //         cache.push(rec);
+                    // });
+                };
+                return this;
+            }
+        }
+
+
         // ------------------------------------------------------
         // Subscription object
         // ------------------------------------------------------
@@ -227,27 +398,28 @@ function syncProvider($syncMappingProvider) {
          */
 
         function Subscription(publication, scope) {
-            var isSyncingOn = false, destroyed,
-                isSingleObjectCache, updateDataStorage, cache, isInitialPushCompleted, initialStartTime, deferredInitialization;
-            var onReadyOff, onUpdateOff, formatRecord;
-            var reconnectOff, publicationListenerOff, destroyOff;
-            var ObjectClass;
-            var subscriptionId;
-            var mapDataFn;
+            let isSyncingOn = false;
+            let destroyed, isSingleObjectCache, updateDataStorage, cache, orderByFn, isInitialPushCompleted, initialStartTime, deferredInitialization;
+            let onReadyOff, onUpdateOff, formatRecord;
+            let reconnectOff, publicationListenerOff, destroyOff;
+            let ObjectClass;
+            let subscriptionId;
+            let mapDataFn, mapPropertyFns = [];
+            const filteredDataSets = [];
 
-            var thisSub = this;
+            const thisSub = this;
             thisSub.$dependentSubscriptionDefinitions = [];
-            var subParams = {};
-            var recordStates = {};
-            var innerScope; // = $rootScope.$new(true);
-            var syncListener = new SyncListener();
+            let subParams = {};
+            let recordStates = {};
+            let innerScope; // = $rootScope.$new(true);
+            const syncListener = new SyncListener();
 
 
-            var dependentSubscriptions = [];
-            var releaseDelay = defaultReleaseDelay;
-            var initializationTimeout = defaultInitializationTimeout;
+            let dependentSubscriptions = [];
+            let releaseDelay = defaultReleaseDelay;
+            let initializationTimeout = defaultInitializationTimeout;
 
-            var releaseTimeout = null;
+            let releaseTimeout = null;
 
             //  ----public----
             this.toString = toString;
@@ -259,6 +431,11 @@ function syncProvider($syncMappingProvider) {
             this.setOnReady = setOnReady;
             this.setOnUpdate = setOnUpdate;
 
+            this.orderBy = orderBy;
+            this.sort = sort;
+
+            this.createFilteredDataSet = createFilteredDataSet;
+
             this.resync = resync;
 
             this.onReady = onReady;
@@ -267,6 +444,8 @@ function syncProvider($syncMappingProvider) {
             this.onRemove = onRemove;
 
             this.getData = getData;
+            this.getOne = getOne;
+            this.getAll = getAll;
             this.setParameters = setParameters;
             this.getParameters = getParameters;
             this.refresh = refresh;
@@ -295,10 +474,17 @@ function syncProvider($syncMappingProvider) {
 
             this.isExistingStateFor = isExistingStateFor; // for testing purposes
 
+            this.setVar = setVar;
+            this.getVar = getVar;
+            this.getVars = getVars;
+
             this.map = map;
             this.mapData = mapData;
+            this.mapProperty = mapProperty;
             this.mapObjectDs = mapObjectDs;
             this.mapArrayDs = mapArrayDs;
+
+            this.refreshMapping = refreshMapping;
 
             this.$notifyUpdateWithinDependentSubscription = $notifyUpdateWithinDependentSubscription;
             this.$createDependentSubscription = $createDependentSubscription;
@@ -311,6 +497,65 @@ function syncProvider($syncMappingProvider) {
             // /////////////////////////////////////////
             function getId() {
                 return subscriptionId;
+            }
+
+            const globalVars = [];
+
+            function getVars() {
+                const varObject = {};
+                _.forEach(globalVars, function(item) {
+                    varObject[item.name] = item.value;
+                });
+                return varObject;
+            }
+
+            function getVar(name) {
+                const globalVar = _.find(globalVars, {name: name});
+                return globalVar ? globalVar.value : null;
+            }
+
+            function setVar(name, fetchFn) {
+                globalVars.push({name: name, fetchFn: fetchFn});
+                return thisSub;
+            }
+
+            /**
+             * return single record maching condition when the data is ready
+             * 
+             * @param {*} condition (Lodash)
+             * @returns {Promise} resolved with found record
+             */            
+            function getOne(args) {
+                if (isSingle() && !_.isNil(args)) {
+                    throw new Error('GetOne is only applicable to an array subscription.');
+                }
+                if (_.isNil(args)) {
+                    return waitForDataReady().then(
+                        function() {
+                            return null;
+                        });
+                    // throw new Error('GetOne requires parameters');
+                }
+                args = _.concat([getData()], arguments);
+                return waitForDataReady().then(
+                    function() {
+                        return _.find.apply(this, args);
+                    });
+            }
+
+            /**
+             * return all records when the data is ready
+             * 
+             *  @returns {Promise} returns with all data
+             */
+            function getAll() {
+                if (isSingle()) {
+                    throw new Error('GetOne is only applicable to an array subscription.');
+                }
+                return waitForDataReady().then(
+                    function() {
+                        return getData();
+                    });
             }
 
             function getPublication() {
@@ -328,6 +573,10 @@ function syncProvider($syncMappingProvider) {
                     return;
                 }
                 destroyed = true;
+                _.forEach(filteredDataSets, function(ds) {
+                    ds.destroy();
+                });
+
                 if (thisSub.$parentSubscription) {
                     isLogDebug && logDebug('Destroying Sub Subscription(s) to ' + thisSub);
                 } else {
@@ -338,29 +587,38 @@ function syncProvider($syncMappingProvider) {
                 isLogDebug && logDebug('Subscription to ' + thisSub + ' destroyed.');
             }
 
+            function createFilteredDataSet( filter, scope) {
+                const fds = new FilteredDataSet( thisSub, filter, scope, function() {
+                    _.remove( filteredDataSets, fds);
+                });
+                filteredDataSets.push(fds);
+                return fds;
+            }
 
-            /** this will be called when data is available 
+
+            /** 
+             *  this will be called when data is available 
              *  it means right after each sync!
              * 
-             * 
+             *  @param {Function} callback receiving an array with all records of the cache if the subscription is to an array, otherwise the single object if the subscription is to a single object.
              */
             function setOnReady(callback) {
-                if (onReadyOff) {
-                    onReadyOff();
+                if (strictCode && onReadyOff) {
+                    throw new Error('setOnReady is already set in subscription to ' + publication+ '. It cannot be resetted to prevent bad practice leading to potential memory leak . Consider using setOnReady when subscription is instantiated. Alternative is using onReady to set the callback but do not forget to remove the listener when no longer needed (usually at scope destruction).');
                 }
                 // this onReady is not attached to any scope and will only be gone when the sub is destroyed
                 onReadyOff = syncListener.on('ready', callback, null);
                 return thisSub;
             }
 
-            /** this will be called when data is available 
-             *  it means right after each sync!
-             * 
-             * 
+            /** 
+             *  this will be called when a record is updated
+             *  @param {Function} callback receiving with updated record.
+             *           
              */
             function setOnUpdate(callback) {
-                if (onUpdateOff) {
-                    onUpdateOff();
+                if (strictCode && onUpdateOff) {
+                    throw new Error('setOnUpdate is already set in subscription to ' + publication+ '. It cannot be resetted to prevent bad practice leading to potential memory leak . Consider using setOnUpdate when subscription is instantiated. Alternative is using onUpdate to set the callback but do not forget to remove the listener when no longer needed (usually at scope destruction).');
                 }
                 // this onUpdateOff is not attached to any scope and will only be gone when the sub is destroyed
                 onUpdateOff = syncListener.on('update', callback, null);
@@ -398,8 +656,12 @@ function syncProvider($syncMappingProvider) {
              * @param classValue
              */
             function setObjectClass(classValue) {
-                if (!classValue || deferredInitialization) {
+                if (deferredInitialization) {
                     return thisSub;
+                }
+
+                if (!classValue) {
+                    throw new Error('Object class cannot be null for subscription to ' + publication);
                 }
 
                 ObjectClass = classValue;
@@ -478,15 +740,119 @@ function syncProvider($syncMappingProvider) {
             /**
              * provide a function that will map some data/lookup to the provided object
              * 
+             * This mapping is executed after all other mappings have completed. So the object has his properties mapped.
+             * 
+             * 
              * ex fn = function(obj) {
              *      obj.city = someCacheLookup(obj.cityId)
              * }
              * 
              */
-            function mapData(fn) {
-                mapDataFn = fn;
+            function mapData(mapFn) {
+                if (strictCode && mapDataFn) {
+                     throw new Error('mapData has already been provided and can only be defined once.');
+                }
+                mapDataFn = mapFn;
                 return thisSub;
             }
+
+            /**
+             * provide the property that will be mapped to the object fetched.
+             * 
+             * sub.mapObject('city',fetchCity,'cityId')
+             * when subscription receives data (obj), it will run fetchCity(obj.cityId) which would save the object in obj.city when it resolves
+             * @param {String} propertyName is the property that will received the fetched value
+             *              propertyName can also be 'arrayPropertyNmae.propertyName'. propertyName of objects of arrayPropertyName would be mapped. 
+             * @param {Function} fetchFn might return a promise resolving with a value or the value directly, 
+             *                      if fetchFn is a datasource, it will be set with the idProperty during mapping (only works if this subscription is single)
+             * @param {String} idProperty is the property that hold the id used to run fetchFn
+             */
+            function mapProperty(propertyName, fetchFn, idProperty) {
+                if (_.isNil(propertyName) || _.isNil(idProperty)) {
+                    throw new Error('Invalid mapping to property ' + propertyName + ' in subscription to ' + publication);
+                }
+                if (_.isNil(fetchFn)) {
+                    throw new Error('Invalid fetch function in mapping to property ' + propertyName + ' in subscription to ' + publication);
+                }
+                if (fetchFn instanceof Subscription) {
+                    mapExternalSubscriptionToProperty(propertyName, fetchFn, idProperty);
+                } else {
+                    mapPromisedDataToProperty(propertyName, fetchFn, idProperty);
+                }
+                return thisSub;
+            }
+
+            function mapExternalSubscriptionToProperty(propertyName, fetchFn, idProperty) {
+                dependentSubscriptions.push(fetchFn);
+                mapPropertyFns.push(function(obj) {
+                    if (typeof obj[idProperty] === 'undefined') {
+                        throw new Error('Undefined property ' + idProperty + ' of data received from subscription to ' + publication);
+                    }
+                    const fetchParams = {};
+                    fetchParams.id = obj[idProperty];
+                    return fetchFn
+                        .setParameters(fetchParams)
+                        .waitForDataReady()
+                        .then(function(object) {
+                            obj[propertyName] = object;
+                        });
+                });
+            }
+
+            function mapPromisedDataToProperty(propertyName, fetchFn, idProperty) {
+                mapPropertyFns.push(function(obj) {
+                    const dot = propertyName.indexOf('.');
+                    if (dot !== -1) {
+                        var arrayName = propertyName.substring( 0, dot);
+
+                        if (!_.isObject(obj[arrayName])) {
+                            throw new Error(arrayName+' is not an array or object in data received from subscription to ' + publication);
+                        }
+                        const itemPropertyName = propertyName.substring( dot+1);
+
+                        if (!_.isArray(obj[arrayName])) {
+                            obj = obj[arrayName];
+                            if (typeof obj[idProperty] === 'undefined') {
+                                throw new Error('Undefined property ' + idProperty + ' in ' + arrayName + ' of data received from subscription to ' + publication);
+                            }
+                            return fetchAndSet(obj, idProperty, itemPropertyName);
+                        }
+
+
+                        return $pq.all(_.map(obj[arrayName], function(item) {
+                            if (typeof item[idProperty] === 'undefined') {
+                                throw new Error('Undefined property ' + idProperty + ' in array '+propertyName+' of data received from subscription to ' + publication);
+                            }
+                            return fetchAndSet(item, idProperty, itemPropertyName);
+                        }));
+                    }
+
+                    if (typeof obj[idProperty] === 'undefined') {
+                        throw new Error('Undefined property ' + idProperty + ' in data received from subscription to ' + publication);
+                    }
+                    return fetchAndSet(obj, idProperty, propertyName);
+                });
+
+                function fetchAndSet(obj, idProperty, propertyName) {
+                    const result = fetchFn(obj[idProperty]);
+                    if (result && result.then) {
+                        return result.then(function(value) {
+                            obj[propertyName] = value;
+                        }, function(err) {
+                            throw new Error('Fetching error for property mapping ' + idProperty + ' in data received from subscription to ' + publication+'. err: '+err);
+                        });
+                    }
+                    return result;
+                }
+            }
+
+            // function mapPropertyDs(propertyName, externalDs, idProperty) {
+            //     dependentSubscriptions.push(externalDs);
+            //     var onReadyOff = externalDs.onReady(function() {
+            //         dependentSub.invalid = true; // means the external sub data has changed, making this subscription obj potentially mapped to wrong data
+            //     });
+            // }
+
 
             /** 
              *  this function allows to add to the subscription multiple mapping strategies at the same time
@@ -538,7 +904,7 @@ function syncProvider($syncMappingProvider) {
                 return thisSub;
 
                 function setMapping(def) {
-                    var type = def.type ? def.type.toLowerCase() : null;
+                    const type = def.type ? def.type.toLowerCase() : null;
                     if (type === 'object') {
                         thisSub.mapObjectDs(def.publication, def.params || def.paramsFn, def.mapFn, def.options);
                     } else if (type === 'array') {
@@ -548,7 +914,16 @@ function syncProvider($syncMappingProvider) {
                     }
                 }
             }
-
+            /**
+             * This refreshes the mapping of an object
+             * @param {Object} obj 
+             */
+            function refreshMapping(obj) {
+                if (obj.removed) {
+                    return obj;
+                }
+                return mapAllDataToObject(obj);
+            }
 
             /**
              * map static data or subscription based data to the provided object
@@ -562,14 +937,21 @@ function syncProvider($syncMappingProvider) {
              * @returns <Promise> returns a promise that is resolved when the object is completely mapped
              */
             function mapAllDataToObject(obj, operation) {
+                return $pq.all(_.map(globalVars, function(varObj) {
+                    return varObj.fetchFn().then(function(data) {
+                        varObj.value = data;
+                    });
+                }))
+                .then(function() {
                 return $syncMapping.mapObjectPropertiesToSubscriptionData(thisSub, obj)
-                    .then(function(obj, operation) {
+                    .then(function(obj) { // , operation) {
                         return mapDataToOject(obj, operation);
                     })
                     .catch(function(err) {
                         logError('Error when mapping received object.', err);
                         $pq.reject(err);
                     });
+                });
             }
 
             /** 
@@ -586,28 +968,54 @@ function syncProvider($syncMappingProvider) {
              * 
              */
             function mapDataToOject(obj, operation) {
-                if (mapDataFn) {
-                    var result = mapDataFn(obj, operation);
-                    if (result && result.then) {
-                        return result
-                            .then(function() {
-                                return obj;
-                            });
-                    }
-                }
-                return $pq.resolve(obj);
+                return $pq
+                    .all(_.map(mapPropertyFns, function(mapPropertyFn) {
+                        // property mapping does not need to clear the mapping be cache is cleaned.
+                        if (operation==='clear') {
+                            return;
+                        }
+                        const result = mapPropertyFn(obj, operation);
+                        if (result && result.then) {
+                            return result
+                                .then(function() {
+                                    return obj;
+                                });
+                        }
+                    }))
+                    .then(function() {
+                        if (mapDataFn) {
+                            const result = mapDataFn(obj, operation, getVars());
+                            if (result && result.then) {
+                                return result
+                                    .then(function() {
+                                        return obj;
+                                    });
+                            }
+                            return obj;
+                        }
+                    });
+                // if (mapDataFn) {
+                //     var result = mapDataFn(obj, operation);
+                //     if (result && result.then) {
+                //         return result
+                //             .then(function() {
+                //                 return obj;
+                //             });
+                //     }
+                // }
+                // return $pq.resolve(obj);
             }
 
 
             function $createDependentSubscription(publication) {
-                var depSub = subscribe(publication);
+                const depSub = subscribe(publication);
                 depSub.$parentSubscription = thisSub;
                 return depSub;
             }
 
 
             function $notifyUpdateWithinDependentSubscription(idOfObjectImpactedByChange) {
-                var cachedObject = getRecordState({id: idOfObjectImpactedByChange});
+                const cachedObject = getRecordState({id: idOfObjectImpactedByChange});
                 syncListener.notify('ready', getData(), [cachedObject]);
             }
 
@@ -681,11 +1089,15 @@ function syncProvider($syncMappingProvider) {
                     return thisSub;
                 }
 
-                var updateFn;
+                let updateFn;
                 isSingleObjectCache = value;
                 if (value) {
                     updateFn = updateSyncedObject;
-                    cache = ObjectClass ? new ObjectClass({}) : {};
+                    cache = ObjectClass ? clearObject(new ObjectClass({})) : {};
+                    cache.timestamp = {
+                        $empty: true,
+                        $sync: thisSub,
+                    };
                 } else {
                     updateFn = updateSyncedArray;
                     cache = [];
@@ -696,7 +1108,7 @@ function syncProvider($syncMappingProvider) {
                         if (record.timestamp) {
                             record.timestamp.$sync = thisSub;
                         }
-                        updateFn(record);
+                        return updateFn(record);
                     } catch (e) {
                         e.message = 'Received Invalid object from publication [' + publication + ']: ' + JSON.stringify(record) + '. DETAILS: ' + e.message;
                         throw e;
@@ -796,7 +1208,23 @@ function syncProvider($syncMappingProvider) {
              * @returns a promise that will be resolved when the data is ready.
              */
             function startSyncing() {
+                if (dependentSubscriptions.length && !isSingle()) {
+                    throw new Error('Mapping to an external datasource can only be used when subscribing to a single object.');
+                }
+
                 if (isSyncingOn) {
+                    // Temporary fix to for remapping
+                    // ------------------------------
+                    // if a mapping is against an existing subscription, and the existing subscription params were changed externally, no by the mapping
+                    // the synced object would have mapped incorrectly, this force the re-mapping.
+                    // when the function setParams, waitForDataReady, syncOn are called
+                    // better solution would be that the external subscription let know this subscription that is params has been modified, then only we would refresh
+                    // the mapping.
+                    if (dependentSubscriptions.length) {
+                        deferredInitialization.promise.then(function(data) {
+                            refreshMapping(getData());
+                        });
+                    }
                     return deferredInitialization.promise;
                 }
                 deferredInitialization = $pq.defer();
@@ -819,18 +1247,18 @@ function syncProvider($syncMappingProvider) {
                 if (!initializationTimeout) {
                     return;
                 }
-                var initializationPromise = deferredInitialization;
-                var completed = false;
+                const initializationPromise = deferredInitialization;
+                let completed = false;
                 setTimeout(function() {
                     if (!completed && deferredInitialization === initializationPromise) {
-                        logError('Failed to load data within '+(initializationTimeout/1000)+'s for '+ thisSub);
+                        logError('Failed to load data within ' + (initializationTimeout / 1000) + 's for ' + thisSub);
                         initializationPromise.reject('sync timeout');
                         // give up syncing.
                         thisSub.syncOff();
                     }
                 }, initializationTimeout);
                 initializationPromise.promise.then(function() {
-                    completed=true;
+                    completed = true;
                 });
             }
 
@@ -904,7 +1332,7 @@ function syncProvider($syncMappingProvider) {
                             thisSub.syncOff();
                             releaseTimeout = null;
                         }
-                    }, Math.max(releaseDelay, initializationTimeout)+500); // to make sure that a release does not happen during initialization
+                    }, Math.max(releaseDelay, initializationTimeout) + 500); // to make sure that a release does not happen during initialization
                 }
             }
 
@@ -967,7 +1395,7 @@ function syncProvider($syncMappingProvider) {
                     destroyOff();
                 }
                 innerScope = newScope;
-                var destroyScope = innerScope; // memorize scope as it is used during destroy
+                const destroyScope = innerScope; // memorize scope as it is used during destroy
 
                 destroyOff = innerScope.$on('$destroy', function() {
                     syncListener.dropListeners(destroyScope);
@@ -1022,45 +1450,36 @@ function syncProvider($syncMappingProvider) {
             /**
              * each subscription listens to any data coming from the sync socket channel
              * If any is related to it, it will process to update the internal cache
+             * 
+             * Note: Potential issue
+             * If consecutive syncs for a same record come for the sub, we should queue them as potential issue might rise such as
+             * - the old revision updates the cache because the mapping was not completed before the new rev was updated in cache.
              *
              */
             function processPublicationData(batch) {
                 // cannot only listen to subscriptionId yet...because the registration might have answer provided its id yet...but started broadcasting changes...@TODO can be improved...
                 if (subscriptionId === batch.subscriptionId || (!subscriptionId && checkDataSetParamsIfMatchingBatchParams(batch.params))) {
-                    var applyPromise;
+                    const startTime = Date.now();
+                    const size = benchmark && isLogInfo ? JSON.stringify(batch.records).length : null;
 
-                    var startTime = Date.now();
-                    var size = benchmark && isLogInfo ? JSON.stringify(batch.records).length : null;
-
-                    if (!batch.diff && isDataCached()) {
-                        // Clear the cache to rebuild it if all data was received.
-                        applyPromise = clearCache()
-                            .then(function() {
-                                return applyChanges(batch.records);
-                            });
-                    } else {
-                        applyPromise = applyChanges(batch.records);
-                    }
-                    return applyPromise.then(
-                        function() {
+                    return cleanCache(batch.records, !batch.diff)
+                        .then( _.partial(applyChanges, batch.records))
+                        .then(function() {
                             if (!isInitialPushCompleted) {
                                 isInitialPushCompleted = true;
 
                                 if (benchmark && isLogInfo) {
-                                    var timeToReceive = Date.now() - initialStartTime;
-                                    var timeToProcess = Date.now() - startTime;
+                                    const timeToReceive = Date.now() - initialStartTime;
+                                    const timeToProcess = Date.now() - startTime;
                                     isLogInfo && logInfo('Initial sync total time for ' + publication + ': ' + (timeToReceive + timeToProcess) + 'ms - Data Received in: ' + timeToReceive + 'ms, applied in: ' + timeToProcess + 'ms - Estimated size: ' + formatSize(size) + ' - Records: ' + batch.records.length + ' - Avg size/time: ' + formatSize(size / (batch.records.length || 1)) + '/' + roundNumber(timeToProcess / (batch.records.length || 1), 2) + 'ms');
                                 }
-
                                 deferredInitialization.resolve(getData());
                             }
-                        }
-                    );
+                        });
                 }
                 // unit test will know when the apply is completed when the promise resolve;
                 return $pq.resolve();
             }
-
 
             /**
              * @return {boolean} true if record states are in memory, it implied data has been cached.
@@ -1069,45 +1488,84 @@ function syncProvider($syncMappingProvider) {
                 return Object.keys(recordStates).length > 0;
             }
 
+            function findRecordsPresentInCacheOnly(records) {
+                const deletedRecords = [];
+                _.forEach(recordStates, function(cachedRecord, id) {
+                    if (!_.find(records, function(record) {
+                        return id === getIdValue(record.id);
+                    })) {
+                        deletedRecords.push( cachedRecord );
+                        cachedRecord.toRemove = true;
+                    }
+                });
+                return deletedRecords;
+            }
+
             /**
-             * this releases all objects currently in the cache 
+             * Removed the following records from the cache, they do no longer exist.
+             * 
+             * @param {*} records 
+             */
+            function cleanArrayCache(records) {
+                const promises = [];
+                _.forEach(records, function(obj) {
+                    $syncMapping.removePropertyMappers(thisSub, obj);
+                    obj.removed = true;
+                    promises.push(mapDataToOject(obj, 'clear'));
+                    delete recordStates[getIdValue(obj)];
+                });
+                return $pq.all(promises)
+                .catch(function(err) {
+                    logError('Error clearing subscription cache - ' + err);
+                });
+            }
+
+            /**
+             * this releases all objects that do no longer exist within the cache 
+             * 
+             * this can be necessary:
+             * - after a network reconnection, all data is sent to the client, but the cache might have data that are no longer present in the initial fetch
+             *
              * 
              * if they have dependent subscriptions, they will be released.
              * 
              * the mapAllDataObject will be called on each object to make sure object can unmapped if necessary
              * 
-             * 
+             *  
              */
-            function clearCache() {
-                var result;
+            function cleanCache(records, force) {
+                let result;
+                if (!force || !isDataCached()) {
+                    return $pq.resolve();
+                }
                 if (!isSingleObjectCache) {
-                    result = clearArrayCache();
+                    result = cleanArrayCache(findRecordsPresentInCacheOnly(records));
                 } else {
-                    result = clearObjectCache();
+                    result = cleanObjectCache();
                 }
                 return result.catch(function(err) {
                     logError('Error clearing subscription cache - ' + err);
                 });
             }
 
-            function clearArrayCache() {
-                var promises = [];
-                _.forEach(cache, function(obj) {
-                    $syncMapping.removePropertyMappers(thisSub, obj);
-                    obj.removed = true;
-                    promises.push(mapDataToOject(obj));
-                });
-                return $pq.all(promises).finally(function() {
-                    recordStates = {};
-                    cache.length = 0;
-                });
-            }
+            // function clearArrayCache() {
+            //     const promises = [];
+            //     _.forEach(cache, function(obj) {
+            //         $syncMapping.removePropertyMappers(thisSub, obj);
+            //         obj.removed = true;
+            //         promises.push(mapDataToOject(obj, 'clear'));
+            //     });
+            //     return $pq.all(promises).finally(function() {
+            //         recordStates = {};
+            //         cache.length = 0;
+            //     });
+            // }
 
-            function clearObjectCache() {
+            function cleanObjectCache() {
                 $syncMapping.removePropertyMappers(thisSub, cache);
                 cache.removed = true;
                 recordStates = {};
-                return mapDataToOject(cache);
+                return mapDataToOject(cache, 'clear');
             }
             /**
              * if the params of the dataset matches the notification, it means the data needs to be collect to update array.
@@ -1119,8 +1577,8 @@ function syncProvider($syncMappingProvider) {
                 if (!subParams || Object.keys(subParams).length == 0) {
                     return true;
                 }
-                var matching = true;
-                for (var param in batchParams) {
+                let matching = true;
+                for (let param in batchParams) {
                     // are other params matching?
                     // ex: we might have receive a notification about taskId=20 but this subscription are only interested about taskId-3
                     if (batchParams[param] !== subParams[param]) {
@@ -1131,6 +1589,45 @@ function syncProvider($syncMappingProvider) {
                 return matching;
             }
 
+            /**
+             * Define the maintained sort and order in the synced data source
+             * It is based on lodash
+             * 
+             * This has only effect on subscription on an array datasource
+             * 
+             * _.orderBy(..., [iteratees=[_.identity]], [orders])
+             * @param {*} fields which is [iteratees=[_.identity]]
+             * @param {*} orders [order]
+             */
+            function orderBy(fields, orders) {
+                orderByFn = function() {
+                    if (!isSingle()) {
+                        const orderedCache = _.orderBy(cache, fields, orders);
+                        cache.length = 0;
+                        _.forEach(orderedCache, function(rec) {
+                            cache.push(rec);
+                        });
+                    }
+                };
+                return thisSub;
+            }
+
+            /**
+             * Define the maintained sort and order in the synced data source
+             * It is based on js array.sort(compareFn)
+             * 
+             * This has only effect on subscription on a array datasource
+             * 
+             * @param {Function} comparefn
+             */
+            function sort(compareFn) {
+                orderByFn = function() {
+                    if (!isSingle()) {
+                        cache.sort(compareFn);
+                    }
+                };
+                return thisSub;
+            }
             /** 
              * Force the provided records into the cache
              * And activate the call backs (ready, add,update,remove)
@@ -1156,8 +1653,8 @@ function syncProvider($syncMappingProvider) {
                 return waitForExternalDatasourcesReady()
                     .then(function() {
                         try {
-                            var newDataArray = [];
-                            var promises = [];
+                            const newDataArray = [];
+                            const promises = [];
                             records.forEach(function(record) {
                                 //                   isInfo && logInfo('Datasync [' + dataStreamName + '] received:' +JSON.stringify(record));//+ JSON.stringify(record.id));
                                 if (record.remove) {
@@ -1175,6 +1672,10 @@ function syncProvider($syncMappingProvider) {
                                 }
                             });
                             return $pq.all(promises).then(function() {
+                                // if order alterered, re-order
+                                if (newDataArray.length && orderByFn) {
+                                    orderByFn();
+                                }
                                 return newDataArray;
                             });
                         } catch (err) {
@@ -1232,26 +1733,26 @@ function syncProvider($syncMappingProvider) {
                 return syncListener.on('update', callback, scope || innerScope);
             }
 
-             /**
-             * Listen to event and run callback
-             * 
-             * @param {function} to call on event
-             * @param {Object} angular scope (by default the current attached subscription scope)
-             * 
-             * @returns {function} to remove the listener. Anyway, the listener will be destroyed when scope is destroyed.
-             */
+            /**
+            * Listen to event and run callback
+            * 
+            * @param {function} to call on event
+            * @param {Object} angular scope (by default the current attached subscription scope)
+            * 
+            * @returns {function} to remove the listener. Anyway, the listener will be destroyed when scope is destroyed.
+            */
             function onRemove(callback, scope) {
                 return syncListener.on('remove', callback, scope || innerScope);
             }
 
-             /**
-             * Listen to event and run callback
-             * 
-             * @param {function} to call on event
-             * @param {Object} angular scope (by default the current attached subscription scope)
-             * 
-             * @returns {function} to remove the listener. Anyway, the listener will be destroyed when scope is destroyed.
-             */
+            /**
+            * Listen to event and run callback
+            * 
+            * @param {function} to call on event
+            * @param {Object} angular scope (by default the current attached subscription scope)
+            * 
+            * @returns {function} to remove the listener. Anyway, the listener will be destroyed when scope is destroyed.
+            */
             function onReady(callback, scope) {
                 return syncListener.on('ready', callback, scope || innerScope);
             }
@@ -1268,10 +1769,10 @@ function syncProvider($syncMappingProvider) {
                 isLogDebug && logDebug('Sync -> Inserted New record #' + JSON.stringify(record.id) + (force ? ' directly' : ' via sync') + ' for subscription to ' + thisSub); // JSON.stringify(record));
                 getRevision(record); // just make sure we can get a revision before we handle this record
 
-                var obj = formatRecord ? formatRecord(record) : record;
+                let obj = formatRecord ? formatRecord(record) : record;
 
                 return mapAllDataToObject(obj, 'add').then(function() {
-                    updateDataStorage(obj);
+                    obj = updateDataStorage(obj);
                     syncListener.notify('add', obj);
                     return obj;
                 });
@@ -1286,14 +1787,14 @@ function syncProvider($syncMappingProvider) {
              * @param {boolean} force in the udate to replace any revision in the subscription data 
              */
             function updateRecord(record, force) {
-                var previous = getRecordState(record);
+                const previous = getRecordState(record);
                 if (!force & getRevision(record) <= getRevision(previous)) {
                     return $pq.resolve();
                 }
 
                 // has Sync received a record whose version was originated locally?
-                var obj = isSingleObjectCache ? cache : previous;
-                if (isLocalChange(obj, record)) {
+                let obj = isSingleObjectCache ? cache : previous;
+                if (_.isNil(force) && isLocalChange(obj, record)) {
                     isLogDebug && logDebug('Sync -> Updated own record #' + JSON.stringify(record.id) + ' for subscription to ' + thisSub);
                     _.assign(obj.timestamp, record.timestamp);
                     obj.revision = record.revision;
@@ -1305,7 +1806,7 @@ function syncProvider($syncMappingProvider) {
                 obj = formatRecord ? formatRecord(record) : record;
 
                 return mapAllDataToObject(obj, 'update').then(function() {
-                    updateDataStorage(obj);
+                    obj = updateDataStorage(obj);
                     syncListener.notify('update', obj);
                     return obj;
                 });
@@ -1319,7 +1820,7 @@ function syncProvider($syncMappingProvider) {
              * @param {boolean} force (let us know if the removal was done by sync, or forcing record manually)
              */
             function removeRecord(record, force) {
-                var previous = getRecordState(record);
+                const previous = getRecordState(record);
 
                 if (force || !previous || getRevision(record) > getRevision(previous)) {
                     isLogDebug && logDebug('Sync -> Removed #' + JSON.stringify(record.id) + (force ? ' directly' : ' via sync') + ' for subscription to ' + thisSub);
@@ -1341,7 +1842,7 @@ function syncProvider($syncMappingProvider) {
 
             function dispose(record) {
                 $syncGarbageCollector.dispose(function collect() {
-                    var existingRecord = getRecordState(record);
+                    const existingRecord = getRecordState(record);
                     if (existingRecord && record.revision >= existingRecord.revision) {
                         // isDebug && logDebug('Collect Now:' + JSON.stringify(record));
                         delete recordStates[getIdValue(record.id)];
@@ -1378,11 +1879,13 @@ function syncProvider($syncMappingProvider) {
                     merge(cache, record);
                 } else {
                     clearObject(cache);
+                    cache.timestamp = {$empty: true};
                 }
+                return cache;
             }
 
             function updateSyncedArray(record) {
-                var existing = getRecordState(record);
+                let existing = getRecordState(record);
                 if (!existing) {
                     // add new instance
                     saveRecordState(record);
@@ -1396,6 +1899,7 @@ function syncProvider($syncMappingProvider) {
                         cache.splice(cache.indexOf(existing), 1);
                     }
                 }
+                return existing;
             }
 
             function merge(destination, source) {
@@ -1412,6 +1916,7 @@ function syncProvider($syncMappingProvider) {
                 Object.keys(object).forEach(function(key) {
                     delete object[key];
                 });
+                return object;
             }
 
             function getRevision(record) {
@@ -1430,8 +1935,8 @@ function syncProvider($syncMappingProvider) {
          * this object 
          */
         function SyncListener() {
-            var events = {};
-            var count = 0;
+            const events = {};
+            let count = 0;
 
             this.notify = notify;
             this.on = on;
@@ -1440,7 +1945,7 @@ function syncProvider($syncMappingProvider) {
             function dropListeners(scope) {
                 _.forEach(events, function(listeners) {
                     _.forEach(listeners, function(listener, id) {
-                        if (listener.scope===scope) {
+                        if (listener.scope === scope) {
                             delete listeners[id];
                         }
                     });
@@ -1448,7 +1953,7 @@ function syncProvider($syncMappingProvider) {
             }
 
             function notify(event, data1, data2) {
-                var listeners = events[event];
+                const listeners = events[event];
                 if (listeners) {
                     _.forEach(listeners, function(listener, id) {
                         listener.notify(data1, data2);
@@ -1460,17 +1965,17 @@ function syncProvider($syncMappingProvider) {
              * @returns handler to unregister listener
              */
             function on(event, callback, scope) {
-                var listeners = events[event];
+                let listeners = events[event];
                 if (!listeners) {
                     listeners = events[event] = {};
                 }
-                var id = count++;
+                const id = count++;
                 listeners[id] = {
                     notify: callback,
                     scope: scope,
                 };
                 return function() {
-                        delete listeners[id];
+                    delete listeners[id];
                 };
             }
         }
@@ -1481,7 +1986,7 @@ function syncProvider($syncMappingProvider) {
             return id;
         }
         // build composite key value
-        var r = _.join(_.map(id, function(value) {
+        const r = _.join(_.map(id, function(value) {
             return value;
         }), '~');
         return r;
@@ -1508,15 +2013,17 @@ function syncProvider($syncMappingProvider) {
         if (!n) {
             return Math.round(num);
         }
-        var d = Math.pow(10, n);
+        const d = Math.pow(10, n);
         return Math.round(num * d) / d;
     }
 
     function logError(msg, e) {
-            console.error('SYNC(error): ' + msg, e);
+        console.error('SYNC(error): ' + msg, e);
     }
 
     function getCurrentSubscriptionCount() {
         return totalSub;
     }
 };
+
+

@@ -906,7 +906,7 @@
                 // }
 
                 function updateCache(rec) {
-                    if (filter(rec)) {
+                    if (filter(rec, ds.getVars())) {
                         var i = _.findIndex(cache, { id: rec.id });
                         if (i !== -1) {
                             cache[i] = rec;
@@ -1679,9 +1679,7 @@
                         return thisSub; // $pq.resolve(getData());
                     }
                     syncOff();
-                    if (!isSingleObjectCache) {
-                        cache.length = 0;
-                    }
+                    cleanCache();
 
                     subParams = fetchingParams || {};
                     options = options || {};
@@ -2133,15 +2131,22 @@
                  * 
                  * the mapAllDataObject will be called on each object to make sure object can unmapped if necessary
                  * 
+                 *  @param {array} excludedRecords are the records that should not be removed from the cache
+                 *  @param {boolean} force when set to true will force the cleaning.
+                 * 
+                 *  @returns {Promise} which resolves when done.
                  *  
                  */
-                function cleanCache(records, force) {
+                function cleanCache(excludedRecords, force) {
                     var result = void 0;
-                    if (!force || !isDataCached()) {
+                    if ((!force || !isDataCached()) && excludedRecords) {
                         return $pq.resolve();
                     }
                     if (!isSingleObjectCache) {
-                        result = cleanArrayCache(findRecordsPresentInCacheOnly(records));
+                        result = cleanArrayCache(findRecordsPresentInCacheOnly(excludedRecords));
+                        if (!isDataCached()) {
+                            cache.length = 0;
+                        }
                     } else {
                         result = cleanObjectCache();
                     }

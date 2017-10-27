@@ -2198,6 +2198,9 @@
                     $syncMapping.removePropertyMappers(thisSub, cache);
                     cache.removed = true;
                     recordStates = {};
+                    if (cache.timestamp && cache.timestamp.$empty) {
+                        return $pq.resolve(cache);
+                    }
                     return mapDataToOject(cache, 'clear');
                 }
                 /**

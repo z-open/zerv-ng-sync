@@ -1040,7 +1040,7 @@
                     destroyOff = void 0;
                 var ObjectClass = void 0;
                 var subscriptionId = void 0;
-                var mapDataFn = void 0,
+                var mapCustomDataFn = void 0,
                     mapPropertyFns = [];
                 var filteredDataSets = [];
 
@@ -1398,10 +1398,10 @@
                  * 
                  */
                 function mapData(mapFn) {
-                    if (strictCode && mapDataFn) {
+                    if (strictCode && mapCustomDataFn) {
                         throw new Error('mapData has already been provided and can only be defined once.');
                     }
-                    mapDataFn = mapFn;
+                    mapCustomDataFn = mapFn;
                     return thisSub;
                 }
 
@@ -1589,7 +1589,7 @@
                     })).then(function () {
                         return $syncMapping.mapObjectPropertiesToSubscriptionData(thisSub, obj).then(function (obj) {
                             // , operation) {
-                            return mapDataToOject(obj, operation);
+                            return mapFullObject(obj, operation);
                         }).catch(function (err) {
                             logError('Error when mapping received object.', err);
                             $pq.reject(err);
@@ -1598,7 +1598,7 @@
                 }
 
                 /** 
-                 * map data to the object calling their map function (mapData)
+                 * map all data to the object by calling their map function (mapData)
                  * 
                  * This is also used to map this object to the parent subscription object
                  * 
@@ -1609,7 +1609,33 @@
                  * @returns <Promise> the promise resolves when the mapping as completed
                   * 
                  */
-                function mapDataToOject(obj, operation) {
+                function mapFullObject(obj, operation) {
+                    return mapAllRecordProperties(obj, operation).then(function () {
+                        if (mapCustomDataFn) {
+                            var result = mapCustomDataFn(obj, operation, getVars());
+                            if (result && result.then) {
+                                return result.then(function () {
+                                    return obj;
+                                });
+                            }
+                            return obj;
+                        }
+                    });
+                }
+
+                /**
+                 * Each object property will collect and receive the proper value as defined in the property mapping configuration (mapProperty)
+                 * 
+                 * This will append for different operations such add, updated, and remove.
+                 * 
+                 * Note:
+                 * We might reconsider and NOT apply the mapping on remove or clear operations later on to simplify. 
+                 * 
+                 * 
+                 * @param {*} obj 
+                 * @param {*} operation 
+                 */
+                function mapAllRecordProperties(obj, operation) {
                     return $pq.all(_.map(mapPropertyFns, function (mapPropertyFn) {
                         // property mapping does not need to clear the property mapping when cache is cleaned.
                         // -> means mapData will no be called in case on cache cleaning.
@@ -1621,34 +1647,18 @@
                         if (operation === 'clear') {
                             return;
                         }
-
-                        var result = mapPropertyFn(obj, operation);
-                        if (result && result.then) {
-                            return result.then(function () {
-                                return obj;
-                            });
-                        }
-                    })).then(function () {
-                        if (mapDataFn) {
-                            var result = mapDataFn(obj, operation, getVars());
+                        try {
+                            var result = mapPropertyFn(obj, operation);
                             if (result && result.then) {
                                 return result.then(function () {
                                     return obj;
                                 });
                             }
-                            return obj;
+                        } catch (e) {
+                            logError('property mapping error while syncing on ' + thisSub, e);
+                            return $pq.reject(e);
                         }
-                    });
-                    // if (mapDataFn) {
-                    //     var result = mapDataFn(obj, operation);
-                    //     if (result && result.then) {
-                    //         return result
-                    //             .then(function() {
-                    //                 return obj;
-                    //             });
-                    //     }
-                    // }
-                    // return $pq.resolve(obj);
+                    }));
                 }
 
                 function $createDependentSubscription(publication) {
@@ -2096,7 +2106,9 @@
                         var startTime = Date.now();
                         var size = benchmark && isLogInfo ? JSON.stringify(batch.records).length : null;
 
-                        return cleanCache(batch.records, !batch.diff).then(_.partial(applyChanges, batch.records)).then(function () {
+                        return cleanCache(batch.records, !batch.diff).then(function () {
+                            return applyChanges(batch.records, false);
+                        }).then(function () {
                             if (!isInitialPushCompleted) {
                                 isInitialPushCompleted = true;
 
@@ -2186,7 +2198,7 @@
                     _.forEach(records, function (obj) {
                         $syncMapping.removePropertyMappers(thisSub, obj);
                         obj.removed = true;
-                        promises.push(mapDataToOject(obj, 'clear'));
+                        promises.push(mapFullObject(obj, 'clear'));
                         delete recordStates[getIdValue(obj.id)];
                     });
                     return $pq.all(promises).catch(function (err) {
@@ -2201,7 +2213,7 @@
                     if (cache.timestamp && cache.timestamp.$empty) {
                         return $pq.resolve(cache);
                     }
-                    return mapDataToOject(cache, 'clear');
+                    return mapFullObject(cache, 'clear');
                 }
                 /**
                  * if the params of the dataset matches the notification, it means the data needs to be collect to update array.
@@ -2426,7 +2438,7 @@
 
                     // has Sync received a record whose version was originated locally?
                     var obj = isSingleObjectCache ? cache : previous;
-                    if (_.isNil(force) && isLocalChange(obj, record)) {
+                    if (!force && isLocalChange(obj, record)) {
                         isLogDebug && logDebug('Sync -> Updated own record #' + JSON.stringify(record.id) + ' for subscription to ' + thisSub);
                         _.assign(obj.timestamp, record.timestamp);
                         obj.revision = record.revision;
@@ -2462,11 +2474,12 @@
 
                         // if there is no previous record we do not need to removed any thing from our storage.     
                         if (previous) {
+                            var recordBeingDeleted = _.assign({}, previous);
                             updateDataStorage(record);
                             $syncMapping.removePropertyMappers(thisSub, record);
                             syncListener.notify('remove', record);
                             dispose(record);
-                            return mapDataToOject(previous, 'remove');
+                            return mapFullObject(recordBeingDeleted, 'remove');
                         }
                     }
                     return $pq.resolve(record);

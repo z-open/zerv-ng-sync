@@ -422,7 +422,7 @@ this.$get = function sync($rootScope, $pq, $socketio, $syncGarbageCollector, $sy
         let reconnectOff, publicationListenerOff, destroyOff;
         let ObjectClass;
         let subscriptionId;
-        let mapDataFn, mapPropertyFns = [];
+        let mapCustomDataFn, mapPropertyFns = [];
         const filteredDataSets = [];
 
         const thisSub = this;
@@ -785,10 +785,10 @@ this.$get = function sync($rootScope, $pq, $socketio, $syncGarbageCollector, $sy
          * 
          */
         function mapData(mapFn) {
-            if (strictCode && mapDataFn) {
+            if (strictCode && mapCustomDataFn) {
                  throw new Error('mapData has already been provided and can only be defined once.');
             }
-            mapDataFn = mapFn;
+            mapCustomDataFn = mapFn;
             return thisSub;
         }
 
@@ -981,7 +981,7 @@ this.$get = function sync($rootScope, $pq, $socketio, $syncGarbageCollector, $sy
             .then(function() {
             return $syncMapping.mapObjectPropertiesToSubscriptionData(thisSub, obj)
                 .then(function(obj) { // , operation) {
-                    return mapDataToOject(obj, operation);
+                    return mapFullObject(obj, operation);
                 })
                 .catch(function(err) {
                     logError('Error when mapping received object.', err);
@@ -991,7 +991,7 @@ this.$get = function sync($rootScope, $pq, $socketio, $syncGarbageCollector, $sy
         }
 
         /** 
-         * map data to the object calling their map function (mapData)
+         * map all data to the object by calling their map function (mapData)
          * 
          * This is also used to map this object to the parent subscription object
          * 
@@ -1003,31 +1003,11 @@ this.$get = function sync($rootScope, $pq, $socketio, $syncGarbageCollector, $sy
 
          * 
          */
-        function mapDataToOject(obj, operation) {
-            return $pq
-                .all(_.map(mapPropertyFns, function(mapPropertyFn) {
-                    // property mapping does not need to clear the property mapping when cache is cleaned.
-                    // -> means mapData will no be called in case on cache cleaning.
-                    // this is not a problem except if the developer uses mapData function for other thing that mapping data. 
-                    // ex pushing the data to be mapped in an external object or array.
-                    // ex mapData(function(house,operation) {
-                    //       if (operation === 'remove') {   removeFromWorldHouseCount(house)}
-                    // })
-                    if (operation==='clear') {
-                        return;
-                    }
-
-                    const result = mapPropertyFn(obj, operation);
-                    if (result && result.then) {
-                        return result
-                            .then(function() {
-                                return obj;
-                            });
-                    }
-                }))
+        function mapFullObject(obj, operation) {
+            return mapAllRecordProperties(obj, operation)
                 .then(function() {
-                    if (mapDataFn) {
-                        const result = mapDataFn(obj, operation, getVars());
+                    if (mapCustomDataFn) {
+                        const result = mapCustomDataFn(obj, operation, getVars());
                         if (result && result.then) {
                             return result
                                 .then(function() {
@@ -1037,18 +1017,47 @@ this.$get = function sync($rootScope, $pq, $socketio, $syncGarbageCollector, $sy
                         return obj;
                     }
                 });
-            // if (mapDataFn) {
-            //     var result = mapDataFn(obj, operation);
-            //     if (result && result.then) {
-            //         return result
-            //             .then(function() {
-            //                 return obj;
-            //             });
-            //     }
-            // }
-            // return $pq.resolve(obj);
         }
 
+        /**
+         * Each object property will collect and receive the proper value as defined in the property mapping configuration (mapProperty)
+         * 
+         * This will append for different operations such add, updated, and remove.
+         * 
+         * Note:
+         * We might reconsider and NOT apply the mapping on remove or clear operations later on to simplify. 
+         * 
+         * 
+         * @param {*} obj 
+         * @param {*} operation 
+         */
+        function mapAllRecordProperties(obj, operation) {
+            return $pq
+            .all(_.map(mapPropertyFns, function(mapPropertyFn) {
+                // property mapping does not need to clear the property mapping when cache is cleaned.
+                // -> means mapData will no be called in case on cache cleaning.
+                // this is not a problem except if the developer uses mapData function for other thing that mapping data. 
+                // ex pushing the data to be mapped in an external object or array.
+                // ex mapData(function(house,operation) {
+                //       if (operation === 'remove') {   removeFromWorldHouseCount(house)}
+                // })
+                if (operation==='clear') {
+                    return;
+                }
+                try {
+                    const result = mapPropertyFn(obj, operation);
+                    if (result && result.then) {
+                        return result
+                            .then(function() {
+                                return obj;
+                            });
+                    }
+                } catch (e) {
+                    logError('property mapping error while syncing on ' + thisSub, e);
+                    return $pq.reject(e);
+                }
+            }));
+        }
 
         function $createDependentSubscription(publication) {
             const depSub = subscribe(publication);
@@ -1504,7 +1513,9 @@ this.$get = function sync($rootScope, $pq, $socketio, $syncGarbageCollector, $sy
                 const size = benchmark && isLogInfo ? JSON.stringify(batch.records).length : null;
 
                 return cleanCache(batch.records, !batch.diff)
-                    .then( _.partial(applyChanges, batch.records))
+                    .then(function() {
+                        return applyChanges(batch.records, false);
+                    })
                     .then(function() {
                         if (!isInitialPushCompleted) {
                             isInitialPushCompleted = true;
@@ -1595,7 +1606,7 @@ this.$get = function sync($rootScope, $pq, $socketio, $syncGarbageCollector, $sy
             _.forEach(records, function(obj) {
                 $syncMapping.removePropertyMappers(thisSub, obj);
                 obj.removed = true;
-                promises.push(mapDataToOject(obj, 'clear'));
+                promises.push(mapFullObject(obj, 'clear'));
                 delete recordStates[getIdValue(obj.id)];
             });
             return $pq.all(promises)
@@ -1612,7 +1623,7 @@ this.$get = function sync($rootScope, $pq, $socketio, $syncGarbageCollector, $sy
             if (cache.timestamp && cache.timestamp.$empty) {
                 return $pq.resolve(cache);
             }
-            return mapDataToOject(cache, 'clear');
+            return mapFullObject(cache, 'clear');
         }
         /**
          * if the params of the dataset matches the notification, it means the data needs to be collect to update array.
@@ -1841,7 +1852,7 @@ this.$get = function sync($rootScope, $pq, $socketio, $syncGarbageCollector, $sy
 
             // has Sync received a record whose version was originated locally?
             let obj = isSingleObjectCache ? cache : previous;
-            if (_.isNil(force) && isLocalChange(obj, record)) {
+            if (!force && isLocalChange(obj, record)) {
                 isLogDebug && logDebug('Sync -> Updated own record #' + JSON.stringify(record.id) + ' for subscription to ' + thisSub);
                 _.assign(obj.timestamp, record.timestamp);
                 obj.revision = record.revision;
@@ -1877,11 +1888,12 @@ this.$get = function sync($rootScope, $pq, $socketio, $syncGarbageCollector, $sy
 
                 // if there is no previous record we do not need to removed any thing from our storage.     
                 if (previous) {
+                    const recordBeingDeleted = _.assign({}, previous);
                     updateDataStorage(record);
                     $syncMapping.removePropertyMappers(thisSub, record);
                     syncListener.notify('remove', record);
                     dispose(record);
-                    return mapDataToOject(previous, 'remove');
+                    return mapFullObject(recordBeingDeleted, 'remove');
                 }
             }
             return $pq.resolve(record);

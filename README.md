@@ -48,20 +48,20 @@ setParameters starts the syncing, so syncOn is not needed.
 
     promise = $sync.subscribe('people.sync')
                 .setObjectClass(Person)
-                .waitForDataReady().then(function(data){
+                .waitForInitialization().then(function(data){
                     console.log('subscription is now active and data is ready');
                 });
      
 
 
 The setObjectClass defines the class of each object in the array.
-The waitForDataReady starts the syncing. The promise resolves when the initial data is received.
+The waitForInitialization starts the syncing. The promise resolves when the initial data is received.
 
 ### Example: start or stop syncing
 
 There are multiple ways for a subscription to start syncing
 - setParameters(object): Provide the parameters and the subscription will start syncing
-- waitForDataReady(): the subscription will start syncing if it is not already syncing. This returns a promise resolving with the data
+- waitForInitialization(): the subscription will start syncing if it is not already syncing. This returns a promise resolving with the data
 - syncOn(): the subscription will start syncing if it is not already syncing
 
 In order to stop a subscription
@@ -72,11 +72,10 @@ In order to stop a subscription
 Ex:
 
      sds = $sync.subscribe('people.sync')
-           .setOnReady(
      
-     // sds starts syncing after waitForDataReady since no setParameters was provided.
-     sds.waitForDataReady().then(function(data){
-          console.log('subscription is now initialed with data.');
+     // sds starts syncing after waitForInitialization since no setParameters was provided.
+     sds.waitForInitialization().then(function(data){
+          console.log('subscription is now initialed with data. This event occurs only once');
      });
      
      // 10s later it stops
@@ -94,7 +93,7 @@ Ex:
 
 ### Example: Syncing from a view state only or limited scope
 
-TBD: using attach(scope)
+TBD: using attach(scope,release)
 
 ### Example: Syncing from a service
 
@@ -268,7 +267,7 @@ The library must be set up in your test runner beforehand in addition of dist/ze
         })
 
         it('should return an array via the resolved promise',function(done){
-               spec.sds.waitForDataReady(function(data){
+               spec.sds.waitForInitialization(function(data){
                    expect(sds.getData().length).toBe(2);
                    done();
                });

@@ -436,7 +436,7 @@
                     } else {
                         propertyMapper.setParams(obj, subParams);
 
-                        return propertyMapper.subscription.waitForDataReady().then(function (data) {
+                        return propertyMapper.subscription.waitForInitialization().then(function (data) {
                             if (propertyMapper.subscription.isSingle()) {
                                 propertyMapper.definition.mapFn(data, obj, false, '');
                             } else {
@@ -746,7 +746,7 @@
                     }
                 }, GRACE_PERIOD_IN_SECONDS * 1000);
 
-                sDs.setParameters(params).waitForDataReady().then(function () {
+                sDs.setParameters(params).waitForInitialization().then(function () {
                     clearTimeout(gracePeriod);
                     deferred.resolve(sDs);
                 }).catch(function () {
@@ -838,9 +838,11 @@
                 var orderByFn = void 0,
                     onReadyFn = void 0;
                 var cache = [];
+                var thisDs = this;
 
                 this.attach = attach;
                 this.waitForDataReady = waitForDataReady;
+                this.waitForInitialization = waitForInitialization;
                 this.getData = getData;
                 this.getOne = getOne;
                 this.getAll = getAll;
@@ -870,6 +872,7 @@
                  */
                 function setOnReady(callback) {
                     onReadyFn = callback;
+                    return thisDs;
                 }
 
                 /**
@@ -888,9 +891,18 @@
                     return this;
                 }
 
-                function waitForDataReady() {
-                    return ds.waitForDataReady();
+                /**
+                 * @deprecated use waitForInitialization instead
+                 * @param {*} callback 
+                 */
+                function waitForDataReady(callback) {
+                    logWarn('waitForDataReady is deprecated, use waitForInitialization instead');
+                    return ds.waitForDataReady(callback);
                     // .then(updateAllCache);
+                }
+
+                function waitForInitialization(callback) {
+                    return ds.waitForInitialization(callback);
                 }
 
                 // function updateAllCache(data) {
@@ -940,12 +952,12 @@
                 function getOne(args) {
                     if (_.isNil(args)) {
                         // throw new Error('GetOne requires parameters');
-                        return waitForDataReady().then(function () {
+                        return waitForInitialization().then(function () {
                             return null;
                         });
                     }
                     args = _.concat([cache], arguments);
-                    return waitForDataReady().then(function () {
+                    return waitForInitialization().then(function () {
                         return _.find.apply(this, args);
                     });
                 }
@@ -956,7 +968,7 @@
                  *  @returns {Promise} returns with all data
                  */
                 function getAll() {
-                    return waitForDataReady().then(function () {
+                    return waitForInitialization().then(function () {
                         return cache;
                     });
                 }
@@ -1090,6 +1102,7 @@
 
                 this.waitForDataReady = waitForDataReady;
                 this.waitForSubscriptionReady = waitForSubscriptionReady;
+                this.waitForInitialization = waitForInitialization;
 
                 this.setForce = setForce;
                 this.isSyncing = isSyncing;
@@ -1166,13 +1179,13 @@
                         throw new Error('GetOne is only applicable to an array subscription.');
                     }
                     if (_.isNil(args)) {
-                        return waitForDataReady().then(function () {
+                        return waitForInitialization().then(function () {
                             return null;
                         });
                         // throw new Error('GetOne requires parameters');
                     }
                     args = _.concat([getData()], arguments);
-                    return waitForDataReady().then(function () {
+                    return waitForInitialization().then(function () {
                         return _.find.apply(this, args);
                     });
                 }
@@ -1186,7 +1199,7 @@
                     if (isSingle()) {
                         throw new Error('GetOne is only applicable to an array subscription.');
                     }
-                    return waitForDataReady().then(function () {
+                    return waitForInitialization().then(function () {
                         return getData();
                     });
                 }
@@ -1279,8 +1292,8 @@
                  * @returns {Promise} that resolves when data is ready
                  */
                 function refresh() {
-                    setForce(true);
-                    return waitForDataReady();
+                    syncOff();
+                    return startSyncing();
                 }
                 /**
                  * The following object will be built upon each record received from the backend
@@ -1439,7 +1452,7 @@
                         }
                         var fetchParams = {};
                         fetchParams.id = obj[idProperty];
-                        return fetchFn.setParameters(fetchParams).waitForDataReady().then(function (object) {
+                        return fetchFn.setParameters(fetchParams).waitForInitialization().then(function (object) {
                             obj[propertyName] = object;
                         });
                     });
@@ -1705,12 +1718,15 @@
                 }
 
                 /**
+                 * @deprecated use waitForInitialization instead
+                 * 
                  * Wait for the subscription to establish initial retrieval of data and returns this subscription in a promise
                  * 
                  * @param {function} optional function that will be called with this subscription object when the data is ready 
                  * @returns {Promise} that waits for the initial fetch to complete then wait for the initial fetch to complete then returns this subscription.
                  */
                 function waitForSubscriptionReady(callback) {
+                    logWarn('waitForSubscriptionReady is deprecated, use waitForInitialization instead');
                     return startSyncing().then(function () {
                         if (callback) {
                             callback(thisSub);
@@ -1725,13 +1741,24 @@
                  * @param {function} optional function that will be called with the synced data and this subscription object when the data is ready 
                  * @returns {Promise} that waits for the initial fetch to complete then returns the data
                  */
-                function waitForDataReady(callback) {
+                function waitForInitialization(callback) {
                     return startSyncing().then(function (data) {
                         if (callback) {
                             callback(data, thisSub);
                         }
                         return data;
                     });
+                }
+
+                /**
+                 * @deprecated use waitForInitialization instead
+                 * 
+                 * @param {function} optional function that will be called with the synced data and this subscription object when the data is ready 
+                 * @returns {Promise} that waits for the initial fetch to complete then returns the data
+                 */
+                function waitForDataReady(callback) {
+                    logWarn('waitForDataReady is deprecated, use waitForInitialization instead');
+                    return waitForInitialization(callback);
                 }
 
                 // does the dataset returns only one object? not an array?
@@ -1866,7 +1893,7 @@
                         // ------------------------------
                         // if a mapping is against an existing subscription, and the existing subscription params were changed externally, no by the mapping
                         // the synced object would have mapped incorrectly, this force the re-mapping.
-                        // when the function setParams, waitForDataReady, syncOn are called
+                        // when the function setParams, waitForInitialization, syncOn are called
                         // better solution would be that the external subscription let know this subscription that is params has been modified, then only we would refresh
                         // the mapping.
                         if (dependentSubscriptions.length) {
@@ -2634,6 +2661,10 @@
                 return value;
             }), '~');
             return r;
+        }
+
+        function logWarn(msg) {
+            console.warn('SYNC(info): ' + msg);
         }
 
         function logInfo(msg) {

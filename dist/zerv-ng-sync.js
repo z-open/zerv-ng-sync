@@ -905,18 +905,6 @@
                     return ds.waitForInitialization(callback);
                 }
 
-                // function updateAllCache(data) {
-                //     // is cache not initialied yet?
-                //     // if (!cache.length) {
-                //     //     data = _.filter( cache, filter);
-                //     //     cache.length = 0;
-                //     //     for (var n=0; n<data.length; n++) {
-                //     //     cache.push(data[n]);
-                //     //     }
-                //     // }
-                //     return cache;
-                // }
-
                 function updateCache(rec) {
                     if (filter(rec, ds.getVars())) {
                         var i = _.findIndex(cache, { id: rec.id });
@@ -925,6 +913,9 @@
                         } else {
                             cache.push(rec);
                         }
+                    } else {
+                        // if the rec is in the cache, it does no longer meet the condition.
+                        deleteCache(rec);
                     }
                 }
 

@@ -95,7 +95,7 @@ describe('Basic Sync Service: ', function() {
         spec.sds = spec.$sync.subscribe('myPub');
         expect(spec.sds.isSyncing()).toBe(false);
         expect(backend.subscribe).not.toHaveBeenCalled();
-        var promise = spec.sds.waitForInitialization();
+        var promise = spec.sds.waitForDataReady();
         expect(backend.subscribe).toHaveBeenCalled();
         expect(spec.sds.isSyncing()).toBe(true);
         expect(backend.unsubscribe).not.toHaveBeenCalled();
@@ -107,10 +107,10 @@ describe('Basic Sync Service: ', function() {
         $rootScope.$digest();
     });
 
-    it('should subscribe and run the waitForInitialization callback', function(done) {
+    it('should subscribe and run the waitForDataReady callback', function(done) {
         backend.setData(subParams, [spec.r1, spec.r2]);
         spec.sds = spec.$sync.subscribe('myPub');
-        spec.sds.waitForInitialization(function(data, sds) {
+        spec.sds.waitForDataReady(function(data, sds) {
             expect(data.length).toBe(2);
             expect(sds).toBe(spec.sds);
             done();
@@ -132,7 +132,7 @@ describe('Basic Sync Service: ', function() {
         expect(backend.acknowledge).not.toHaveBeenCalled();
         spec.sds = spec.$sync.subscribe('myPub');
         expect(spec.sds.isSyncing()).toBe(false);
-        var promise = spec.sds.waitForInitialization();
+        var promise = spec.sds.waitForDataReady();
         expect(spec.sds.isSyncing()).toBe(true);
         promise.then(function(data) {
             expect(backend.acknowledge).toHaveBeenCalled();
@@ -165,7 +165,7 @@ describe('Basic Sync Service: ', function() {
         });
 
         it('should start when waiting on data ready', function() {
-            spec.sds.waitForInitialization();
+            spec.sds.waitForDataReady();
             expect(spec.sds.isSyncing()).toBe(true);
         });
 
@@ -188,7 +188,7 @@ describe('Basic Sync Service: ', function() {
         spec.sds = spec.$sync.subscribe('myPub').syncOn();
         expect(backend.exists(subParams)).toBe(true);
 
-        spec.sds.waitForInitialization().then(function() {
+        spec.sds.waitForDataReady().then(function() {
             spec.sds.destroy();
             expect(backend.exists(subParams)).toBe(false);
             done();
@@ -200,7 +200,7 @@ describe('Basic Sync Service: ', function() {
     it('should unsubscribe when subscription is destroyed', function() {
         backend.setData(subParams, []);
         spec.sds = spec.$sync.subscribe('myPub');
-        spec.sds.waitForInitialization();
+        spec.sds.waitForDataReady();
         $rootScope.$digest();
         expect(spec.sds.isSyncing()).toBe(true);
         expect(backend.unsubscribe).not.toHaveBeenCalled();
@@ -214,7 +214,7 @@ describe('Basic Sync Service: ', function() {
         var scope = $rootScope.$new();
         spec.sds = spec.$sync.subscribe('myPub');
         spec.sds.attach(scope);
-        spec.sds.waitForInitialization();
+        spec.sds.waitForDataReady();
         $rootScope.$digest();
         expect(spec.sds.isSyncing()).toBe(true);
 
@@ -228,7 +228,7 @@ describe('Basic Sync Service: ', function() {
         backend.setData(subParams, []);
         var scope = $rootScope.$new();
         spec.sds = spec.$sync.subscribe('myPub', scope);
-        spec.sds.waitForInitialization();
+        spec.sds.waitForDataReady();
         $rootScope.$digest();
         expect(spec.sds.isSyncing()).toBe(true);
         expect(backend.unsubscribe).not.toHaveBeenCalled();
@@ -240,7 +240,7 @@ describe('Basic Sync Service: ', function() {
 
     // it('should not allow attaching a different scope after initialization', function () {
     //     spec.sds = spec.$sync.subscribe('myPub');
-    //     spec.sds.waitForInitialization();
+    //     spec.sds.waitForDataReady();
 
     // });
 
@@ -250,7 +250,7 @@ describe('Basic Sync Service: ', function() {
     it('should not allow changing to set the object class after starting syncing', function() {
         backend.setData(subParams, []);
         spec.sds = spec.$sync.subscribe('myPub');
-        spec.sds.waitForInitialization();
+        spec.sds.waitForDataReady();
         spec.sds.setObjectClass(Person);
         expect(spec.sds.getObjectClass()).toBeUndefined();
     });
@@ -262,7 +262,7 @@ describe('Basic Sync Service: ', function() {
         });
 
         it('should receive an array', function(done) {
-            spec.sds.waitForInitialization(function(data) {
+            spec.sds.waitForDataReady(function(data) {
                 expect(_.isArray(data)).toBe(true);
                 done();
             });
@@ -270,7 +270,7 @@ describe('Basic Sync Service: ', function() {
         });
 
         it('should NOT allow syncing data without revision property', function(done) {
-            spec.sds.waitForInitialization().then(function(data) {
+            spec.sds.waitForDataReady().then(function(data) {
                 backend.notifyDataCreation(subParams, [spec.recordWithNoRevision]).
                     catch(function(err) {
                         expect(err.message).toBe('Sync requires a revision or timestamp property in received record');
@@ -282,7 +282,7 @@ describe('Basic Sync Service: ', function() {
 
         // one or list to test... check if instance is maintained too.
         it('should add a record to the array when receiving an add operation', function(done) {
-            spec.sds.waitForInitialization().then(function(data) {
+            spec.sds.waitForDataReady().then(function(data) {
                 expect(data.length).toBe(2);
                 backend.notifyDataCreation(subParams, [spec.r3])
                     .then(function() {
@@ -295,7 +295,7 @@ describe('Basic Sync Service: ', function() {
         });
 
         it('should update existing record in the array when receiving an update operation', function(done) {
-            spec.sds.waitForInitialization().then(function(data) {
+            spec.sds.waitForDataReady().then(function(data) {
                 expect(data.length).toBe(2);
                 var rec = _.find(data, {id: spec.r1.id});
                 backend.notifyDataUpdate(subParams, [spec.r1b])
@@ -310,7 +310,7 @@ describe('Basic Sync Service: ', function() {
         });
 
         it('should remove a record from array when receiving a removal operation', function(done) {
-            spec.sds.waitForInitialization().then(function(data) {
+            spec.sds.waitForDataReady().then(function(data) {
                 expect(data.length).toBe(2);
                 backend.notifyDataDelete(subParams, [{id: spec.r2.id, revision: spec.r2.revision + 1}]);
                 $rootScope.$evalAsync(function() {
@@ -331,7 +331,7 @@ describe('Basic Sync Service: ', function() {
         });
 
         it('should receive an array', function(done) {
-            spec.sds.waitForInitialization().then(function(data) {
+            spec.sds.waitForDataReady().then(function(data) {
                 expect(_.isArray(data)).toBe(true);
                 expect(data.length).toBe(2);
                 done();
@@ -341,7 +341,7 @@ describe('Basic Sync Service: ', function() {
 
         // one or list to test... check if instance is maintained too.
         it('should add a record to the array when receiving an add operation', function(done) {
-            spec.sds.waitForInitialization().then(function(data) {
+            spec.sds.waitForDataReady().then(function(data) {
                 expect(data.length).toBe(2);
                 backend.notifyDataCreation(subParams, [spec.rc3])
                     .then(function() {
@@ -354,7 +354,7 @@ describe('Basic Sync Service: ', function() {
         });
 
         it('should update existing record in the array when receiving an update operation', function(done) {
-            spec.sds.waitForInitialization().then(function(data) {
+            spec.sds.waitForDataReady().then(function(data) {
                 expect(data.length).toBe(2);
                 var rec = _.find(data, {id: spec.rc1.id});
                 backend.notifyDataUpdate(subParams, [spec.rc1b])
@@ -369,7 +369,7 @@ describe('Basic Sync Service: ', function() {
         });
 
         it('should remove a record from array when receiving a removal operation', function(done) {
-            spec.sds.waitForInitialization().then(function(data) {
+            spec.sds.waitForDataReady().then(function(data) {
                 expect(data.length).toBe(2);
                 var p = backend.notifyDataDelete(subParams, [{id: spec.rc2.id, revision: spec.rc2.revision + 1}]);
                 p.then(function() {
@@ -397,7 +397,7 @@ describe('Basic Sync Service: ', function() {
         });
 
         it('should receive an object', function(done) {
-            spec.sds.waitForInitialization().then(function(data) {
+            spec.sds.waitForDataReady().then(function(data) {
                 expect(_.isArray(data)).toBe(false);
                 done();
             });
@@ -405,7 +405,7 @@ describe('Basic Sync Service: ', function() {
         });
 
         it('should update existing record in the array when receiving an update operation', function(done) {
-            spec.sds.waitForInitialization().then(function(data) {
+            spec.sds.waitForDataReady().then(function(data) {
                 expect(data.description).toBe(spec.r1.description);
                 backend.notifyDataUpdate(subParams, [spec.r1b])
                     .then(function() {
@@ -417,7 +417,7 @@ describe('Basic Sync Service: ', function() {
         });
 
         it('should remove a record from array when receiving a removal operation', function(done) {
-            spec.sds.waitForInitialization().then(function(data) {
+            spec.sds.waitForDataReady().then(function(data) {
                 var p = backend.notifyDataDelete(subParams, [{id: spec.r1.id, revision: spec.r1.revision + 1}]);
                 p.then(function() {
                     expect(data.id).toBeUndefined();
@@ -437,7 +437,7 @@ describe('Basic Sync Service: ', function() {
         });
 
         it('should receive an array of objects with same class', function(done) {
-            spec.sds.waitForInitialization().then(function(data) {
+            spec.sds.waitForDataReady().then(function(data) {
                 expect(_.isArray(data)).toBe(true);
                 expect(data[0] instanceof Person).toBe(true);
                 expect(data[1] instanceof Person).toBe(true);
@@ -447,7 +447,7 @@ describe('Basic Sync Service: ', function() {
         });
 
         it('should update existing object in the array when receiving an update operation', function(done) {
-            spec.sds.waitForInitialization().then(function(data) {
+            spec.sds.waitForDataReady().then(function(data) {
                 var object = _.find(data, {id: spec.p1.id});
                 expect(data.length).toBe(2);
                 backend.notifyDataUpdate(subParams, [spec.p1b])
@@ -462,7 +462,7 @@ describe('Basic Sync Service: ', function() {
         });
 
         it('should only update object revision when object synced was originated locally', function(done) {
-            spec.sds.waitForInitialization().then(function(data) {
+            spec.sds.waitForDataReady().then(function(data) {
                 var object = _.find(data, {id: spec.p1.id});
                 expect(data.length).toBe(2);
 
@@ -493,7 +493,7 @@ describe('Basic Sync Service: ', function() {
         });
 
         it('should receive an object', function(done) {
-            spec.sds.waitForInitialization().then(function(data) {
+            spec.sds.waitForDataReady().then(function(data) {
                 expect(data instanceof Person).toBe(true);
                 done();
             });
@@ -501,7 +501,7 @@ describe('Basic Sync Service: ', function() {
         });
 
         it('should update existing object when receiving an update operation', function(done) {
-            spec.sds.waitForInitialization().then(function(data) {
+            spec.sds.waitForDataReady().then(function(data) {
                 expect(data.getFullname()).toBe(spec.p1.getFullname());
                 backend.notifyDataUpdate(subParams, [spec.p1b])
                     .then(function() {
@@ -513,7 +513,7 @@ describe('Basic Sync Service: ', function() {
         });
 
         it('should only update object revision when object synced was originated locally', function(done) {
-            spec.sds.waitForInitialization().then(function(data) {
+            spec.sds.waitForDataReady().then(function(data) {
                 expect(data.getFullname()).toBe(spec.p1.getFullname());
                 // modify local version to pretend something was inputed
                 data.timestamp = {sessionId: spec.sessionUser.sessionId, $isLocalUpdate: true};
@@ -533,7 +533,7 @@ describe('Basic Sync Service: ', function() {
         });
 
         it('should empty the single object  when receiving a removal operation', function(done) {
-            spec.sds.waitForInitialization().then(function(data) {
+            spec.sds.waitForDataReady().then(function(data) {
                 var p = backend.notifyDataDelete(subParams, [{id: spec.p1.id, revision: spec.p1.revision + 1}]);
                 p.then(function() {
                     expect(data.id).toBeUndefined();
@@ -544,7 +544,7 @@ describe('Basic Sync Service: ', function() {
         });
 
         it('should NOT empty the object when receiving an OLD removal operation', function(done) {
-            spec.sds.waitForInitialization().then(function(data) {
+            spec.sds.waitForDataReady().then(function(data) {
                 // debugger;
                 backend.notifyDataDelete(subParams, [{id: spec.p1.id, revision: spec.p1.revision}]);
                 expect(data.id).toBeDefined();
@@ -554,7 +554,7 @@ describe('Basic Sync Service: ', function() {
         });
 
         it('should NOT add any object when receiving an OLD removal operation', function(done) {
-            spec.sds.waitForInitialization().then(function(data) {
+            spec.sds.waitForDataReady().then(function(data) {
                 backend.notifyDataDelete(subParams, [{id: spec.p1.id, revision: spec.p1.revision + 1}])
                     .then(function() {
                         expect(data.id).toBeUndefined();
@@ -576,7 +576,7 @@ describe('Basic Sync Service: ', function() {
             });
 
             it('should NOT get called on receiving data at initialization', function(done) {
-                spec.sds.waitForInitialization().then(function() {
+                spec.sds.waitForDataReady().then(function() {
                     expect(spec.syncCallbacks.onUpdate).not.toHaveBeenCalled();
                     done();
                 });
@@ -584,7 +584,7 @@ describe('Basic Sync Service: ', function() {
             });
 
             it('should get called on receiving updated data', function(done) {
-                spec.sds.waitForInitialization().then(function() {
+                spec.sds.waitForDataReady().then(function() {
                     backend.notifyDataUpdate(subParams, [spec.r1b])
                         .then(function() {
                             expect(spec.syncCallbacks.onUpdate).toHaveBeenCalled();
@@ -603,7 +603,7 @@ describe('Basic Sync Service: ', function() {
             });
 
             it('should NOT get called on receiving data at initialization', function(done) {
-                spec.sds.waitForInitialization().then(function() {
+                spec.sds.waitForDataReady().then(function() {
                     expect(spec.syncCallbacks.onRemove).not.toHaveBeenCalled();
                     done();
                 });
@@ -611,7 +611,7 @@ describe('Basic Sync Service: ', function() {
             });
 
             it('should get called on receiving data removal', function(done) {
-                spec.sds.waitForInitialization().then(function() {
+                spec.sds.waitForDataReady().then(function() {
                     var p = backend.notifyDataDelete(subParams, [{id: spec.r1.id, revision: spec.r1.revision + 1}]);
                     p.then(function() {
                         expect(spec.syncCallbacks.onRemove).toHaveBeenCalled();
@@ -630,7 +630,7 @@ describe('Basic Sync Service: ', function() {
             });
 
             it('should ALSO get called on receiving data at initialization', function(done) {
-                spec.sds.waitForInitialization().then(function() {
+                spec.sds.waitForDataReady().then(function() {
                     expect(spec.syncCallbacks.onAdd).toHaveBeenCalled();
                     done();
                 });
@@ -638,7 +638,7 @@ describe('Basic Sync Service: ', function() {
             });
 
             it('should get called on receiving data removal', function(done) {
-                spec.sds.waitForInitialization().then(function() {
+                spec.sds.waitForDataReady().then(function() {
                     backend.notifyDataUpdate(subParams, [spec.r1b]);
                     expect(spec.syncCallbacks.onAdd).toHaveBeenCalled();
                     done();
@@ -655,7 +655,7 @@ describe('Basic Sync Service: ', function() {
             });
 
             it('should get called on receiving data at initialization', function(done) {
-                spec.sds.waitForInitialization().then(function() {
+                spec.sds.waitForDataReady().then(function() {
                     expect(spec.syncCallbacks.onReady).toHaveBeenCalled();
                     done();
                 });
@@ -663,7 +663,7 @@ describe('Basic Sync Service: ', function() {
             });
 
             it('should get called on receiving new data ', function(done) {
-                spec.sds.waitForInitialization().then(function() {
+                spec.sds.waitForDataReady().then(function() {
                     backend.notifyDataCreation(subParams, [spec.r2]);
                     expect(spec.syncCallbacks.onReady).toHaveBeenCalled();
                     done();
@@ -671,7 +671,7 @@ describe('Basic Sync Service: ', function() {
                 $rootScope.$digest();
             });
             it('should get called on receiving data update ', function(done) {
-                spec.sds.waitForInitialization().then(function() {
+                spec.sds.waitForDataReady().then(function() {
                     backend.notifyDataUpdate(subParams, [spec.r1b]);
                     expect(spec.syncCallbacks.onReady).toHaveBeenCalled();
                     done();
@@ -679,7 +679,7 @@ describe('Basic Sync Service: ', function() {
                 $rootScope.$digest();
             });
             it('should get called on receiving data removal ', function(done) {
-                spec.sds.waitForInitialization().then(function() {
+                spec.sds.waitForDataReady().then(function() {
                     backend.notifyDataDelete(subParams, [spec.r1]);
                     expect(spec.syncCallbacks.onReady).toHaveBeenCalled();
                     done();
@@ -699,7 +699,7 @@ describe('Basic Sync Service: ', function() {
                     });
                 spec.sds.setParameters();
                 $rootScope.$digest();
-                //                spec.sds.waitForInitialization();
+                //                spec.sds.waitForDataReady();
             });
 
 
@@ -717,7 +717,7 @@ describe('Basic Sync Service: ', function() {
                     })
                     .setParameters();
                 $rootScope.$digest();
-                spec.sds.waitForInitialization().then(function(data) {
+                spec.sds.waitForDataReady().then(function(data) {
                     synchronizedData = data;
                     n--;
                     backend.notifyDataUpdate(subParams, [spec.r3]);
@@ -738,7 +738,7 @@ describe('Basic Sync Service: ', function() {
                     })
                     .setParameters();
                 $rootScope.$digest();
-                spec.sds.waitForInitialization();
+                spec.sds.waitForDataReady();
                 $rootScope.$digest();
             });
 
@@ -759,7 +759,7 @@ describe('Basic Sync Service: ', function() {
                     })
                     .setParameters();
                 $rootScope.$digest();
-                spec.sds.waitForInitialization().then(function(data) {
+                spec.sds.waitForDataReady().then(function(data) {
                     synchronizedData = data;
                     n--;
                     backend.notifyDataUpdate(subParams, [spec.p1b]);
@@ -776,7 +776,7 @@ describe('Basic Sync Service: ', function() {
         });
 
         it('should dispose removed record after receiving a removal operation', function(done) {
-            spec.sds.waitForInitialization().then(function(data) {
+            spec.sds.waitForDataReady().then(function(data) {
                 expect(spec.garbageCollector.dispose).not.toHaveBeenCalled();
                 var p = backend.notifyDataDelete(subParams, [{id: spec.r2.id, revision: spec.r2.revision + 1}]);
                 p.then(function() {
@@ -788,7 +788,7 @@ describe('Basic Sync Service: ', function() {
         });
 
         it('should collect disposed record after some time', function(done) {
-            spec.sds.waitForInitialization().then(function(data) {
+            spec.sds.waitForDataReady().then(function(data) {
                 var p = backend.notifyDataDelete(subParams, [{id: spec.r2.id, revision: spec.r2.revision + 1}]);
                 expect(spec.garbageCollector.run).not.toHaveBeenCalled();
                 expect(spec.sds.isExistingStateFor(spec.r2)).toBe(true);
@@ -812,7 +812,7 @@ describe('Basic Sync Service: ', function() {
         spec.sds.setParameters();
         $scope.$digest();
         jasmine.clock().tick(2100); // the subscription does not listen to connection event right away (Need better handling)
-        spec.sds.waitForInitialization().then(function(data) {
+        spec.sds.waitForDataReady().then(function(data) {
             // initial subscription call
             expect(spec.$socketio.fetch.calls.count()).toEqual(1);
             backend.setData(subParams, [spec.r3]);
@@ -825,7 +825,7 @@ describe('Basic Sync Service: ', function() {
             // 2nd subscription for reconnect
             expect(spec.$socketio.fetch.calls.mostRecent().args[0]).toEqual('sync.subscribe');
 
-            // spec.sds.waitForInitialization().then(function () {
+            // spec.sds.waitForDataReady().then(function () {
 
             // });
         });

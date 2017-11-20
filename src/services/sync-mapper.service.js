@@ -281,7 +281,7 @@ function syncMappingProvider() {
                 } else {
                     propertyMapper.setParams(obj, subParams);
 
-                    return propertyMapper.subscription.waitForInitialization().then(function(data) {
+                    return propertyMapper.subscription.waitForDataReady().then(function(data) {
                         if (propertyMapper.subscription.isSingle()) {
                             propertyMapper.definition.mapFn(data, obj, false, '');
                         } else {

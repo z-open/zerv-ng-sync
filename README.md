@@ -48,20 +48,20 @@ setParameters starts the syncing, so syncOn is not needed.
 
     promise = $sync.subscribe('people.sync')
                 .setObjectClass(Person)
-                .waitForInitialization().then(function(data){
+                .waitForDataReady().then(function(data){
                     console.log('subscription is now active and data is ready');
                 });
      
 
 
 The setObjectClass defines the class of each object in the array.
-The waitForInitialization starts the syncing. The promise resolves when the initial data is received.
+The waitForDataReady starts the syncing. The promise resolves when the initial data is received.
 
 ### Example: start or stop syncing
 
 There are multiple ways for a subscription to start syncing
 - setParameters(object): Provide the parameters and the subscription will start syncing
-- waitForInitialization(): the subscription will start syncing if it is not already syncing. This returns a promise resolving with the data
+- waitForDataReady(): the subscription will start syncing if it is not already syncing. This returns a promise resolving with the data
 - syncOn(): the subscription will start syncing if it is not already syncing
 
 In order to stop a subscription
@@ -73,8 +73,8 @@ Ex:
 
      sds = $sync.subscribe('people.sync')
      
-     // sds starts syncing after waitForInitialization since no setParameters was provided.
-     sds.waitForInitialization().then(function(data){
+     // sds starts syncing after waitForDataReady since no setParameters was provided.
+     sds.waitForDataReady().then(function(data){
           console.log('subscription is now initialed with data. This event occurs only once');
      });
      
@@ -267,7 +267,7 @@ The library must be set up in your test runner beforehand in addition of dist/ze
         })
 
         it('should return an array via the resolved promise',function(done){
-               spec.sds.waitForInitialization(function(data){
+               spec.sds.waitForDataReady(function(data){
                    expect(sds.getData().length).toBe(2);
                    done();
                });

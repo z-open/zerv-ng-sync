@@ -436,7 +436,7 @@
                     } else {
                         propertyMapper.setParams(obj, subParams);
 
-                        return propertyMapper.subscription.waitForInitialization().then(function (data) {
+                        return propertyMapper.subscription.waitForDataReady().then(function (data) {
                             if (propertyMapper.subscription.isSingle()) {
                                 propertyMapper.definition.mapFn(data, obj, false, '');
                             } else {
@@ -746,7 +746,7 @@
                     }
                 }, GRACE_PERIOD_IN_SECONDS * 1000);
 
-                sDs.setParameters(params).waitForInitialization().then(function () {
+                sDs.setParameters(params).waitForDataReady().then(function () {
                     clearTimeout(gracePeriod);
                     deferred.resolve(sDs);
                 }).catch(function () {
@@ -842,14 +842,16 @@
 
                 this.attach = attach;
                 this.waitForDataReady = waitForDataReady;
-                this.waitForInitialization = waitForInitialization;
+                this.load = load;
                 this.getData = getData;
                 this.getOne = getOne;
                 this.getAll = getAll;
                 this.sort = sort;
                 this.orderBy = orderBy;
                 this.destroy = destroy;
-                this.setOnReady = setOnReady;
+
+                this.onDataReceived = onDataReceived;
+                this.setOnReady = onDataReceived;
 
                 // when the subscription data is updated, the subset updates its own cache.
                 var offs = [ds.onUpdate(updateCache), ds.onAdd(updateCache), ds.onRemove(deleteCache), ds.onReady(function () {
@@ -870,7 +872,7 @@
                  * 
                  * @param {Function} callback 
                  */
-                function setOnReady(callback) {
+                function onDataReceived(callback) {
                     onReadyFn = callback;
                     return thisDs;
                 }
@@ -892,17 +894,17 @@
                 }
 
                 /**
-                 * @deprecated use waitForInitialization instead
+                 * @deprecated use waitForDataReady instead
                  * @param {*} callback 
                  */
                 function waitForDataReady(callback) {
-                    logWarn('waitForDataReady is deprecated, use waitForInitialization instead');
+                    logWarn('waitForDataReady is deprecated, use load instead');
                     return ds.waitForDataReady(callback);
                     // .then(updateAllCache);
                 }
 
-                function waitForInitialization(callback) {
-                    return ds.waitForInitialization(callback);
+                function load() {
+                    return ds.waitForDataReady();
                 }
 
                 function updateCache(rec) {
@@ -943,12 +945,12 @@
                 function getOne(args) {
                     if (_.isNil(args)) {
                         // throw new Error('GetOne requires parameters');
-                        return waitForInitialization().then(function () {
+                        return waitForDataReady().then(function () {
                             return null;
                         });
                     }
                     args = _.concat([cache], arguments);
-                    return waitForInitialization().then(function () {
+                    return waitForDataReady().then(function () {
                         return _.find.apply(this, args);
                     });
                 }
@@ -959,7 +961,7 @@
                  *  @returns {Promise} returns with all data
                  */
                 function getAll() {
-                    return waitForInitialization().then(function () {
+                    return waitForDataReady().then(function () {
                         return cache;
                     });
                 }
@@ -1067,7 +1069,10 @@
                 this.ready = false;
                 this.syncOn = syncOn;
                 this.syncOff = syncOff;
-                this.setOnReady = setOnReady;
+
+                this.onDataReceived = onDataReceived;
+
+                this.setOnReady = onDataReceived;
                 this.setOnUpdate = setOnUpdate;
 
                 this.orderBy = orderBy;
@@ -1085,6 +1090,9 @@
                 this.getData = getData;
                 this.getOne = getOne;
                 this.getAll = getAll;
+
+                this.load = load;
+
                 this.setParameters = setParameters;
                 this.getParameters = getParameters;
                 this.refresh = refresh;
@@ -1093,7 +1101,6 @@
 
                 this.waitForDataReady = waitForDataReady;
                 this.waitForSubscriptionReady = waitForSubscriptionReady;
-                this.waitForInitialization = waitForInitialization;
 
                 this.setForce = setForce;
                 this.isSyncing = isSyncing;
@@ -1170,13 +1177,13 @@
                         throw new Error('GetOne is only applicable to an array subscription.');
                     }
                     if (_.isNil(args)) {
-                        return waitForInitialization().then(function () {
+                        return waitForDataReady().then(function () {
                             return null;
                         });
                         // throw new Error('GetOne requires parameters');
                     }
                     args = _.concat([getData()], arguments);
-                    return waitForInitialization().then(function () {
+                    return waitForDataReady().then(function () {
                         return _.find.apply(this, args);
                     });
                 }
@@ -1190,7 +1197,7 @@
                     if (isSingle()) {
                         throw new Error('GetOne is only applicable to an array subscription.');
                     }
-                    return waitForInitialization().then(function () {
+                    return waitForDataReady().then(function () {
                         return getData();
                     });
                 }
@@ -1238,7 +1245,7 @@
                  * 
                  *  @param {Function} callback receiving an array with all records of the cache if the subscription is to an array, otherwise the single object if the subscription is to a single object.
                  */
-                function setOnReady(callback) {
+                function onDataReceived(callback) {
                     if (strictCode && onReadyOff) {
                         throw new Error('setOnReady is already set in subscription to ' + publication + '. It cannot be resetted to prevent bad practice leading to potential memory leak . Consider using setOnReady when subscription is instantiated. Alternative is using onReady to set the callback but do not forget to remove the listener when no longer needed (usually at scope destruction).');
                     }
@@ -1443,7 +1450,7 @@
                         }
                         var fetchParams = {};
                         fetchParams.id = obj[idProperty];
-                        return fetchFn.setParameters(fetchParams).waitForInitialization().then(function (object) {
+                        return fetchFn.setParameters(fetchParams).waitForDataReady().then(function (object) {
                             obj[propertyName] = object;
                         });
                     });
@@ -1677,6 +1684,17 @@
                 }
 
                 /**
+                 * Launch the subscription and wait to receive the data
+                 * @param {*} fetchingParams 
+                 * @param {*} options 
+                 * 
+                 * @returns {Promise} returns on object with the last synced data.
+                 */
+                function load(fetchingParams, options) {
+                    return setParameters(fetchingParams, options).waitForDataReady();
+                }
+
+                /**
                  * this function starts the syncing.
                  * Only publication pushing data matching our fetching params will be received.
                  * 
@@ -1709,7 +1727,7 @@
                 }
 
                 /**
-                 * @deprecated use waitForInitialization instead
+                 * @deprecated use waitForDataReady instead
                  * 
                  * Wait for the subscription to establish initial retrieval of data and returns this subscription in a promise
                  * 
@@ -1717,7 +1735,6 @@
                  * @returns {Promise} that waits for the initial fetch to complete then wait for the initial fetch to complete then returns this subscription.
                  */
                 function waitForSubscriptionReady(callback) {
-                    logWarn('waitForSubscriptionReady is deprecated, use waitForInitialization instead');
                     return startSyncing().then(function () {
                         if (callback) {
                             callback(thisSub);
@@ -1732,24 +1749,13 @@
                  * @param {function} optional function that will be called with the synced data and this subscription object when the data is ready 
                  * @returns {Promise} that waits for the initial fetch to complete then returns the data
                  */
-                function waitForInitialization(callback) {
+                function waitForDataReady(callback) {
                     return startSyncing().then(function (data) {
                         if (callback) {
                             callback(data, thisSub);
                         }
                         return data;
                     });
-                }
-
-                /**
-                 * @deprecated use waitForInitialization instead
-                 * 
-                 * @param {function} optional function that will be called with the synced data and this subscription object when the data is ready 
-                 * @returns {Promise} that waits for the initial fetch to complete then returns the data
-                 */
-                function waitForDataReady(callback) {
-                    logWarn('waitForDataReady is deprecated, use waitForInitialization instead');
-                    return waitForInitialization(callback);
                 }
 
                 // does the dataset returns only one object? not an array?
@@ -1884,7 +1890,7 @@
                         // ------------------------------
                         // if a mapping is against an existing subscription, and the existing subscription params were changed externally, no by the mapping
                         // the synced object would have mapped incorrectly, this force the re-mapping.
-                        // when the function setParams, waitForInitialization, syncOn are called
+                        // when the function setParams, waitForDataReady, syncOn are called
                         // better solution would be that the external subscription let know this subscription that is params has been modified, then only we would refresh
                         // the mapping.
                         if (dependentSubscriptions.length) {
@@ -2492,11 +2498,15 @@
 
                         // if there is no previous record we do not need to removed any thing from our storage.     
                         if (previous) {
-                            var recordBeingDeleted = _.assign({}, previous);
+                            // some complexity here to rework:
+                            // - make sure the recordBeingDeleted is a fulling working object to process the delete. Mapdata with operation 'remove' might get called against this object.
+                            // - cache is being cleared while the recordBeingDeleted is processed
+                            var recordBeingDeleted = _.assign(formatRecord ? formatRecord({}) : {}, previous);
                             updateDataStorage(record);
                             $syncMapping.removePropertyMappers(thisSub, record);
                             syncListener.notify('remove', record);
                             dispose(record);
+
                             return mapFullObject(recordBeingDeleted, 'remove');
                         }
                     }

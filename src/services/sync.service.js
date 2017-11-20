@@ -121,7 +121,7 @@ this.$get = function sync($rootScope, $pq, $socketio, $syncGarbageCollector, $sy
         }, GRACE_PERIOD_IN_SECONDS * 1000);
 
         sDs.setParameters(params)
-            .waitForInitialization()
+            .waitForDataReady()
             .then(function() {
                 clearTimeout(gracePeriod);
                 deferred.resolve(sDs);
@@ -226,14 +226,16 @@ this.$get = function sync($rootScope, $pq, $socketio, $syncGarbageCollector, $sy
 
         this.attach = attach;
         this.waitForDataReady = waitForDataReady;
-        this.waitForInitialization = waitForInitialization;
+        this.load = load;
         this.getData = getData;
         this.getOne = getOne;
         this.getAll = getAll;
         this.sort = sort;
         this.orderBy = orderBy;
         this.destroy = destroy;
-        this.setOnReady = setOnReady;
+
+        this.onDataReceived = onDataReceived;
+        this.setOnReady = onDataReceived;
 
         // when the subscription data is updated, the subset updates its own cache.
         const offs = [
@@ -259,7 +261,7 @@ this.$get = function sync($rootScope, $pq, $socketio, $syncGarbageCollector, $sy
          * 
          * @param {Function} callback 
          */
-        function setOnReady(callback) {
+        function onDataReceived(callback) {
             onReadyFn = callback;
             return thisDs;
         }
@@ -281,17 +283,18 @@ this.$get = function sync($rootScope, $pq, $socketio, $syncGarbageCollector, $sy
         }
 
         /**
-         * @deprecated use waitForInitialization instead
+         * @deprecated use waitForDataReady instead
          * @param {*} callback 
          */
         function waitForDataReady(callback) {
-            logWarn('waitForDataReady is deprecated, use waitForInitialization instead');
+            logWarn('waitForDataReady is deprecated, use load instead');
             return ds.waitForDataReady(callback);
             // .then(updateAllCache);
         }
 
-        function waitForInitialization(callback) {
-            return ds.waitForInitialization(callback);
+
+        function load() {
+            return ds.waitForDataReady();
         }
 
         function updateCache(rec) {
@@ -332,13 +335,13 @@ this.$get = function sync($rootScope, $pq, $socketio, $syncGarbageCollector, $sy
         function getOne(args) {
             if (_.isNil(args)) {
                 // throw new Error('GetOne requires parameters');
-                return waitForInitialization().then(
+                return waitForDataReady().then(
                     function() {
                         return null;
                     });
             }
             args = _.concat([cache], arguments);
-            return waitForInitialization().then(
+            return waitForDataReady().then(
                 function() {
                     return _.find.apply(this, args);
                 });
@@ -350,7 +353,7 @@ this.$get = function sync($rootScope, $pq, $socketio, $syncGarbageCollector, $sy
          *  @returns {Promise} returns with all data
          */
         function getAll() {
-            return waitForInitialization().then(
+            return waitForDataReady().then(
                 function() {
                     return cache;
                 });
@@ -449,7 +452,10 @@ this.$get = function sync($rootScope, $pq, $socketio, $syncGarbageCollector, $sy
         this.ready = false;
         this.syncOn = syncOn;
         this.syncOff = syncOff;
-        this.setOnReady = setOnReady;
+
+        this.onDataReceived = onDataReceived;
+
+        this.setOnReady = onDataReceived;
         this.setOnUpdate = setOnUpdate;
 
         this.orderBy = orderBy;
@@ -467,6 +473,9 @@ this.$get = function sync($rootScope, $pq, $socketio, $syncGarbageCollector, $sy
         this.getData = getData;
         this.getOne = getOne;
         this.getAll = getAll;
+
+        this.load = load;
+
         this.setParameters = setParameters;
         this.getParameters = getParameters;
         this.refresh = refresh;
@@ -475,7 +484,6 @@ this.$get = function sync($rootScope, $pq, $socketio, $syncGarbageCollector, $sy
 
         this.waitForDataReady = waitForDataReady;
         this.waitForSubscriptionReady = waitForSubscriptionReady;
-        this.waitForInitialization = waitForInitialization;
 
         this.setForce = setForce;
         this.isSyncing = isSyncing;
@@ -552,14 +560,14 @@ this.$get = function sync($rootScope, $pq, $socketio, $syncGarbageCollector, $sy
                 throw new Error('GetOne is only applicable to an array subscription.');
             }
             if (_.isNil(args)) {
-                return waitForInitialization().then(
+                return waitForDataReady().then(
                     function() {
                         return null;
                     });
                 // throw new Error('GetOne requires parameters');
             }
             args = _.concat([getData()], arguments);
-            return waitForInitialization().then(
+            return waitForDataReady().then(
                 function() {
                     return _.find.apply(this, args);
                 });
@@ -574,7 +582,7 @@ this.$get = function sync($rootScope, $pq, $socketio, $syncGarbageCollector, $sy
             if (isSingle()) {
                 throw new Error('GetOne is only applicable to an array subscription.');
             }
-            return waitForInitialization().then(
+            return waitForDataReady().then(
                 function() {
                     return getData();
                 });
@@ -624,7 +632,7 @@ this.$get = function sync($rootScope, $pq, $socketio, $syncGarbageCollector, $sy
          * 
          *  @param {Function} callback receiving an array with all records of the cache if the subscription is to an array, otherwise the single object if the subscription is to a single object.
          */
-        function setOnReady(callback) {
+        function onDataReceived(callback) {
             if (strictCode && onReadyOff) {
                 throw new Error('setOnReady is already set in subscription to ' + publication+ '. It cannot be resetted to prevent bad practice leading to potential memory leak . Consider using setOnReady when subscription is instantiated. Alternative is using onReady to set the callback but do not forget to remove the listener when no longer needed (usually at scope destruction).');
             }
@@ -832,7 +840,7 @@ this.$get = function sync($rootScope, $pq, $socketio, $syncGarbageCollector, $sy
                 fetchParams.id = obj[idProperty];
                 return fetchFn
                     .setParameters(fetchParams)
-                    .waitForInitialization()
+                    .waitForDataReady()
                     .then(function(object) {
                         obj[propertyName] = object;
                     });
@@ -1075,6 +1083,18 @@ this.$get = function sync($rootScope, $pq, $socketio, $syncGarbageCollector, $sy
             syncListener.notify('ready', getData(), [cachedObject]);
         }
 
+
+        /**
+         * Launch the subscription and wait to receive the data
+         * @param {*} fetchingParams 
+         * @param {*} options 
+         * 
+         * @returns {Promise} returns on object with the last synced data.
+         */
+        function load(fetchingParams, options) {
+            return setParameters(fetchingParams, options).waitForDataReady();
+        }
+
         /**
          * this function starts the syncing.
          * Only publication pushing data matching our fetching params will be received.
@@ -1108,7 +1128,7 @@ this.$get = function sync($rootScope, $pq, $socketio, $syncGarbageCollector, $sy
         }
 
         /**
-         * @deprecated use waitForInitialization instead
+         * @deprecated use waitForDataReady instead
          * 
          * Wait for the subscription to establish initial retrieval of data and returns this subscription in a promise
          * 
@@ -1116,7 +1136,6 @@ this.$get = function sync($rootScope, $pq, $socketio, $syncGarbageCollector, $sy
          * @returns {Promise} that waits for the initial fetch to complete then wait for the initial fetch to complete then returns this subscription.
          */
         function waitForSubscriptionReady(callback) {
-            logWarn('waitForSubscriptionReady is deprecated, use waitForInitialization instead');
             return startSyncing().then(function() {
                 if (callback) {
                     callback(thisSub);
@@ -1131,25 +1150,13 @@ this.$get = function sync($rootScope, $pq, $socketio, $syncGarbageCollector, $sy
          * @param {function} optional function that will be called with the synced data and this subscription object when the data is ready 
          * @returns {Promise} that waits for the initial fetch to complete then returns the data
          */
-        function waitForInitialization(callback) {
+        function waitForDataReady(callback) {
             return startSyncing().then(function(data) {
                 if (callback) {
                     callback(data, thisSub);
                 }
                 return data;
             });
-        }
-
-
-        /**
-         * @deprecated use waitForInitialization instead
-         * 
-         * @param {function} optional function that will be called with the synced data and this subscription object when the data is ready 
-         * @returns {Promise} that waits for the initial fetch to complete then returns the data
-         */
-        function waitForDataReady(callback) {
-            logWarn('waitForDataReady is deprecated, use waitForInitialization instead');
-            return waitForInitialization(callback);
         }
 
 
@@ -1287,7 +1294,7 @@ this.$get = function sync($rootScope, $pq, $socketio, $syncGarbageCollector, $sy
                 // ------------------------------
                 // if a mapping is against an existing subscription, and the existing subscription params were changed externally, no by the mapping
                 // the synced object would have mapped incorrectly, this force the re-mapping.
-                // when the function setParams, waitForInitialization, syncOn are called
+                // when the function setParams, waitForDataReady, syncOn are called
                 // better solution would be that the external subscription let know this subscription that is params has been modified, then only we would refresh
                 // the mapping.
                 if (dependentSubscriptions.length) {
@@ -1908,11 +1915,15 @@ this.$get = function sync($rootScope, $pq, $socketio, $syncGarbageCollector, $sy
 
                 // if there is no previous record we do not need to removed any thing from our storage.     
                 if (previous) {
-                    const recordBeingDeleted = _.assign({}, previous);
+                    // some complexity here to rework:
+                    // - make sure the recordBeingDeleted is a fulling working object to process the delete. Mapdata with operation 'remove' might get called against this object.
+                    // - cache is being cleared while the recordBeingDeleted is processed
+                    const recordBeingDeleted = _.assign(formatRecord ? formatRecord({}) : {}, previous);
                     updateDataStorage(record);
                     $syncMapping.removePropertyMappers(thisSub, record);
                     syncListener.notify('remove', record);
                     dispose(record);
+
                     return mapFullObject(recordBeingDeleted, 'remove');
                 }
             }

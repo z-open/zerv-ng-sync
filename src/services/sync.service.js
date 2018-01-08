@@ -36,7 +36,7 @@ function noop(r) {
 }
 
 this.setDebug = function(value) {
-    isLogInfo = value === 1;
+    isLogInfo = value >= 1;
     isLogDebug = value === 2;
     $syncMappingProvider.setDebug(isLogDebug);
     return this;
@@ -1242,10 +1242,6 @@ this.$get = function sync($rootScope, $pq, $socketio, $syncGarbageCollector, $sy
          * @returns this subcription
          */
         function syncOff() {
-            if (deferredInitialization) {
-                // if there is code waiting on this promise.. ex (load in resolve)
-                deferredInitialization.resolve(getData());
-            }
             if (isSyncingOn) {
                 unregisterSubscription();
                 isSyncingOn = false;
@@ -1260,6 +1256,12 @@ this.$get = function sync($rootScope, $pq, $socketio, $syncGarbageCollector, $sy
                     reconnectOff = null;
                 }
             }
+
+            if (deferredInitialization) {
+                // if there is code waiting on this promise.. ex (load in resolve)
+                deferredInitialization.resolve(getData());
+            }
+            
             return thisSub;
         }
 

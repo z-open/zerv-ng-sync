@@ -2093,6 +2093,14 @@
                     }, listenNow ? 0 : 2000);
                 }
 
+                /**
+                 * Register the subscription on the zerv server
+                 * and save the subscriptionId for network recovery.
+                 * Note:
+                 * On connection loss, the subscription id will be used to reconnect the zerver 
+                 * and prevent refetching all data. 
+                 * Only the missing data that was not received during the disconnection would then be received if any.
+                 */
                 function registerSubscription() {
                     $socketio.fetch('sync.subscribe', {
                         version: SYNC_VERSION,
@@ -2100,7 +2108,11 @@
                         publication: publication,
                         params: subParams
                     }).then(function (subId) {
-                        subscriptionId = subId;
+                        // registration might complete after an order to syncOff. 
+                        if (isSyncingOn) {
+                            // syncing is on, let's remember the subId for potential reconnect to prevent refetching all data.
+                            subscriptionId = subId;
+                        }
                     });
                 }
 

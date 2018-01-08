@@ -72,11 +72,10 @@ In order to stop a subscription
 Ex:
 
      sds = $sync.subscribe('people.sync')
-           .setOnReady(
      
      // sds starts syncing after waitForDataReady since no setParameters was provided.
      sds.waitForDataReady().then(function(data){
-          console.log('subscription is now initialed with data.');
+          console.log('subscription is now initialed with data. This event occurs only once');
      });
      
      // 10s later it stops
@@ -94,7 +93,7 @@ Ex:
 
 ### Example: Syncing from a view state only or limited scope
 
-TBD: using attach(scope)
+TBD: using attach(scope,release)
 
 ### Example: Syncing from a service
 

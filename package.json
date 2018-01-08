@@ -6,7 +6,7 @@
   "repository": {
     "url": ""
   },
-  "version": "1.2.4",
+  "version": "1.2.5",
   "dependencies": {
     "angular": "~1.5.8",
     "lodash": "~4.0.0",

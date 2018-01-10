@@ -2580,9 +2580,13 @@
                         }
                         existing = record;
                     } else {
+                        var isExistingToBeRemoved = existing.removed;
                         merge(existing, record);
                         if (record.removed) {
                             cache.splice(cache.indexOf(existing), 1);
+                        } else if (isExistingToBeRemoved) {
+                            // let's put back the record in the cache, it has been readded
+                            cache.push(existing);
                         }
                     }
                     return existing;

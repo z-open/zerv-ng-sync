@@ -36,7 +36,7 @@ function noop(r) {
 }
 
 this.setDebug = function(value) {
-    isLogInfo = value === 1;
+    isLogInfo = value >= 1;
     isLogDebug = value === 2;
     $syncMappingProvider.setDebug(isLogDebug);
     return this;
@@ -1242,10 +1242,6 @@ this.$get = function sync($rootScope, $pq, $socketio, $syncGarbageCollector, $sy
          * @returns this subcription
          */
         function syncOff() {
-            if (deferredInitialization) {
-                // if there is code waiting on this promise.. ex (load in resolve)
-                deferredInitialization.resolve(getData());
-            }
             if (isSyncingOn) {
                 unregisterSubscription();
                 isSyncingOn = false;
@@ -1260,6 +1256,12 @@ this.$get = function sync($rootScope, $pq, $socketio, $syncGarbageCollector, $sy
                     reconnectOff = null;
                 }
             }
+
+            if (deferredInitialization) {
+                // if there is code waiting on this promise.. ex (load in resolve)
+                deferredInitialization.resolve(getData());
+            }
+            
             return thisSub;
         }
 
@@ -1500,6 +1502,15 @@ this.$get = function sync($rootScope, $pq, $socketio, $syncGarbageCollector, $sy
             }, listenNow ? 0 : 2000);
         }
 
+
+        /**
+         * Register the subscription on the zerv server
+         * and save the subscriptionId for network recovery.
+         * Note:
+         * On connection loss, the subscription id will be used to reconnect the zerver 
+         * and prevent refetching all data. 
+         * Only the missing data that was not received during the disconnection would then be received if any.
+         */
         function registerSubscription() {
             $socketio.fetch('sync.subscribe', {
                 version: SYNC_VERSION,
@@ -1507,7 +1518,11 @@ this.$get = function sync($rootScope, $pq, $socketio, $syncGarbageCollector, $sy
                 publication: publication,
                 params: subParams,
             }).then(function(subId) {
-                subscriptionId = subId;
+                // registration might complete after an order to syncOff. 
+                if (isSyncingOn) {
+                    // syncing is on, let's remember the subId for potential reconnect to prevent refetching all data.
+                    subscriptionId = subId;
+                }
             });
         }
 
@@ -1984,9 +1999,13 @@ this.$get = function sync($rootScope, $pq, $socketio, $syncGarbageCollector, $sy
                 }
                 existing = record;
             } else {
+                const isExistingToBeRemoved = existing.removed;
                 merge(existing, record);
                 if (record.removed) {
                     cache.splice(cache.indexOf(existing), 1);
+                } else if (isExistingToBeRemoved) {
+                    // let's put back the record in the cache, it has been readded
+                    cache.push(existing);
                 }
             }
             return existing;

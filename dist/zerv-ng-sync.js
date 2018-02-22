@@ -834,7 +834,7 @@
              * @param {*} scope 
              * @param {*} onDestroyFn 
              */
-            function FilteredDataSet(ds, filter, scope, onDestroyFn) {
+            function FilteredSubSet(ds, filter, scope, onDestroyFn) {
                 var orderByFn = void 0,
                     onReadyFn = void 0;
                 var cache = [];
@@ -849,6 +849,7 @@
                 this.sort = sort;
                 this.orderBy = orderBy;
                 this.destroy = destroy;
+                this.refresh = refresh;
 
                 this.onDataReceived = onDataReceived;
                 this.setOnReady = onDataReceived;
@@ -865,6 +866,18 @@
 
                 if (scope) {
                     attach(scope);
+                }
+
+                /** 
+                * Refresh the data, this could be necessary if the filter is based on external information that has changed 
+                */
+                function refresh() {
+                    return ds.getAll().then(function (data) {
+                        cache.length = 0;
+                        _.forEach(data, function (record) {
+                            return updateCache(record);
+                        });
+                    });
                 }
 
                 /**
@@ -1078,7 +1091,10 @@
                 this.orderBy = orderBy;
                 this.sort = sort;
 
-                this.createFilteredDataSet = createFilteredDataSet;
+                this.createFilteredDataSet = createSubSet; // deprecated
+
+                this.createSubSet = createSubSet;
+                this.refreshSubSets = refreshSubSets;
 
                 this.resync = resync;
 
@@ -1231,12 +1247,23 @@
                     isLogDebug && logDebug('Subscription to ' + thisSub + ' destroyed.');
                 }
 
-                function createFilteredDataSet(filter, scope) {
-                    var fds = new FilteredDataSet(thisSub, filter, scope, function () {
+                function createSubSet(filter, scope) {
+                    var fds = new FilteredSubSet(thisSub, filter, scope, function () {
                         _.remove(filteredDataSets, fds);
                     });
                     filteredDataSets.push(fds);
                     return fds;
+                }
+
+                /**
+                * Refresh the data in all subsets
+                * This could be necessary if the subset filters are based on external information that has changed 
+                * If not all subsets rely on external data for filtering, a refresh method can be called on the subset that does for increased performance. 
+                */
+                function refreshSubSets() {
+                    return $pq.all(_.map(filteredDataSets, function (subSet) {
+                        return subSet.refresh();
+                    }));
                 }
 
                 /** 
@@ -1857,7 +1884,6 @@
                         // if there is code waiting on this promise.. ex (load in resolve)
                         deferredInitialization.resolve(getData());
                     }
-
                     return thisSub;
                 }
 

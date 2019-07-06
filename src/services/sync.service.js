@@ -1,5 +1,5 @@
 /**
- * 
+ * TEST
  * Service that allows an array of data remain in sync with backend.
  * 
  * 
@@ -92,6 +92,7 @@ this.$get = function sync($rootScope, $pq, $socketio, $syncGarbageCollector, $sy
         getGracePeriod: getGracePeriod,
         getIdValue: getIdValue,
         getCurrentSubscriptionCount: getCurrentSubscriptionCount,
+        differenceBetween
     };
 
     return service;
@@ -1184,6 +1185,7 @@ this.$get = function sync($rootScope, $pq, $socketio, $syncGarbageCollector, $sy
                 try {
                     if (record.timestamp) {
                         record.timestamp.$sync = thisSub;
+                        record.timestamp.$untouched = _.cloneDeep(record.toJSON ? record.toJSON() : record);
                     }
                     return updateFn(record);
                 } catch (e) {
@@ -1749,6 +1751,16 @@ this.$get = function sync($rootScope, $pq, $socketio, $syncGarbageCollector, $sy
          * 
          */
         function applyChanges(records, force) {
+
+// publication must be have a parma to make it work as partial
+// if (this.isSingle() && records.length && records[0].$partial) {
+//     const fullObj = _.cloneDeep(cache.toJSON());
+//     records[0] = mergeChange(fullObj, records[0]);
+// // maker sure we maintain revision and other special fields
+
+// }
+
+
             thisSub.ready = false;
             return waitForExternalDatasourcesReady()
                 .then(function() {
@@ -2138,5 +2150,85 @@ function getCurrentSubscriptionCount() {
     return totalSub;
 }
 };
+
+// ------------------------------------
+
+function differenceBetween(jsonObj1, jsonObj2) {
+    const objDifferences = {};
+    _.forEach(_.keys(jsonObj1), property => {
+        if (['id', 'revision'].indexOf(property) !== -1) {
+            // there is no need to compare this.
+            return;
+        }
+        if (_.isArray(jsonObj1[property])) {
+            const obj1Array = jsonObj1[property];
+            const obj2Array = jsonObj2[property];
+            if (_.isEmpty(obj2Array)) {
+                objDifferences[property] = jsonObj1[property];
+                return;
+            }
+
+            if (!obj1Array.length) {
+                if (!obj2Array.length) {
+                    // objects are both empty, so equals
+                    return;
+                }
+                // obj2 is not empty
+                // so obj1 does not have its data
+                objDifferences[property] = [];
+                return;
+            }
+
+            // does obj1 has its content managed by ids
+            if (_.isNil(obj1Array[0].id)) {
+                // no it is just a big array of data
+                if (!_.isEqual(obj1Array, obj2Array)) {
+                    objDifferences[property] = obj1Array;
+                }
+                return;
+            }
+
+            // since objects have ids, let's dig in to get specific difference
+            const rowDifferences = [];
+            for (let obj1Row of obj1Array) {
+                const id = obj1Row.id;
+                const obj2Row = _.find(obj2Array, { id });
+                if (obj2Row) {
+                    // is it updated?
+                    const r = differenceBetween(obj1Row, obj2Row);
+                    if (!_.isEmpty(r)) {
+                        rowDifferences.push(_.assign({ id }, r));
+                    }
+                } else {
+                    // row does not exist in the other obj
+                    rowDifferences.push(obj1Row);
+                }
+            }
+            // any row is no longer in obj1
+            for (let obj2Row of obj2Array) {
+                const id = obj2Row.id;
+                const obj1Row = _.find(obj1Array, { id });
+                if (!obj1Row) {
+                    rowDifferences.push({ id, $removed: true });
+                }
+            }
+            if (rowDifferences.length) {
+                objDifferences[property] = rowDifferences;
+            }
+        } else if (_.isObject(jsonObj1[property])) {
+            // what fields of the object have changed?
+            if (jsonObj2[property]) {
+                objDifferences[property] = differenceBetween(jsonObj1, jsonObj2);
+            } else {
+                objDifferences[property] = jsonObj1[property];
+            }
+        } else if (jsonObj1[property] !== jsonObj2[property]) {
+            // } && (_.isNull(newObj[key]) !== _.isNull(previousObj[key]))) {
+            // what value has changed
+            objDifferences[property] = jsonObj1[property];
+        }
+    });
+    return _.isEmpty(objDifferences) ? null : objDifferences;
+}
 
 

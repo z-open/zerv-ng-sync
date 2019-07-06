@@ -73,7 +73,7 @@ module.exports = function(config) {
 
         // uncomment this line when debugging unit tests in Chrome:
         // browsers: ['PhantomJS', 'Chrome'],
-        browsers: ['PhantomJS'],
+        browsers: ['Chrome'],
 
         // Continuous Integration mode
         // if true, Karma captures browsers, runs the tests and exits

@@ -622,23 +622,23 @@
     /**
      * TEST
      * Service that allows an array of data remain in sync with backend.
-     * 
-     * 
+     *
+     *
      * ex:
      * when there is a notification, noticationService notifies that there is something new...then the dataset get the data and notifies all its callback.
-     * 
-     * NOTE: 
-     *  
-     * 
+     *
+     * NOTE:
+     *
+     *
      * Pre-Requiste:
      * -------------
      * Sync requires objects have BOTH id and revision fields/properties.
-     * 
+     *
      * When the backend writes any data to the db that are supposed to be syncronized:
      * It must make sure each add, update, removal of record is timestamped.
      * It must notify the datastream (with notifyChange or notifyRemoval) with some params so that backend knows that it has to push back the data back to the subscribers (ex: the taskCreation would notify with its planId)
-     * 
-     * 
+     *
+     *
      */
 
     syncProvider.$inject = ["$syncMappingProvider"];
@@ -679,9 +679,9 @@
 
         /**
          *  add a delay before processing publication data to simulate network latency
-         * 
+         *
          * @param <number> milliseconds
-         * 
+         *
          */
         this.setLatency = function (seconds) {
             latencyInMilliSecs = seconds;
@@ -690,7 +690,7 @@
 
         /**
          * Delay before a released subscription stop syncing (see attach)
-         * 
+         *
          *  @param <number> seconds
          */
         this.setReleaseDelay = function (seconds) {
@@ -726,13 +726,13 @@
 
             // /////////////////////////////////
             /**
-             * subscribe to publication and returns the subscription when data is available. 
+             * subscribe to publication and returns the subscription when data is available.
              * @param publication name. on the server side, a publication shall exist. ex: magazines.sync
              * @param params   the params object passed to the subscription, ex: {magazineId:'entrepreneur'})
              * @param objectClass an instance of this class will be created for each record received.
              * returns a promise returning the subscription when the data is synced
-             * or rejects if the initial sync fails to complete in a limited amount of time. 
-             * 
+             * or rejects if the initial sync fails to complete in a limited amount of time.
+             *
              * to get the data from the dataSet, just dataSet.getData()
              */
             function resolveSubscription(publicationName, params, objectClass) {
@@ -765,7 +765,7 @@
             }
 
             /**
-             * 
+             *
              * for test purposes, returns the time resolveSubscription before it times out.
              */
             function getGracePeriod() {
@@ -773,11 +773,11 @@
             }
             /**
              * subscribe to publication. It will not sync until you set the params.
-             * 
+             *
              * @param publication name. on the server side, a publication shall exist. ex: magazines.sync
              * @param params   the params object passed to the subscription, ex: {magazineId:'entrepreneur'})
              * returns subscription
-             * 
+             *
              */
             function subscribe(publicationName, scope) {
                 return new Subscription(publicationName, scope);
@@ -803,7 +803,7 @@
                     }
                     fn('SYNCED'); // let know the backend the client was able to sync.
 
-                    // returns a promise to know when the subscriptions have completed syncing    
+                    // returns a promise to know when the subscriptions have completed syncing
                     return $pq.all(processed);
                 });
             };
@@ -829,12 +829,12 @@
 
             /**
              * The filtered dataset is a subset of a subscription cache.
-             * 
-             * 
-             * @param {*} ds 
-             * @param {*} filter 
-             * @param {*} scope 
-             * @param {*} onDestroyFn 
+             *
+             *
+             * @param {*} ds
+             * @param {*} filter
+             * @param {*} scope
+             * @param {*} onDestroyFn
              */
             function FilteredSubSet(ds, filter, scope, onDestroyFn) {
                 var orderByFn = void 0,
@@ -870,8 +870,8 @@
                     attach(scope);
                 }
 
-                /** 
-                * Refresh the data, this could be necessary if the filter is based on external information that has changed 
+                /**
+                * Refresh the data, this could be necessary if the filter is based on external information that has changed
                 */
                 function refresh() {
                     return ds.getAll().then(function (data) {
@@ -884,8 +884,8 @@
 
                 /**
                  * The callback will be called each time the data is ready
-                 * 
-                 * @param {Function} callback 
+                 *
+                 * @param {Function} callback
                  */
                 function onDataReceived(callback) {
                     onReadyFn = callback;
@@ -894,8 +894,8 @@
 
                 /**
                  * Attach this dataset, it will be released (no longer updating on sync) when the scope is destroyed;
-                 * 
-                 * @param {*} newScope 
+                 *
+                 * @param {*} newScope
                  */
                 function attach(newScope) {
                     if (scope) {
@@ -910,7 +910,7 @@
 
                 /**
                  * @deprecated use waitForDataReady instead
-                 * @param {*} callback 
+                 * @param {*} callback
                  */
                 function waitForDataReady(callback) {
                     logWarn('waitForDataReady is deprecated, use load instead');
@@ -953,7 +953,7 @@
 
                 /**
                  * return single record maching condition when the data is ready
-                 * 
+                 *
                  * @param {*} condition (Lodash)
                  * @returns {Promise} resolved with found record
                  */
@@ -972,7 +972,7 @@
 
                 /**
                  * return all records when the data is ready
-                 * 
+                 *
                  *  @returns {Promise} returns with all data
                  */
                 function getAll() {
@@ -984,7 +984,7 @@
                 /**
                 * Define the maintained sort and order in the synced data source
                 * It is based on lodash
-                * 
+                *
                 * _.orderBy(..., [iteratees=[_.identity]], [orders])
                 * @param {*} fields which is [iteratees=[_.identity]]
                 * @param {*} orders [order]
@@ -1003,7 +1003,7 @@
                 /**
                  * Define the maintained sort and order in the synced data source
                  * It is based on js array.sort(compareFn)
-                 * 
+                 *
                  * @param {Function} comparefn
                  */
                 function sort(compareFn) {
@@ -1024,20 +1024,20 @@
             // ------------------------------------------------------
             /**
              * a subscription synchronizes with the backend for any backend data change and makes that data available to a controller.
-             * 
+             *
              *  When client subscribes to an syncronized api, any data change that impacts the api result WILL be PUSHed to the client.
-             * If the client does NOT subscribe or stop subscribe, it will no longer receive the PUSH. 
-             *    
-             * if the connection is lost for a short time (duration defined on server-side), the server queues the changes if any. 
+             * If the client does NOT subscribe or stop subscribe, it will no longer receive the PUSH.
+             *
+             * if the connection is lost for a short time (duration defined on server-side), the server queues the changes if any.
              * When the connection returns, the missing data automatically  will be PUSHed to the subscribing client.
              * if the connection is lost for a long time (duration defined on the server), the server will destroy the subscription. To simplify, the client will resubscribe at its reconnection and get all data.
-             * 
+             *
              * subscription object provides 3 callbacks (add,update, del) which are called during synchronization.
-             *      
-             * Scope will allow the subscription stop synchronizing and cancel registration when it is destroyed. 
-             *  
+             *
+             * Scope will allow the subscription stop synchronizing and cancel registration when it is destroyed.
+             *
              * Constructor:
-             * 
+             *
              * @param publication, the publication must exist on the server side
              * @param scope, by default $rootScope, but can be modified later on with attach method.
              */
@@ -1190,7 +1190,7 @@
 
                 /**
                  * return single record maching condition when the data is ready
-                 * 
+                 *
                  * @param {*} condition (Lodash)
                  * @returns {Promise} resolved with found record
                  */
@@ -1212,7 +1212,7 @@
 
                 /**
                  * return all records when the data is ready
-                 * 
+                 *
                  *  @returns {Promise} returns with all data
                  */
                 function getAll() {
@@ -1272,8 +1272,8 @@
 
                 /**
                 * Refresh the data in all subsets
-                * This could be necessary if the subset filters are based on external information that has changed 
-                * If not all subsets rely on external data for filtering, a refresh method can be called on the subset that does for increased performance. 
+                * This could be necessary if the subset filters are based on external information that has changed
+                * If not all subsets rely on external data for filtering, a refresh method can be called on the subset that does for increased performance.
                 */
                 function refreshSubSets() {
                     return $pq.all(_.map(filteredDataSets, function (subSet) {
@@ -1281,10 +1281,10 @@
                     }));
                 }
 
-                /** 
-                 *  this will be called when data is available 
+                /**
+                 *  this will be called when data is available
                  *  it means right after each sync!
-                 * 
+                 *
                  *  @param {Function} callback receiving an array with all records of the cache if the subscription is to an array, otherwise the single object if the subscription is to a single object.
                  */
                 function onDataReceived(callback) {
@@ -1297,10 +1297,10 @@
                     return thisSub;
                 }
 
-                /** 
+                /**
                  *  this will be called when a record is updated
                  *  @param {Function} callback receiving with updated record.
-                 *           
+                 *
                  */
                 function setOnUpdate(callback) {
                     if (strictCode && onUpdateOff) {
@@ -1314,9 +1314,9 @@
 
                 /**
                  * force resyncing from scratch even if the parameters have not changed
-                 * 
+                 *
                  * if outside code has modified the data and you need to rollback, you could consider forcing a refresh with this. Better solution should be found than that.
-                 * 
+                 *
                  */
                 function setForce(value) {
                     if (value) {
@@ -1326,9 +1326,9 @@
                     return thisSub;
                 }
 
-                /** 
+                /**
                  * Refresh the subscription and get the data again
-                 * 
+                 *
                  * @returns {Promise} that resolves when data is ready
                  */
                 function refresh() {
@@ -1337,9 +1337,9 @@
                 }
                 /**
                  * The following object will be built upon each record received from the backend
-                 * 
+                 *
                  * This cannot be modified after the sync has started.
-                 * 
+                 *
                  * @param classValue
                  */
                 function setObjectClass(classValue) {
@@ -1365,8 +1365,8 @@
 
                 /**
                  * defines the mapping to an additional subscription which syncs a single object
-                 * 
-                 * ex: 
+                 *
+                 * ex:
                  *  $sync.subscribe('people.sync')
                  *    .setObjectClass(Person)
                  *    .mapObjectDs('people.address.sync',
@@ -1378,12 +1378,12 @@
                  *            person.address = address;
                  *        })
                  *    .waitForSubscriptionReady();
-                 * 
+                 *
                  * @param <String> name of publication to subscribe
-                 * @param <function> function that returns the params for the inner subscription          
+                 * @param <function> function that returns the params for the inner subscription
                  * @param <function> for each object received for this inner subscription via sync, this map function is executed
                  * @param <object> options object, check map()
-                 * 
+                 *
                  */
                 function mapObjectDs(publication, paramsFn, mapFn, options) {
                     $syncMapping.addSyncObjectDefinition(thisSub, publication, paramsFn, mapFn, options);
@@ -1392,11 +1392,11 @@
 
                 /**
                  * defines the mapping to an additional subscription which syncs an array of objects
-                 * 
+                 *
                  *   TODO: Delete is not implemented yet!!!!!!!!!!!!!!!!!!
-                 * 
-                 * 
-                 * ex: 
+                 *
+                 *
+                 * ex:
                  *  $sync.subscribe('people.sync')
                  *    .setObjectClass(Person)
                  *    .mapArrayDs('people.friends.sync',
@@ -1411,12 +1411,12 @@
                  *            }
                  *        })
                  *    .waitForSubscriptionReady();
-                 *            
+                 *
                  * @param <String> name of publication to subscribe
-                 * @param <function> function that returns the params for the inner subscription          
+                 * @param <function> function that returns the params for the inner subscription
                  * @param <function> for each object received for this inner subscription via sync, this map function is executed
                  * @param <object> options object, check map()
-                 * 
+                 *
                  */
                 function mapArrayDs(publication, paramsFn, mapFn, options) {
                     $syncMapping.addSyncArrayDefinition(thisSub, publication, paramsFn, mapFn, options);
@@ -1425,30 +1425,30 @@
 
                 /**
                  * This provides a function that will map some data/lookup to the provided object.
-                 * This mapping is executed after all other potential mappings (mapDsObject, mapDsArray) have completed. 
-                 * 
-                 * 
+                 * This mapping is executed after all other potential mappings (mapDsObject, mapDsArray) have completed.
+                 *
+                 *
                  * ex mapData(function (obj, operation, lookupVars) {
                  *      obj.city = getSomeCacheLookup(obj.cityId);
                  *      obj.state = _.find(lookupVars.states, {code:obj.stateCode});
                  * })
-                 * 
-                 * 
+                 *
+                 *
                  * but avoid or use the following simple manner carefully:
                  * ex mapData(function(house, operation, lookupVars) {
                  *      if (operation === 'add') {   houseInWorld.push(house)}
                  *      if (operation === 'remove') {   houseInWorld.remove(house)}
                  * })
                  * This will could create unpredicable behavior when the setParams is changed.
-                 * 
+                 *
                  * @param {Function} mapFn;
-                 *    function mapFn(record, operation, lookupVars) 
+                 *    function mapFn(record, operation, lookupVars)
                  *    - record: The object whose properties need mapping
                  *    - operation: 'add', 'update' and 'remove' indicate what type of mapping is being applied
                  *    - lookupsVars: object which contains properties initialized with setVar
-                 * 
-                 * @returns {Subscription} 
-                 * 
+                 *
+                 * @returns {Subscription}
+                 *
                  */
                 function mapData(mapFn) {
                     if (strictCode && mapCustomDataFn) {
@@ -1460,12 +1460,12 @@
 
                 /**
                  * provide the property that will be mapped to the object fetched.
-                 * 
+                 *
                  * sub.mapObject('city',fetchCity,'cityId')
                  * when subscription receives data (obj), it will run fetchCity(obj.cityId) which would save the object in obj.city when it resolves
                  * @param {String} propertyName is the property that will received the fetched value
-                 *              propertyName can also be 'arrayPropertyNmae.propertyName'. propertyName of objects of arrayPropertyName would be mapped. 
-                 * @param {Function} fetchFn might return a promise resolving with a value or the value directly, 
+                 *              propertyName can also be 'arrayPropertyNmae.propertyName'. propertyName of objects of arrayPropertyName would be mapped.
+                 * @param {Function} fetchFn might return a promise resolving with a value or the value directly,
                  *                      if fetchFn is a datasource, it will be set with the idProperty during mapping (only works if this subscription is single)
                  * @param {String} idProperty is the property that hold the id used to run fetchFn
                  */
@@ -1552,9 +1552,9 @@
                 // }
 
 
-                /** 
+                /**
                  *  this function allows to add to the subscription multiple mapping strategies at the same time
-                 * 
+                 *
                  *  data mapping strategy
                  * -----------------------
                  *  {
@@ -1562,7 +1562,7 @@
                  *    mapFn: function(objectReceicedFromSync) {
                  *                    }
                  *  }
-                 * 
+                 *
                  *  array mapping strategy
                  * ------------------------
                  *  {
@@ -1577,19 +1577,19 @@
                  *                      }
                  *           }
                  *  }
-                 * 
+                 *
                  *  object mapping strategy
                  * -------------------------
                  *  similar to array but type is 'object, subscription only returns one object
-                 * 
-                 * 
+                 *
+                 *
                  *  object and array stragegies might have options:
                  *  options: {
                  *       notifyReady: <boolean>  (if data has changed in the subscription, the main subscription onReady is triggered)
                  *       objectClass: <ClassName>  subscription class used to build the received objects
-                 *       mappings : <array> of definitions objects 
+                 *       mappings : <array> of definitions objects
                  *  }
-                 * 
+                 *
                  *  @param <array> array of mapping definitions
                  *  @returns this subscription obj
                  */
@@ -1614,7 +1614,7 @@
                 }
                 /**
                  * This refreshes the mapping of an object
-                 * @param {Object} obj 
+                 * @param {Object} obj
                  */
                 function refreshMapping(obj) {
                     if (obj.removed) {
@@ -1625,12 +1625,12 @@
 
                 /**
                  * map static data or subscription based data to the provided object
-                 * 
+                 *
                  * DELETE NOT TESTED !!!!!!!!!!!!
                  * - if the obj is deleted, we should delete all its object subscriptions
                  * - if the inner object is deleted, we should pass deleted true to mapFn, so that the mapping code provided does what it is supposed to do.
-                 * 
-                 * 
+                 *
+                 *
                  * @param <Object> the obj is the constructed object version from the data over the network
                  * @returns <Promise> returns a promise that is resolved when the object is completely mapped
                  */
@@ -1650,17 +1650,17 @@
                     });
                 }
 
-                /** 
+                /**
                  * map all data to the object by calling their map function (mapData)
-                 * 
+                 *
                  * This is also used to map this object to the parent subscription object
-                 * 
+                 *
                  * if the mapping fails, the new object version will not be merged
-                 * 
+                 *
                  * @param obj
                  * @param <String> operation (add or update or remove)
                  * @returns <Promise> the promise resolves when the mapping as completed
-                  * 
+                  *
                  */
                 function mapFullObject(obj, operation) {
                     return mapAllRecordProperties(obj, operation).then(function () {
@@ -1678,21 +1678,21 @@
 
                 /**
                  * Each object property will collect and receive the proper value as defined in the property mapping configuration (mapProperty)
-                 * 
+                 *
                  * This will append for different operations such add, updated, and remove.
-                 * 
+                 *
                  * Note:
-                 * We might reconsider and NOT apply the mapping on remove or clear operations later on to simplify. 
-                 * 
-                 * 
-                 * @param {*} obj 
-                 * @param {*} operation 
+                 * We might reconsider and NOT apply the mapping on remove or clear operations later on to simplify.
+                 *
+                 *
+                 * @param {*} obj
+                 * @param {*} operation
                  */
                 function mapAllRecordProperties(obj, operation) {
                     return $pq.all(_.map(mapPropertyFns, function (mapPropertyFn) {
                         // property mapping does not need to clear the property mapping when cache is cleaned.
                         // -> means mapData will no be called in case on cache cleaning.
-                        // this is not a problem except if the developer uses mapData function for other thing that mapping data. 
+                        // this is not a problem except if the developer uses mapData function for other thing that mapping data.
                         // ex pushing the data to be mapped in an external object or array.
                         // ex mapData(function(house,operation) {
                         //       if (operation === 'remove') {   removeFromWorldHouseCount(house)}
@@ -1727,9 +1727,9 @@
 
                 /**
                  * Launch the subscription and wait to receive the data
-                 * @param {*} fetchingParams 
-                 * @param {*} options 
-                 * 
+                 * @param {*} fetchingParams
+                 * @param {*} options
+                 *
                  * @returns {Promise} returns on object with the last synced data.
                  */
                 function load(fetchingParams, options) {
@@ -1739,12 +1739,12 @@
                 /**
                  * this function starts the syncing.
                  * Only publication pushing data matching our fetching params will be received.
-                 * 
+                 *
                  * ex: for a publication named "magazines.sync", if fetching params equalled {magazinName:'cars'}, the magazine cars data would be received by this subscription.
-                 * 
+                 *
                  * @param fetchingParams
                  * @param options
-                 * 
+                 *
                  * @returns a promise that resolves when data is arrived.
                  */
                 function setParameters(fetchingParams, options) {
@@ -1770,10 +1770,10 @@
 
                 /**
                  * @deprecated use waitForDataReady instead
-                 * 
+                 *
                  * Wait for the subscription to establish initial retrieval of data and returns this subscription in a promise
-                 * 
-                 * @param {function} optional function that will be called with this subscription object when the data is ready 
+                 *
+                 * @param {function} optional function that will be called with this subscription object when the data is ready
                  * @returns {Promise} that waits for the initial fetch to complete then wait for the initial fetch to complete then returns this subscription.
                  */
                 function waitForSubscriptionReady(callback) {
@@ -1787,8 +1787,8 @@
 
                 /**
                  * Wait for the subscription to establish initial retrieval of data and returns the data in a promise
-                 * 
-                 * @param {function} optional function that will be called with the synced data and this subscription object when the data is ready 
+                 *
+                 * @param {function} optional function that will be called with the synced data and this subscription object when the data is ready
                  * @returns {Promise} that waits for the initial fetch to complete then returns the data
                  */
                 function waitForDataReady(callback) {
@@ -1824,13 +1824,19 @@
                         try {
                             if (record.timestamp) {
                                 record.timestamp.$sync = thisSub;
-                                if (incrementalChangesEnabled) {
-                                    // this gives acces to original value before modification
-                                    // So far only use by incremental changes, so let's not add processing time to the
-                                    record.timestamp.$untouched = JSON.parse(JSON.stringify(record));
-                                }
+                                // if (incrementalChangesEnabled) {
+                                //     // this gives acces to original value before modification
+                                //     // So far only use by incremental changes, so let's not add processing time to the
+                                //     record.timestamp.$untouched = JSON.parse(JSON.stringify(record));
+                                // }
                             }
-                            return updateFn(record);
+                            var obj = updateFn(record);
+                            if (obj.timestamp && incrementalChangesEnabled) {
+                                // this gives acces to original value before modification
+                                // So far only use by incremental changes, so let's not add processing time to the
+                                obj.timestamp.$untouched = JSON.parse(JSON.stringify(obj));
+                            }
+                            return obj;
                         } catch (e) {
                             e.message = 'Received Invalid object from publication [' + publication + ']: ' + JSON.stringify(record) + '. DETAILS: ' + e.message;
                             throw e;
@@ -1849,11 +1855,11 @@
 
                 /**
                  *  returns the object or array in sync
-                 * 
+                 *
                  *  Note: When the sync is set to work on a single object, the cache object would be an empty object if the record was deleted.
-                 * 
+                 *
                  *  @param {integer} id. Optional id of the record to look up otherwise returns all data available
-                 * 
+                 *
                  */
                 function getData(id) {
                     return !_.isNil(id) ? getCachedObject(id) : cache;
@@ -1909,7 +1915,7 @@
 
                 /**
                  * force resyncing.
-                 * 
+                 *
                  * This would clear the cache then restablish the sync to load fresh data
                  *
                  * @returns this subcription
@@ -1922,10 +1928,10 @@
                 }
 
                 /**
-                 * the dataset will start listening to the datastream 
-                 * 
+                 * the dataset will start listening to the datastream
+                 *
                  * Note During the sync, it will also call the optional callbacks - after processing EACH record received.
-                 * 
+                 *
                  * @returns a promise that will be resolved when the data is ready.
                  */
                 function startSyncing() {
@@ -1993,7 +1999,7 @@
                         publicationListenerOff = addPublicationListener(publication, function (batch) {
                             // Create a delay before processing publication data to simulate network latency
                             if (latencyInMilliSecs) {
-                                isLogInfo && logInfo('Sync -> Processing delayed for ' + latencyInMilliSecs + ' ms.'); // 
+                                isLogInfo && logInfo('Sync -> Processing delayed for ' + latencyInMilliSecs + ' ms.'); //
                                 setTimeout(function () {
                                     isLogInfo && logInfo('Sync -> Processing ' + publication + ' now.');
                                     processPublicationData(batch);
@@ -2008,10 +2014,10 @@
                 /**
                  * set which external subscription this subscription depends on.
                  * When this subscription is released, the other subscription will be released as well.
-                 *  
+                 *
                  * When a subscription is released, it remains in sync for a little while to promote reuse.
-                 * 
-                 * @param {Array} subscriptions 
+                 *
+                 * @param {Array} subscriptions
                  */
                 function setDependentSubscriptions(subs) {
                     dependentSubscriptions = subs;
@@ -2021,7 +2027,7 @@
                 /**
                  * set the number of seconds before a subscription stops syncing after it is release for destruction.
                  * This promotes re-use.
-                 * 
+                 *
                  * @param {int} t in seconds
                  */
                 function setReleaseDelay(t) {
@@ -2034,7 +2040,7 @@
 
                 /**
                  * Schedule this subscription to stop syncing after a lap of time (releaseDelay)
-                 * 
+                 *
                  */
                 function scheduleRelease() {
                     // detach must be called otherwise,  the subscription is planned for release.
@@ -2055,7 +2061,7 @@
                 /**
                  * Detach a subscription will give the ability to reuse an active subscription without stopping syncing.
                  * It is useful mainly if the subscription is used on a new scope with similar params (there is no need to resync/refetch data.)
-                 * 
+                 *
                  */
                 function detach() {
                     isLogDebug && logDebug('Detach subscription(release): ' + thisSub);
@@ -2079,21 +2085,21 @@
                  * When the scope is destroyed, the subscription will be destroyed or released for future reuse if option is selected (delayRelease)
                  *  a subscription that is attached to a scope cannot be reattached to another scope.
                  *  It must detach first.
-                 * 
+                 *
                  *  To allow a subscription to remain in memory for re-reuse:
-                 * 
+                 *
                  *  create a subscription in a service
                  *  create a view
                  *  detach and start the subscription in the resolve
                  *  attach it to the view controller scope with delayRelease
-                 *  
+                 *
                  *  create a different view that is not an inner view or parent view of the previous one
                  *  detach and start the subscription in the resolve
                  *  attach it to the view controller scope with delayRelease
-                 *  
+                 *
                  *  when the app goes to the different view, the subscription will be reused (will not re initialize if the params have not changed).
-                 * 
-                 *  
+                 *
+                 *
                  */
                 function attach(newScope, delayRelease) {
                     detach();
@@ -2143,8 +2149,8 @@
                  * Register the subscription on the zerv server
                  * and save the subscriptionId for network recovery.
                  * Note:
-                 * On connection loss, the subscription id will be used to reconnect the zerver 
-                 * and prevent refetching all data. 
+                 * On connection loss, the subscription id will be used to reconnect the zerver
+                 * and prevent refetching all data.
                  * Only the missing data that was not received during the disconnection would then be received if any.
                  */
                 function registerSubscription() {
@@ -2154,7 +2160,7 @@
                         publication: publication,
                         params: subParams
                     }).then(function (subId) {
-                        // registration might complete after an order to syncOff. 
+                        // registration might complete after an order to syncOff.
                         if (isSyncingOn) {
                             // syncing is on, let's remember the subId for potential reconnect to prevent refetching all data.
                             subscriptionId = subId;
@@ -2178,7 +2184,7 @@
                 /**
                  * each subscription listens to any data coming from the sync socket channel
                  * If any is related to it, it will process to update the internal cache
-                 * 
+                 *
                  * Note: Potential issue
                  * If consecutive syncs for a same record come for the sub, we should queue them as potential issue might rise such as
                  * - the old revision updates the cache because the mapping was not completed before the new rev was updated in cache.
@@ -2217,21 +2223,21 @@
                 }
 
                 /**
-                 * this releases all objects that do no longer exist within the cache 
-                 * 
+                 * this releases all objects that do no longer exist within the cache
+                 *
                  * this can be necessary:
                  * - after a network reconnection, all data is sent to the client, but the cache might have data that are no longer present in the initial fetch
                  *
-                 * 
+                 *
                  * if they have dependent subscriptions, they will be released.
-                 * 
+                 *
                  * the mapAllDataObject will be called on each object to make sure object can unmapped if necessary
-                 * 
+                 *
                  *  @param {array} excludedRecords are the records that should not be removed from the cache
                  *  @param {boolean} force when set to true will force the cleaning.
-                 * 
+                 *
                  *  @returns {Promise} which resolves when done.
-                 *  
+                 *
                  */
                 function cleanCache(excludedRecords, force) {
                     var result = void 0;
@@ -2254,10 +2260,10 @@
                 /**
                  * Determine the records that are in the cache but not in the data that needs to replace the cache content.
                  * These records will need removing from the cache since they are not part of the data received, and do not need updating.
-                 * 
+                 *
                  * @param {*} receivedRecordsToBeSynced contains all records that the cache should contain after a sync
-                 * 
-                 * @returns {array} records 
+                 *
+                 * @returns {array} records
                  */
                 function findRecordsPresentInCacheOnly(receivedRecordsToBeSynced) {
                     var deletedRecords = [];
@@ -2273,8 +2279,8 @@
 
                 /**
                  * Removed the following records from the cache, they do no longer exist.
-                 * 
-                 * @param {*} records 
+                 *
+                 * @param {*} records
                  * @returns {Promise} resolve when the cache is cleaned.
                  */
                 function cleanArrayCache(records) {
@@ -2324,9 +2330,9 @@
                 /**
                  * Define the maintained sort and order in the synced data source
                  * It is based on lodash
-                 * 
+                 *
                  * This has only effect on subscription on an array datasource
-                 * 
+                 *
                  * _.orderBy(..., [iteratees=[_.identity]], [orders])
                  * @param {*} fields which is [iteratees=[_.identity]]
                  * @param {*} orders [order]
@@ -2347,9 +2353,9 @@
                 /**
                  * Define the maintained sort and order in the synced data source
                  * It is based on js array.sort(compareFn)
-                 * 
+                 *
                  * This has only effect on subscription on a array datasource
-                 * 
+                 *
                  * @param {Function} comparefn
                  */
                 function sort(compareFn) {
@@ -2360,13 +2366,13 @@
                     };
                     return thisSub;
                 }
-                /** 
+                /**
                  * Force the provided records into the cache
                  * And activate the call backs (ready, add,update,remove)
-                 * 
+                 *
                  * The changes might be overwritten by next sync/publication. To prevent this, sync off should be called first.
-                 * 
-                 * @param <array> records is an array of data record (json obj) 
+                 *
+                 * @param <array> records is an array of data record (json obj)
                  * @returns <promise> that resolves when the changes are applied to the cache
                  */
                 function forceChanges(records) {
@@ -2375,13 +2381,12 @@
 
                 /**
                  *  fetch all the missing records, and activate the call backs (add,update,remove) accordingly if there is something that is new or not already in sync.
-                 * 
+                 *
                  * @param <array> records is an array of data record (json obj)
                  * @param <boolean> force, forces the data into the cache even whatever is the record revision.
-                 * 
+                 *
                  */
                 function applyChanges(records, force) {
-
                     // publication must be have a parma to make it work as partial
                     // if (this.isSingle() && records.length && records[0].$partial) {
                     //     const fullObj = _.cloneDeep(cache.toJSON());
@@ -2447,14 +2452,14 @@
 
                 /**
                  * Although most cases are handled using onReady, this tells you the current data state.
-                 * 
+                 *
                  * @returns if true is a sync has been processed otherwise false if the data is not ready.
                  */
                 function isReady() {
                     return thisSub.ready;
                 }
                 /**
-                 * 
+                 *
                  * returns a function to remove the listener.
                  */
                 function onAdd(callback, scope) {
@@ -2463,10 +2468,10 @@
 
                 /**
                  * Listen to event and run callback
-                 * 
+                 *
                  * @param {function} to call on event
                  * @param {Object} angular scope (by default the current attached subscription scope)
-                 * 
+                 *
                  * @returns {function} to remove the listener. Anyway, the listener will be destroyed when scope is destroyed.
                  */
                 function onUpdate(callback, scope) {
@@ -2475,10 +2480,10 @@
 
                 /**
                 * Listen to event and run callback
-                * 
+                *
                 * @param {function} to call on event
                 * @param {Object} angular scope (by default the current attached subscription scope)
-                * 
+                *
                 * @returns {function} to remove the listener. Anyway, the listener will be destroyed when scope is destroyed.
                 */
                 function onRemove(callback, scope) {
@@ -2487,10 +2492,10 @@
 
                 /**
                 * Listen to event and run callback
-                * 
+                *
                 * @param {function} to call on event
                 * @param {Object} angular scope (by default the current attached subscription scope)
-                * 
+                *
                 * @returns {function} to remove the listener. Anyway, the listener will be destroyed when scope is destroyed.
                 */
                 function onReady(callback, scope) {
@@ -2499,9 +2504,9 @@
 
                 /**
                  * Add record to the subscription data
-                 * 
-                 * 
-                 * @param {Object} record 
+                 *
+                 *
+                 * @param {Object} record
                  * @param {boolean} force (let us know if the addition was done by sync, or forcing record manually)
                  */
                 function addRecord(record, force) {
@@ -2519,10 +2524,10 @@
 
                 /**
                  * Update record in the subscription data
-                 * 
-                 * 
-                 * @param {Object} record 
-                 * @param {boolean} force in the udate to replace any revision in the subscription data 
+                 *
+                 *
+                 * @param {Object} record
+                 * @param {boolean} force in the udate to replace any revision in the subscription data
                  */
                 function updateRecord(record, force) {
                     var previous = getRecordState(record);
@@ -2540,7 +2545,7 @@
                         if (incrementalChangesEnabled) {
                             // this gives acces to original value before modification
                             // So far only use by incremental changes, so let's not add processing time
-                            obj.timestamp.$untouched = JSON.parse(JSON.stringify(record));
+                            obj.timestamp.$untouched = JSON.parse(JSON.stringify(obj));
                         }
                         return $pq.resolve(obj);
                     }
@@ -2557,9 +2562,9 @@
 
                 /**
                  * Add record to the subscription data
-                 * 
-                 * 
-                 * @param {Object} record 
+                 *
+                 *
+                 * @param {Object} record
                  * @param {boolean} force (let us know if the removal was done by sync, or forcing record manually)
                  */
                 function removeRecord(record, force) {
@@ -2569,9 +2574,9 @@
                         isLogDebug && logDebug('Sync -> Removed #' + JSON.stringify(record.id) + (force ? ' directly' : ' via sync') + ' for subscription to ' + thisSub);
                         // We could have for the same record consecutively fetching in this order:
                         // delete id:4, rev 10, then add id:4, rev 9.... by keeping track of what was deleted, we will not add the record since it was deleted with a most recent timestamp.
-                        record.removed = true; // So we only flag as removed, later on the garbage collector will get rid of it.       
+                        record.removed = true; // So we only flag as removed, later on the garbage collector will get rid of it.
 
-                        // if there is no previous record we do not need to removed any thing from our storage.     
+                        // if there is no previous record we do not need to removed any thing from our storage.
                         if (previous) {
                             // some complexity here to rework:
                             // - make sure the recordBeingDeleted is a fulling working object to process the delete. Mapdata with operation 'remove' might get called against this object.
@@ -2683,7 +2688,7 @@
             }
 
             /**
-             * this object 
+             * this object
              */
             function SyncListener() {
                 var events = {};

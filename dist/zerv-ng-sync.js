@@ -620,7 +620,7 @@
     "use strict";
 
     /**
-     * 
+     * TEST
      * Service that allows an array of data remain in sync with backend.
      * 
      * 
@@ -717,7 +717,9 @@
                 resolveSubscription: resolveSubscription,
                 getGracePeriod: getGracePeriod,
                 getIdValue: getIdValue,
-                getCurrentSubscriptionCount: getCurrentSubscriptionCount
+                getCurrentSubscriptionCount: getCurrentSubscriptionCount,
+                differenceBetween: differenceBetween,
+                mergeChanges: mergeChanges
             };
 
             return service;
@@ -1060,6 +1062,7 @@
                 var subscriptionId = void 0;
                 var mapCustomDataFn = void 0,
                     mapPropertyFns = [];
+                var incrementalChangesEnabled = false;
                 var filteredDataSets = [];
 
                 var thisSub = this;
@@ -1082,6 +1085,9 @@
                 this.ready = false;
                 this.syncOn = syncOn;
                 this.syncOff = syncOff;
+
+                this.enableIncrementalChanges = enableIncrementalChanges;
+                this.isIncrementalChangesEnabled = isIncrementalChangesEnabled;
 
                 this.onDataReceived = onDataReceived;
 
@@ -1216,6 +1222,15 @@
                     return waitForDataReady().then(function () {
                         return getData();
                     });
+                }
+
+                function enableIncrementalChanges() {
+                    incrementalChangesEnabled = true;
+                    return thisSub;
+                }
+
+                function isIncrementalChangesEnabled() {
+                    return incrementalChangesEnabled;
                 }
 
                 function getPublication() {
@@ -1809,6 +1824,11 @@
                         try {
                             if (record.timestamp) {
                                 record.timestamp.$sync = thisSub;
+                                if (incrementalChangesEnabled) {
+                                    // this gives acces to original value before modification
+                                    // So far only use by incremental changes, so let's not add processing time to the
+                                    record.timestamp.$untouched = JSON.parse(JSON.stringify(record));
+                                }
                             }
                             return updateFn(record);
                         } catch (e) {
@@ -2361,6 +2381,16 @@
                  * 
                  */
                 function applyChanges(records, force) {
+
+                    // publication must be have a parma to make it work as partial
+                    // if (this.isSingle() && records.length && records[0].$partial) {
+                    //     const fullObj = _.cloneDeep(cache.toJSON());
+                    //     records[0] = mergeChange(fullObj, records[0]);
+                    // // maker sure we maintain revision and other special fields
+
+                    // }
+
+
                     thisSub.ready = false;
                     return waitForExternalDatasourcesReady().then(function () {
                         try {
@@ -2507,6 +2537,11 @@
                         _.assign(obj.timestamp, record.timestamp);
                         obj.revision = record.revision;
                         previous.revision = record.revision;
+                        if (incrementalChangesEnabled) {
+                            // this gives acces to original value before modification
+                            // So far only use by incremental changes, so let's not add processing time
+                            obj.timestamp.$untouched = JSON.parse(JSON.stringify(record));
+                        }
                         return $pq.resolve(obj);
                     }
 
@@ -2744,4 +2779,185 @@
             return totalSub;
         }
     };
+
+    // ------------------------------------
+
+    function differenceBetween(jsonObj1, jsonObj2) {
+        if (_.isEmpty(jsonObj1) && _.isEmpty(jsonObj2)) {
+            return null;
+        }
+        var objDifferences = {};
+        _.forEach(_.keys(jsonObj1), function (property) {
+            if (['id', 'revision'].indexOf(property) !== -1) {
+                // there is no need to compare this.
+                return;
+            }
+            if (_.isArray(jsonObj1[property])) {
+                var obj1Array = jsonObj1[property];
+                var obj2Array = jsonObj2[property];
+                if (_.isEmpty(obj2Array)) {
+                    if (obj1Array.length) {
+                        // add new array
+                        objDifferences[property] = jsonObj1[property];
+                    }
+                    // same empty array
+                    return;
+                }
+
+                if (!obj1Array.length) {
+                    if (!obj2Array.length) {
+                        // objects are both empty, so equals
+                        return;
+                    }
+                    // obj2 is not empty
+                    // so obj1 does not have its data
+                    objDifferences[property] = [];
+                    return;
+                }
+
+                // does obj1 has its content managed by ids
+                if (_.isNil(obj1Array[0].id)) {
+                    // no it is just a big array of data
+                    if (!_.isEqual(obj1Array, obj2Array)) {
+                        objDifferences[property] = obj1Array;
+                    }
+                    return;
+                }
+
+                // since objects have ids, let's dig in to get specific difference
+                var rowDifferences = [];
+                var _iteratorNormalCompletion = true;
+                var _didIteratorError = false;
+                var _iteratorError = undefined;
+
+                try {
+                    for (var _iterator = obj1Array[Symbol.iterator](), _step; !(_iteratorNormalCompletion = (_step = _iterator.next()).done); _iteratorNormalCompletion = true) {
+                        var obj1Row = _step.value;
+
+                        var id = obj1Row.id;
+                        var obj2Row = _.find(obj2Array, { id: id });
+                        if (obj2Row) {
+                            // is it updated?
+                            var r = differenceBetween(obj1Row, obj2Row);
+                            if (!_.isEmpty(r)) {
+                                rowDifferences.push(_.assign({ id: id }, r));
+                            }
+                        } else {
+                            // row does not exist in the other obj
+                            rowDifferences.push(obj1Row);
+                        }
+                    }
+                    // any row is no longer in obj1
+                } catch (err) {
+                    _didIteratorError = true;
+                    _iteratorError = err;
+                } finally {
+                    try {
+                        if (!_iteratorNormalCompletion && _iterator.return) {
+                            _iterator.return();
+                        }
+                    } finally {
+                        if (_didIteratorError) {
+                            throw _iteratorError;
+                        }
+                    }
+                }
+
+                var _iteratorNormalCompletion2 = true;
+                var _didIteratorError2 = false;
+                var _iteratorError2 = undefined;
+
+                try {
+                    for (var _iterator2 = obj2Array[Symbol.iterator](), _step2; !(_iteratorNormalCompletion2 = (_step2 = _iterator2.next()).done); _iteratorNormalCompletion2 = true) {
+                        var obj2Row = _step2.value;
+
+                        var id = obj2Row.id;
+                        var _obj1Row = _.find(obj1Array, { id: id });
+                        if (!_obj1Row) {
+                            rowDifferences.push({ id: id, $removed: true });
+                        }
+                    }
+                } catch (err) {
+                    _didIteratorError2 = true;
+                    _iteratorError2 = err;
+                } finally {
+                    try {
+                        if (!_iteratorNormalCompletion2 && _iterator2.return) {
+                            _iterator2.return();
+                        }
+                    } finally {
+                        if (_didIteratorError2) {
+                            throw _iteratorError2;
+                        }
+                    }
+                }
+
+                if (rowDifferences.length) {
+                    objDifferences[property] = rowDifferences;
+                }
+            } else if (_.isObject(jsonObj1[property])) {
+                // what fields of the object have changed?
+                if (jsonObj2[property]) {
+                    var _r = differenceBetween(jsonObj1[property], jsonObj2[property]);
+                    if (!_.isEmpty(_r)) {
+                        objDifferences[property] = _r;
+                    }
+                } else {
+                    objDifferences[property] = jsonObj1[property];
+                }
+            } else if (jsonObj1[property] !== jsonObj2[property]) {
+                // } && (_.isNull(newObj[key]) !== _.isNull(previousObj[key]))) {
+                // what value has changed
+                objDifferences[property] = jsonObj1[property];
+            }
+        });
+        _.forEach(_.keys(jsonObj2), function (property) {
+            if (_.keys(jsonObj1).indexOf(property) === -1) {
+                objDifferences[property] = { $removed: true };
+            }
+        });
+        return _.isEmpty(objDifferences) ? null : objDifferences;
+    }
+
+    function mergeChanges(jsonObj, changes) {
+        _.forEach(changes, function (newValue, property) {
+            if (property === 'id') {
+                // id will never be different. they are just here to identity rows that contains new values
+                return;
+            }
+            if (_.isArray(newValue)) {
+                var changeArray = newValue;
+                if (changeArray.length === 0 || _.isNil(changeArray[0].id)) {
+                    // a  array value is the new value
+                    // There is no id in the items, so there is no granular change.
+                    jsonObj[property] = changeArray;
+                } else {
+                    _.forEach(changeArray, function (changeRow) {
+                        var objRow = _.find(jsonObj[property], { id: changeRow.id });
+                        if (objRow) {
+                            if (changeRow.$removed) {
+                                _.remove(jsonObj[property], objRow);
+                            } else {
+                                mergeChanges(objRow, changeRow);
+                            }
+                        } else {
+                            jsonObj[property].push(changeRow);
+                        }
+                    });
+                }
+
+                return;
+            }
+            if (_.isObject(newValue)) {
+                if (newValue.$removed) {
+                    delete jsonObj[property];
+                } else {
+                    mergeChanges(jsonObj[property], newValue);
+                }
+            } else {
+                jsonObj[property] = newValue;
+            }
+        });
+        return jsonObj;
+    }
 })();

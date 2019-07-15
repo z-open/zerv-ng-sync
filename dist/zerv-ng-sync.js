@@ -1824,16 +1824,10 @@
                         try {
                             if (record.timestamp) {
                                 record.timestamp.$sync = thisSub;
-                                // if (incrementalChangesEnabled) {
-                                //     // this gives acces to original value before modification
-                                //     // So far only use by incremental changes, so let's not add processing time to the
-                                //     record.timestamp.$untouched = JSON.parse(JSON.stringify(record));
-                                // }
                             }
                             var obj = updateFn(record);
                             if (obj.timestamp && incrementalChangesEnabled) {
                                 // this gives acces to original value before modification
-                                // So far only use by incremental changes, so let's not add processing time to the
                                 obj.timestamp.$untouched = JSON.parse(JSON.stringify(obj));
                             }
                             return obj;
@@ -2544,7 +2538,6 @@
                         previous.revision = record.revision;
                         if (incrementalChangesEnabled) {
                             // this gives acces to original value before modification
-                            // So far only use by incremental changes, so let's not add processing time
                             obj.timestamp.$untouched = JSON.parse(JSON.stringify(obj));
                         }
                         return $pq.resolve(obj);

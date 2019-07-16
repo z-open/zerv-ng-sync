@@ -2236,6 +2236,7 @@ function syncProvider($syncMappingProvider) {
 // ------------------------------------
 // the following code is copied from zerv-sync helper service.
 // it must be similar.
+
 function differenceBetween(jsonObj1, jsonObj2) {
     if (_.isEmpty(jsonObj1) && _.isEmpty(jsonObj2)) {
         return null;
@@ -2252,7 +2253,10 @@ function differenceBetween(jsonObj1, jsonObj2) {
             if (_.isEmpty(obj2Array)) {
                 if (obj1Array.length) {
                     // add new array
-                    objDifferences[property] = jsonObj1[property];
+                    const result = removeNil(jsonObj1[property]);
+                    if (!_.isNil(result)) {
+                        objDifferences[property] = result;
+                    }
                 }
                 // same empty array
                 return;
@@ -2273,7 +2277,10 @@ function differenceBetween(jsonObj1, jsonObj2) {
             if (_.isNil(obj1Array[0].id)) {
                 // no it is just a big array of data
                 if (!_.isEqual(obj1Array, obj2Array)) {
-                    objDifferences[property] = obj1Array;
+                    const result = removeNil(obj1Array);
+                    if (!_.isNil(result)) {
+                        objDifferences[property] = result;
+                    }
                 }
                 return;
             }
@@ -2291,7 +2298,10 @@ function differenceBetween(jsonObj1, jsonObj2) {
                     }
                 } else {
                     // row does not exist in the other obj
-                    rowDifferences.push(obj1Row);
+                    const result = removeNil(obj1Row);
+                    if (!_.isNil(result)) {
+                        rowDifferences.push(result);
+                    }
                 }
             }
             // any row is no longer in obj1
@@ -2313,12 +2323,23 @@ function differenceBetween(jsonObj1, jsonObj2) {
                     objDifferences[property] = r;
                 }
             } else {
-                objDifferences[property] = jsonObj1[property];
+                // field does not exist in obj2
+                const result = removeNil(jsonObj1[property]);
+                if (!_.isNil(result)) {
+                    objDifferences[property] = result;
+                }
             }
-        } else if (jsonObj1[property] !== jsonObj2[property]) {
-            // } && (_.isNull(newObj[key]) !== _.isNull(previousObj[key]))) {
-            // what value has changed
-            objDifferences[property] = jsonObj1[property];
+        } else if (!_.isEqual(jsonObj1[property], jsonObj2[property]) ) {
+            if (_.isNil(jsonObj1[property]) && !_.isNil(jsonObj2[property])) {
+            // the property is now set to null
+                objDifferences[property] = null;
+            } else {
+            // what value has changed. Is it valid?
+                const result = removeNil(jsonObj1[property]);
+                if (!_.isNil(result)) {
+                    objDifferences[property] = result;
+                }
+            }
         }
     });
     _.forEach(_.keys(jsonObj2), (property) => {
@@ -2329,6 +2350,31 @@ function differenceBetween(jsonObj1, jsonObj2) {
     return _.isEmpty(objDifferences) ? null : objDifferences;
 }
 
+function removeNil(jsonObj) {
+    if (_.isArray(jsonObj)) {
+        const newArray = [];
+        for (let objRow of jsonObj) {
+            const result = removeNil(objRow);
+            if (!_.isNil(result)) {
+                newArray.push(result);
+            }
+        }
+        return newArray;
+    }
+    if (_.isObject(jsonObj)) {
+        const newObj = {};
+        _.forEach(_.keys(jsonObj), (property) => {
+            if (!_.isNil(jsonObj[property])) {
+                const result = removeNil(jsonObj[property]);
+                if (!_.isNil(result)) {
+                    newObj[property] = result;
+                }
+            }
+        });
+        return newObj;
+    }
+    return jsonObj;
+}
 
 function mergeChanges(jsonObj, changes) {
     _.forEach(changes, (newValue, property) => {
@@ -2371,3 +2417,4 @@ function mergeChanges(jsonObj, changes) {
     });
     return jsonObj;
 }
+

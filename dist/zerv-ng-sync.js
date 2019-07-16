@@ -2819,6 +2819,7 @@
     // ------------------------------------
     // the following code is copied from zerv-sync helper service.
     // it must be similar.
+
     function differenceBetween(jsonObj1, jsonObj2) {
         if (_.isEmpty(jsonObj1) && _.isEmpty(jsonObj2)) {
             return null;
@@ -2835,7 +2836,10 @@
                 if (_.isEmpty(obj2Array)) {
                     if (obj1Array.length) {
                         // add new array
-                        objDifferences[property] = jsonObj1[property];
+                        var result = removeNil(jsonObj1[property]);
+                        if (!_.isNil(result)) {
+                            objDifferences[property] = result;
+                        }
                     }
                     // same empty array
                     return;
@@ -2856,7 +2860,10 @@
                 if (_.isNil(obj1Array[0].id)) {
                     // no it is just a big array of data
                     if (!_.isEqual(obj1Array, obj2Array)) {
-                        objDifferences[property] = obj1Array;
+                        var _result = removeNil(obj1Array);
+                        if (!_.isNil(_result)) {
+                            objDifferences[property] = _result;
+                        }
                     }
                     return;
                 }
@@ -2881,7 +2888,10 @@
                             }
                         } else {
                             // row does not exist in the other obj
-                            rowDifferences.push(obj1Row);
+                            var _result2 = removeNil(obj1Row);
+                            if (!_.isNil(_result2)) {
+                                rowDifferences.push(_result2);
+                            }
                         }
                     }
                     // any row is no longer in obj1
@@ -2940,12 +2950,23 @@
                         objDifferences[property] = _r;
                     }
                 } else {
-                    objDifferences[property] = jsonObj1[property];
+                    // field does not exist in obj2
+                    var _result3 = removeNil(jsonObj1[property]);
+                    if (!_.isNil(_result3)) {
+                        objDifferences[property] = _result3;
+                    }
                 }
-            } else if (jsonObj1[property] !== jsonObj2[property]) {
-                // } && (_.isNull(newObj[key]) !== _.isNull(previousObj[key]))) {
-                // what value has changed
-                objDifferences[property] = jsonObj1[property];
+            } else if (!_.isEqual(jsonObj1[property], jsonObj2[property])) {
+                if (_.isNil(jsonObj1[property]) && !_.isNil(jsonObj2[property])) {
+                    // the property is now set to null
+                    objDifferences[property] = null;
+                } else {
+                    // what value has changed. Is it valid?
+                    var _result4 = removeNil(jsonObj1[property]);
+                    if (!_.isNil(_result4)) {
+                        objDifferences[property] = _result4;
+                    }
+                }
             }
         });
         _.forEach(_.keys(jsonObj2), function (property) {
@@ -2954,6 +2975,54 @@
             }
         });
         return _.isEmpty(objDifferences) ? null : objDifferences;
+    }
+
+    function removeNil(jsonObj) {
+        if (_.isArray(jsonObj)) {
+            var newArray = [];
+            var _iteratorNormalCompletion3 = true;
+            var _didIteratorError3 = false;
+            var _iteratorError3 = undefined;
+
+            try {
+                for (var _iterator3 = jsonObj[Symbol.iterator](), _step3; !(_iteratorNormalCompletion3 = (_step3 = _iterator3.next()).done); _iteratorNormalCompletion3 = true) {
+                    var objRow = _step3.value;
+
+                    var result = removeNil(objRow);
+                    if (!_.isNil(result)) {
+                        newArray.push(result);
+                    }
+                }
+            } catch (err) {
+                _didIteratorError3 = true;
+                _iteratorError3 = err;
+            } finally {
+                try {
+                    if (!_iteratorNormalCompletion3 && _iterator3.return) {
+                        _iterator3.return();
+                    }
+                } finally {
+                    if (_didIteratorError3) {
+                        throw _iteratorError3;
+                    }
+                }
+            }
+
+            return newArray;
+        }
+        if (_.isObject(jsonObj)) {
+            var newObj = {};
+            _.forEach(_.keys(jsonObj), function (property) {
+                if (!_.isNil(jsonObj[property])) {
+                    var _result5 = removeNil(jsonObj[property]);
+                    if (!_.isNil(_result5)) {
+                        newObj[property] = _result5;
+                    }
+                }
+            });
+            return newObj;
+        }
+        return jsonObj;
     }
 
     function mergeChanges(jsonObj, changes) {

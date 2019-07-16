@@ -1134,6 +1134,8 @@
                 this.setObjectClass = setObjectClass;
                 this.getObjectClass = getObjectClass;
 
+                this.getCurrentModifications = getCurrentModifications;
+
                 this.attach = attach;
                 this.detach = detach;
                 this.setDependentSubscriptions = setDependentSubscriptions;
@@ -1820,13 +1822,16 @@
                         cache = [];
                     }
 
-                    updateDataStorage = function updateDataStorage(record) {
+                    // the cache might be updated by the network (publication)
+                    // or locally.
+                    // Example of local change, an entire object is forced in to the cache. The lib would still keep tracks of its previous state(untouched) in order to determine differences.
+                    updateDataStorage = function updateDataStorage(record, isLocallyModified) {
                         try {
                             if (record.timestamp) {
                                 record.timestamp.$sync = thisSub;
                             }
                             var obj = updateFn(record);
-                            if (obj.timestamp && incrementalChangesEnabled) {
+                            if (!isLocallyModified && obj.timestamp && incrementalChangesEnabled) {
                                 // this gives acces to original value before modification
                                 obj.timestamp.$untouched = JSON.parse(JSON.stringify(obj));
                             }
@@ -2176,6 +2181,32 @@
                 }
 
                 /**
+                 * Return the object tree containing the fields,
+                 * objects or array that were modified/deleted within the object since it was received from sync.
+                 *
+                 * This is to be used as incremental change.
+                 * @param {*} id
+                 * @returns {object} incremental change
+                 */
+                function getCurrentModifications(id) {
+                    var object = getData(id);
+                    var jsonUntouchedVersion = object.timestamp.$untouched;
+                    delete jsonUntouchedVersion.timestamp;
+                    var objectString = JSON.stringify(object);
+                    var jsonObject = JSON.parse(objectString);
+                    var increment = differenceBetween(jsonObject, jsonUntouchedVersion);
+                    if (_.isEmpty(increment)) {
+                        // if there is no change to data
+                        return;
+                    }
+                    isLogDebug && logDebug(function () {
+                        var incrementSize = JSON.stringify(increment).length;
+                        return ['increment rev ' + increment.revision + ' (est size before compression: ' + incrementSize * 100 / objectString.length + '% ' + incrementSize + ' out of ' + objectString.length + ' bytes)' + ': ', increment];
+                    });
+                    return increment;
+                }
+
+                /**
                  * each subscription listens to any data coming from the sync socket channel
                  * If any is related to it, it will process to update the internal cache
                  *
@@ -2510,7 +2541,7 @@
                     var obj = formatRecord ? formatRecord(record) : record;
 
                     return mapAllDataToObject(obj, 'add').then(function () {
-                        obj = updateDataStorage(obj);
+                        obj = updateDataStorage(obj, force);
                         syncListener.notify('add', obj);
                         return obj;
                     });
@@ -2547,7 +2578,7 @@
                     obj = formatRecord ? formatRecord(record) : record;
 
                     return mapAllDataToObject(obj, 'update').then(function () {
-                        obj = updateDataStorage(obj);
+                        obj = updateDataStorage(obj, force);
                         syncListener.notify('update', obj);
                         return obj;
                     });
@@ -2575,7 +2606,7 @@
                             // - make sure the recordBeingDeleted is a fulling working object to process the delete. Mapdata with operation 'remove' might get called against this object.
                             // - cache is being cleared while the recordBeingDeleted is processed
                             var recordBeingDeleted = _.assign(formatRecord ? formatRecord({}) : {}, previous);
-                            updateDataStorage(record);
+                            updateDataStorage(record, force);
                             $syncMapping.removePropertyMappers(thisSub, record);
                             syncListener.notify('remove', record);
                             dispose(record);
@@ -2753,7 +2784,7 @@
 
         function logDebug(msg) {
             if (isLogDebug) {
-                console.debug('SYNC(debug): ' + msg);
+                console.debug('SYNC(debug): ' + (_.isFunction(msg) ? msg() : msg));
             }
         }
 

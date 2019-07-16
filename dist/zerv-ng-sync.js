@@ -2205,10 +2205,11 @@
                         // if there is no change to data
                         return;
                     }
-                    isLogDebug && logDebug(function () {
+                    if (isLogDebug) {
                         var incrementSize = JSON.stringify(increment).length;
-                        return ['increment rev ' + increment.revision + ' (est size before compression: ' + incrementSize * 100 / objectString.length + '% ' + incrementSize + ' out of ' + objectString.length + ' bytes)' + ': ', increment];
-                    });
+                        logDebug('Diff size for rev ' + jsonUntouchedVersion.revision + ': ' + incrementSize * 100 / objectString.length + '%, ' + incrementSize + ' bytes out of ' + objectString.length + ')');
+                        console.info(_.clone(increment)); // output the current value.
+                    }
                     return increment;
                 }
 
@@ -2790,7 +2791,7 @@
 
         function logDebug(msg) {
             if (isLogDebug) {
-                console.debug('SYNC(debug): ' + (_.isFunction(msg) ? msg() : msg));
+                console.debug('SYNC(debug): ', _.isFunction(msg) ? msg() : msg);
             }
         }
 

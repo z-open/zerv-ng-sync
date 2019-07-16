@@ -2188,12 +2188,18 @@
                  * @param {*} id
                  * @returns {object} incremental change
                  */
-                function getCurrentModifications(id) {
+                function getCurrentModifications(id, includeTimestamp) {
                     var object = getData(id);
                     var jsonUntouchedVersion = object.timestamp.$untouched;
-                    delete jsonUntouchedVersion.timestamp;
                     var objectString = JSON.stringify(object);
                     var jsonObject = JSON.parse(objectString);
+                    if (!includeTimestamp) {
+                        // timestamp might have sessionId
+                        // A sessionId might be different, but the object data might be the same/
+                        delete jsonUntouchedVersion.timestamp;
+                        delete jsonObject.timestamp;
+                    }
+
                     var increment = differenceBetween(jsonObject, jsonUntouchedVersion);
                     if (_.isEmpty(increment)) {
                         // if there is no change to data
@@ -2810,7 +2816,8 @@
     };
 
     // ------------------------------------
-
+    // the following code is copied from zerv-sync helper service.
+    // it must be similar.
     function differenceBetween(jsonObj1, jsonObj2) {
         if (_.isEmpty(jsonObj1) && _.isEmpty(jsonObj2)) {
             return null;

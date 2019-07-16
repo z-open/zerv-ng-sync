@@ -1595,12 +1595,18 @@ function syncProvider($syncMappingProvider) {
              * @param {*} id
              * @returns {object} incremental change
              */
-            function getCurrentModifications(id) {
+            function getCurrentModifications(id, includeTimestamp) {
                 const object = getData(id);
                 const jsonUntouchedVersion = object.timestamp.$untouched;
-                delete jsonUntouchedVersion.timestamp;
                 const objectString = JSON.stringify(object);
                 const jsonObject = JSON.parse(objectString);
+                if (!includeTimestamp) {
+                    // timestamp might have sessionId
+                    // A sessionId might be different, but the object data might be the same/
+                    delete jsonUntouchedVersion.timestamp;
+                    delete jsonObject.timestamp;
+                }
+
                 const increment = differenceBetween(jsonObject, jsonUntouchedVersion);
                 if (_.isEmpty(increment)) {
                     // if there is no change to data

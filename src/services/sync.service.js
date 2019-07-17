@@ -81,7 +81,7 @@ function syncProvider($syncMappingProvider) {
         const publicationListeners = {};
         let lastPublicationListenerUid = 0;
         let GRACE_PERIOD_IN_SECONDS = 8;
-        const SYNC_VERSION = '1.2';
+        const SYNC_VERSION = '1.4';
 
         listenToPublicationNotification();
 

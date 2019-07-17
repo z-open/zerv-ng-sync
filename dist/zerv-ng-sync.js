@@ -707,7 +707,7 @@
             var publicationListeners = {};
             var lastPublicationListenerUid = 0;
             var GRACE_PERIOD_IN_SECONDS = 8;
-            var SYNC_VERSION = '1.2';
+            var SYNC_VERSION = '1.4';
 
             listenToPublicationNotification();
 

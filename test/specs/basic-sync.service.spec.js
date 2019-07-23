@@ -1,4 +1,28 @@
 describe('Basic Sync Service: ', function() {
+    let spec;
+
+    beforeEach(module('sync.test'));
+    beforeEach(module('zerv.sync'));
+    beforeEach(module(function( $syncProvider) {
+        window.ZJSONBIN = {
+            mergeChanges: () => 'merge',
+            differenceWith: () => 'diff',
+        };
+    }));
+
+    beforeEach(inject(function(_$sync_) {
+        spec = {
+            $sync: _$sync_,
+        };
+    }));
+
+    it('should delegate to zjonlib functions', () => {
+        expect(spec.$sync.mergeChanges()).toBeDefined();
+        expect(spec.$sync.mergeChanges()).toBe(window.ZJSONBIN.mergeChanges());
+    });
+});
+
+describe('Basic Sync Service: ', function() {
     var $rootScope;
     var backend;
     var spec;
@@ -88,6 +112,7 @@ describe('Basic Sync Service: ', function() {
         jasmine.clock().tick(10000);
         jasmine.clock().uninstall();
     });
+
 
     it('should subscribe and acknowledge to receive empty list', function(done) {
         backend.setData(subParams, []);

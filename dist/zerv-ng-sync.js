@@ -704,14 +704,11 @@
             var GRACE_PERIOD_IN_SECONDS = 8;
             var SYNC_VERSION = '1.4';
 
-            var deserialize = _.isNil(window.ZJSONBIN) || window.ZJSONBIN.disabled ? noop : window.ZJSONBIN.deserialize;
-
+            var deserialize = _.isNil(window.ZJSONBIN) || window.ZJSONBIN.disabled ? function (v) {
+                return v;
+            } : window.ZJSONBIN.deserialize;
             var differenceBetween = _.get(window.ZJSONBIN, 'differenceBetween');
             var mergeChanges = _.get(window.ZJSONBIN, 'mergeChanges');
-
-            function noop(r) {
-                return r;
-            }
 
             listenToPublicationNotification();
 

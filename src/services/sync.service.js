@@ -78,24 +78,19 @@ function syncProvider($syncMappingProvider) {
         let GRACE_PERIOD_IN_SECONDS = 8;
         const SYNC_VERSION = '1.4';
 
-        const deserialize = _.isNil(window.ZJSONBIN) || window.ZJSONBIN.disabled ? noop : window.ZJSONBIN.deserialize;
-
+        const deserialize = _.isNil(window.ZJSONBIN) || window.ZJSONBIN.disabled ? ((v)=> v) : window.ZJSONBIN.deserialize;
         const differenceBetween = _.get(window.ZJSONBIN, 'differenceBetween');
         const mergeChanges = _.get(window.ZJSONBIN, 'mergeChanges');
-    
-        function noop(r) {
-            return r;
-        }
 
         listenToPublicationNotification();
 
         const service = {
-            subscribe: subscribe,
-            subscribeObject: subscribeObject,
-            resolveSubscription: resolveSubscription,
-            getGracePeriod: getGracePeriod,
-            getIdValue: getIdValue,
-            getCurrentSubscriptionCount: getCurrentSubscriptionCount,
+            subscribe,
+            subscribeObject,
+            resolveSubscription,
+            getGracePeriod,
+            getIdValue,
+            getCurrentSubscriptionCount,
             differenceBetween,
             mergeChanges,
         };

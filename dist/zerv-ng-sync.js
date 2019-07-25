@@ -2196,7 +2196,8 @@
                     var jsonObject = JSON.parse(objectString);
                     if (!includeTimestamp) {
                         // timestamp might have sessionId
-                        // A sessionId might be different, but the object data might be the same/
+                        // A sessionId might be different, but the object data might be the same
+                        // There is no need to be aware of those differences by default.
                         delete jsonUntouchedVersion.timestamp;
                         delete jsonObject.timestamp;
                     }
@@ -2204,7 +2205,7 @@
                     var increment = differenceBetween(jsonObject, jsonUntouchedVersion);
                     if (_.isEmpty(increment)) {
                         // if there is no change to data
-                        return;
+                        return undefined;
                     }
                     if (isLogDebug) {
                         var incrementSize = JSON.stringify(increment).length;

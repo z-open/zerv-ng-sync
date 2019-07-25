@@ -208,7 +208,7 @@ function mockSyncServer() {
         }
 
         function unsubscribe(subParams) {
-            var publication = publicationsWithSubscriptions.release(subParams.id, subParams.publication, subParams.params);
+            publicationsWithSubscriptions.release(subParams.id, subParams.publication, subParams.params);
             logDebug("Unsubscribed: " + JSON.stringify(subParams));
             return $pq.resolve();
         }

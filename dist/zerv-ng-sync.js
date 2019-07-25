@@ -1833,7 +1833,9 @@
                             }
                             var obj = updateFn(record);
                             if (!isLocallyModified && obj.timestamp && incrementalChangesEnabled) {
-                                // this gives acces to original value before modification
+                                // this gives acces to original json value (not the object with its mapping and property) before modification
+                                // Object.prototype.toJSON is automatically called by JSON.stringify
+                                // https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/JSON/stringify#Description
                                 obj.timestamp.$untouched = JSON.parse(JSON.stringify(obj));
                             }
                             return obj;
@@ -2186,7 +2188,7 @@
                  * objects or array that were modified/deleted within the object since it was received from sync.
                  *
                  * This is to be used as incremental change.
-                 * @param {*} id
+                 * @param {String} id of the object that is in case of array being sync, otherwise pass nothing for single object subscription
                  * @returns {object} incremental change
                  */
                 function getCurrentModifications(id, includeTimestamp) {
@@ -2421,15 +2423,6 @@
                  *
                  */
                 function applyChanges(records, force) {
-                    // publication must be have a parma to make it work as partial
-                    // if (this.isSingle() && records.length && records[0].$partial) {
-                    //     const fullObj = _.cloneDeep(cache.toJSON());
-                    //     records[0] = mergeChange(fullObj, records[0]);
-                    // // maker sure we maintain revision and other special fields
-
-                    // }
-
-
                     thisSub.ready = false;
                     return waitForExternalDatasourcesReady().then(function () {
                         try {
@@ -2577,7 +2570,9 @@
                         obj.revision = record.revision;
                         previous.revision = record.revision;
                         if (incrementalChangesEnabled) {
-                            // this gives acces to original value before modification
+                            // this gives acces to original json value (not the object with its mapping and property) before modification
+                            // Object.prototype.toJSON is automatically called by JSON.stringify
+                            // https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/JSON/stringify#Description
                             obj.timestamp.$untouched = JSON.parse(JSON.stringify(obj));
                         }
                         return $pq.resolve(obj);

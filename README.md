@@ -16,6 +16,13 @@ When the backend writes any data to the db that are supposed to be synchronized:
 
 Sync does not work if objects do not have BOTH id and revision field!!!!
 
+### install
+```
+npm install git://github.com/z-open/zerv-ng-sync#1.2.8
+```
+Use the appropriate release number.
+Tested with node: v10.15.1
+
 ### Example: Syncing an array
 
     sds = $sync

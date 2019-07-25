@@ -44,7 +44,8 @@
   },
   "scripts": {
     "build": "gulp build",
-    "test": "./node_modules/karma/bin/karma start"
+    "test": "./node_modules/karma/bin/karma start",
+    "eslint": "./node_modules/eslint/bin/eslint.js --fix **/*.js"
   },
   "readmeFilename": "README.md",
   "license": "MIT"

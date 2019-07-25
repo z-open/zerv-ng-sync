@@ -4,7 +4,7 @@ angular
 
 function mockSocketio() {
     var debug;
-    window.ZJSONBIN = {disabled: true};
+    window.ZJSONBIN = _.assign({}, window.ZJSONBIN, {disabled: true});
 
     this.setDebug = function(value) {
         debug = value;

@@ -1,24 +1,23 @@
-describe('Basic Sync Service: ', function() {
+describe('Basic Incremental facility: ', function() {
     let spec;
 
     beforeEach(module('sync.test'));
     beforeEach(module('zerv.sync'));
-    beforeEach(module(function( $syncProvider) {
-        window.ZJSONBIN = {
-            mergeChanges: () => 'merge',
-            differenceWith: () => 'diff',
-        };
-    }));
-
     beforeEach(inject(function(_$sync_) {
         spec = {
             $sync: _$sync_,
         };
     }));
 
+    it('should check that zjonlib is installed properly', () => {
+        // zjsonbin should be installed properly
+        expect(window.ZJSONBIN.mergeChanges).toBeDefined();
+        expect(window.ZJSONBIN.differenceBetween).toBeDefined();
+    });
+
     it('should delegate to zjonlib functions', () => {
-        expect(spec.$sync.mergeChanges()).toBeDefined();
-        expect(spec.$sync.mergeChanges()).toBe(window.ZJSONBIN.mergeChanges());
+        expect(spec.$sync.mergeChanges).toBe(window.ZJSONBIN.mergeChanges);
+        expect(spec.$sync.differenceBetween).toBe(window.ZJSONBIN.differenceBetween);
     });
 });
 
@@ -169,7 +168,7 @@ describe('Basic Sync Service: ', function() {
         $rootScope.$digest();
     });
 
-    describe('Syncinc actitivity', function() {
+    describe('Syncing activity', function() {
         beforeEach(function() {
             backend.setData(subParams, [spec.r1, spec.r2]);
             spec.sds = spec.$sync.subscribe('myPub');
@@ -413,7 +412,44 @@ describe('Basic Sync Service: ', function() {
         }
         );
     }
-    describe('Single record sync', function() {
+
+    describe('Single record sync with incrementals', function() {
+        beforeEach(function() {
+            backend.setData(subParams, [spec.r1]);
+            spec.sds = spec.$sync.subscribe('myPub')
+                .setSingle(true)
+                .enableIncrementalChanges();
+            $rootScope.$digest();
+        });
+
+        it('should receive an object and have set an untouched json object', function(done) {
+            spec.sds.waitForDataReady().then(function(data) {
+                expect(_.isArray(data)).toBe(false);
+                expect(data.timestamp.$untouched).toEqual({
+                    id: 1,
+                    description: 'person1',
+                    revision: 0,
+                    timestamp: {},
+                });
+                done();
+            });
+            $rootScope.$digest();
+        });
+
+        it('should return modifications made to the record', function(done) {
+            spec.sds.waitForDataReady().then(function(data) {
+                // let's modified instance returned by sync
+                data.description = 'personOne';
+                // can sync detect the differences?
+                const diff = spec.sds.getCurrentModifications();
+                expect(diff).toEqual({description: 'personOne'});
+                done();
+            });
+            $rootScope.$digest();
+        });
+    });
+
+    describe('Single record sync without incrementals', function() {
         beforeEach(function() {
             backend.setData(subParams, [spec.r1]);
             spec.sds = spec.$sync.subscribe('myPub')
@@ -421,9 +457,12 @@ describe('Basic Sync Service: ', function() {
             $rootScope.$digest();
         });
 
-        it('should receive an object', function(done) {
+        it('should receive an object without setting the untouched json object', function(done) {
+            // For now, For performance purposes, the untouched json object
+            // is not generated when incremental option is not enabled.
             spec.sds.waitForDataReady().then(function(data) {
                 expect(_.isArray(data)).toBe(false);
+                expect(data.timestamp.$untouched).toBeUndefined();
                 done();
             });
             $rootScope.$digest();
@@ -508,6 +547,44 @@ describe('Basic Sync Service: ', function() {
             $rootScope.$digest();
         });
     });
+
+    describe('Single Object sync with incrementals', function() {
+        beforeEach(function() {
+            backend.setData(subParams, [spec.p1]);
+            spec.sds = spec.$sync.subscribe('myPub')
+                .enableIncrementalChanges()
+                .setSingle(true)
+                .setObjectClass(Person);
+            $rootScope.$digest();
+        });
+
+        it('should receive an object and have set an untouched json object', function(done) {
+            spec.sds.waitForDataReady().then(function(data) {
+                expect(data.timestamp.$untouched).toEqual({
+                    id: 1,
+                    firstname: 'Tom',
+                    lastname: 'Great',
+                    revision: 1,
+                });
+                done();
+            });
+            $rootScope.$digest();
+        });
+
+        it('should return modifications made to the record', function(done) {
+            spec.sds.waitForDataReady().then(function(data) {
+                // let's modified instance returned by sync
+                data.firstname = 'Tommy';
+                data.someObjectAdded = {description: 'not part of Person and its ToJSON'};
+                // can sync detect the differences?
+                const diff = spec.sds.getCurrentModifications();
+                expect(diff).toEqual({firstname: 'Tommy'});
+                done();
+            });
+            $rootScope.$digest();
+        });
+    });
+
 
     describe('Single Object sync', function() {
         beforeEach(function() {
@@ -880,9 +957,14 @@ describe('Basic Sync Service: ', function() {
             this.getAbbrevation = function() {
                 return this.firstname.substring(0, 1) + this.lastname.substring(0, 1);
             };
+            this.timestamp = obj.timestamp || {};
         }
         Person.prototype.getFullname = function() {
             return this.firstname + ' ' + this.lastname;
+        };
+        // this is the object representation that would be communicated thru network or persisted to any support (DB, files...)
+        Person.prototype.toJSON = function() {
+            return _.pick(this, ['id', 'firstname', 'lastname', 'revision']);
         };
         return Person;
     }

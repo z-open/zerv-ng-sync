@@ -23,6 +23,7 @@ module.exports = function(config) {
             './node_modules/angular-mocks/angular-mocks.js',
             './node_modules/lodash/lodash.js',
             './node_modules/zerv-ng-core/dist/zerv-ng-core.js',
+            './node_modules/zjsonbin/lib/zjson-bin.js',
             'src/sync.module.js',
             'src/**/*.*.js',
             'test/helpers/**/*.module.js',
@@ -38,7 +39,7 @@ module.exports = function(config) {
 
         babelPreprocessor: {
             options: {
-                presets: ['es2015'],
+                presets: ['env'],
                 // sourceMap: 'inline',
                 retainLines: true,
             },
@@ -72,8 +73,8 @@ module.exports = function(config) {
         // available browser launchers: https://npmjs.org/browse/keyword/karma-launcher
 
         // uncomment this line when debugging unit tests in Chrome:
-        // browsers: ['PhantomJS', 'Chrome'],
-        browsers: ['PhantomJS'],
+        // browsers: ['PhantomJS', 'Chrome', 'ChromeHeadless'],
+        browsers: ['ChromeHeadless'],
 
         // Continuous Integration mode
         // if true, Karma captures browsers, runs the tests and exits

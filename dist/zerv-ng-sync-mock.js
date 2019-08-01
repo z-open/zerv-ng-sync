@@ -14,7 +14,7 @@ angular
 
 function mockSocketio() {
     var debug;
-    window.ZJSONBIN = {disabled: true};
+    window.ZJSONBIN = _.assign({}, window.ZJSONBIN, {disabled: true});
 
     this.setDebug = function(value) {
         debug = value;
@@ -319,7 +319,7 @@ function mockSyncServer() {
         }
 
         function unsubscribe(subParams) {
-            var publication = publicationsWithSubscriptions.release(subParams.id, subParams.publication, subParams.params);
+            publicationsWithSubscriptions.release(subParams.id, subParams.publication, subParams.params);
             logDebug("Unsubscribed: " + JSON.stringify(subParams));
             return $pq.resolve();
         }

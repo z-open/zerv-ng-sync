@@ -1063,7 +1063,7 @@
                 var subscriptionId = void 0;
                 var mapCustomDataFn = void 0,
                     mapPropertyFns = [];
-                var incrementalChangesEnabled = false;
+                var incrementalChangesEnabled = true;
                 var filteredDataSets = [];
 
                 var thisSub = this;
@@ -2233,6 +2233,21 @@
                         var size = benchmark && isLogInfo ? JSON.stringify(batch.records).length : null;
 
                         return cleanCache(batch.records, !batch.diff).then(function () {
+                            if (batch.incremental) {
+                                // if (!thisSub.isSingle()) {
+                                //     throw new Error('Incremental on array is not supported yet');
+                                // }
+                                batch.records = _.map(batch.records, function (record) {
+
+                                    var object = getData(record.id);
+                                    if (!object || !record.incr) {
+                                        // new record received... not incremental
+                                        return record.data;
+                                    }
+                                    var jsonObject = _.clone(object.timestamp.$untouched);
+                                    return service.mergeChanges(jsonObject, record.incr);
+                                });
+                            }
                             return applyChanges(batch.records, false);
                         }).then(function () {
                             if (!isInitialPushCompleted) {

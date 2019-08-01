@@ -441,7 +441,7 @@ function syncProvider($syncMappingProvider) {
             let ObjectClass;
             let subscriptionId;
             let mapCustomDataFn, mapPropertyFns = [];
-            let incrementalChangesEnabled = false;
+            let incrementalChangesEnabled = true;
             const filteredDataSets = [];
 
             const thisSub = this;
@@ -1639,6 +1639,21 @@ function syncProvider($syncMappingProvider) {
 
                     return cleanCache(batch.records, !batch.diff)
                         .then(function() {
+                            if (batch.incremental) {
+                                // if (!thisSub.isSingle()) {
+                                //     throw new Error('Incremental on array is not supported yet');
+                                // }
+                                batch.records = _.map(batch.records, (record) => {
+
+                                    const object = getData(record.id);
+                                    if (!object || !record.incr) {
+                                        // new record received... not incremental
+                                        return record.data;
+                                    }
+                                    const jsonObject = _.clone(object.timestamp.$untouched);
+                                    return service.mergeChanges(jsonObject, record.incr);
+                                });
+                            }
                             return applyChanges(batch.records, false);
                         })
                         .then(function() {

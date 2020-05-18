@@ -102,12 +102,7 @@ gulp.task('bump-dev', () => {
 });
 
 // build angular-socketio.js for dev (with map) and prod (min)
-gulp.task('build', gulp.series('lib', 'mockLib', () => {
-    return gulp.series('test')();
-}));
-
+gulp.task('build', gulp.series('lib', 'mockLib', 'test'));
 
 // continuous watchers
-gulp.task('default', gulp.series('lib', () => {
-    return gulp.series('tdd')();
-}));
+gulp.task('default', gulp.series('lib', 'tdd'));

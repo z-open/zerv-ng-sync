@@ -34,7 +34,7 @@ module.exports = function(config) {
         // preprocess matching files before serving them to the browser
         // available preprocessors: https://npmjs.org/browse/keyword/karma-preprocessor
         preprocessors: {
-            'src/**/*.js': ['wrap', 'babel'],
+            'src/**/*.js': ['babel'],
         },
 
         babelPreprocessor: {
@@ -43,11 +43,6 @@ module.exports = function(config) {
                 // sourceMap: 'inline',
                 retainLines: true,
             },
-        },
-
-        wrapPreprocessor: {
-            // Example: wrap each file in an IIFE
-            template: '(function () { <%= contents %> })()',
         },
 
 

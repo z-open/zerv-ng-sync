@@ -76,7 +76,7 @@ function syncProvider($syncMappingProvider) {
         const publicationListeners = {};
         let lastPublicationListenerUid = 0;
         let GRACE_PERIOD_IN_SECONDS = 8;
-        const SYNC_VERSION = '1.4';
+        const SYNC_VERSION = '1.5';
 
         const deserialize = _.isNil(window.ZJSONBIN) || window.ZJSONBIN.disabled ? ((v)=> v) : window.ZJSONBIN.deserialize;
         const differenceBetween = _.get(window.ZJSONBIN, 'differenceBetween');

@@ -702,7 +702,7 @@
             var publicationListeners = {};
             var lastPublicationListenerUid = 0;
             var GRACE_PERIOD_IN_SECONDS = 8;
-            var SYNC_VERSION = '1.4';
+            var SYNC_VERSION = '1.5';
 
             var deserialize = _.isNil(window.ZJSONBIN) || window.ZJSONBIN.disabled ? function (v) {
                 return v;

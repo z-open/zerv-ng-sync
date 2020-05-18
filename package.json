@@ -6,7 +6,7 @@
   "repository": {
     "url": ""
   },
-  "version": "1.2.10",
+  "version": "1.2.11",
   "dependencies": {
     "angular": "1.7.9",
     "lodash": "4.17.15"
@@ -34,7 +34,7 @@
     "karma-chrome-launcher": "2.2.0",
     "karma-jasmine": "0.3.6",
     "karma-jshint": "0.1.0",
-    "zerv-ng-core": "z-open/zerv-ng-core#1.1.3",
+    "zerv-ng-core": "z-open/zerv-ng-core#1.1.8",
     "zjsonbin": "z-open/zjsonbin#2.0.3"
   },
   "scripts": {

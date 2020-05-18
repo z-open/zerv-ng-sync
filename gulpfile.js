@@ -7,9 +7,6 @@ const gulp = require('gulp');
 
 const babel = require('gulp-babel');
 
-// deletes files used during build (https://www.npmjs.com/package/gulp-clean)
-const clean = require('gulp-clean');
-
 // combines files into a single destination file (https://github.com/wearefractal/gulp-concat)
 const concat = require('gulp-concat');
 
@@ -95,12 +92,6 @@ gulp.task('tdd', (done) => {
     }).start();
 });
 
-// clean up files after builds
-gulp.task('cleanup', () => {
-    return gulp.src('dist', {read: false})
-        .pipe(clean());
-});
-
 // bump the dev version (NOTE: NOT IN USE RIGHT NOW)
 gulp.task('bump-dev', () => {
     const gitInfo = gitDescribeSync(__dirname);
@@ -112,7 +103,7 @@ gulp.task('bump-dev', () => {
 
 // build angular-socketio.js for dev (with map) and prod (min)
 gulp.task('build', gulp.series('lib', 'mockLib', () => {
-    return gulp.series('test', 'cleanup')();
+    return gulp.series('test')();
 }));
 
 

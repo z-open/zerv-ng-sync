@@ -1,12 +1,12 @@
 (function() {
-'use strict';
+"use strict";
 
 angular
     .module('sync.test', ['zerv.sync']);
 }());
 
 (function() {
-'use strict';
+"use strict";
 
 angular
     .module('sync.test')
@@ -22,7 +22,7 @@ function mockSocketio() {
 
 
     this.$get =
-        ['$rootScope', '$pq', function($rootScope, $pq) {
+        ["$rootScope", "$pq", function($rootScope, $pq) {
             var self = this;
             this.network = true;
             var events = {},
@@ -108,21 +108,23 @@ function mockSocketio() {
 }());
 
 (function() {
-'use strict';
+"use strict";
 
 angular
     .module('sync.test')
     .provider('mockSyncServer', mockSyncServer);
 
 function mockSyncServer() {
+
     var debug;
 
-    this.setDebug = function(value) {
+    this.setDebug = function (value) {
         debug = value;
     };
 
 
-    this.$get = ['$rootScope', '$pq', '$socketio', '$sync', 'publicationService', function sync($rootScope, $pq, $socketio, $sync, publicationService) {
+    this.$get = ["$rootScope", "$pq", "$socketio", "$sync", "publicationService", function sync($rootScope, $pq, $socketio, $sync, publicationService) {
+
         var publicationsWithSubscriptions = publicationService;
         var subCount = 0;
 
@@ -143,14 +145,15 @@ function mockSyncServer() {
             acknowledge: acknowledge,
 
 
-            setData: setData,
-        };
 
-        $socketio.onFetch('sync.subscribe', function() {
+            setData: setData
+        }
+
+        $socketio.onFetch('sync.subscribe', function () {
             return service.subscribe.apply(self, arguments);
         });
 
-        $socketio.onFetch('sync.unsubscribe', function() {
+        $socketio.onFetch('sync.unsubscribe', function () {
             return service.unsubscribe.apply(self, arguments);
         });
 
@@ -205,7 +208,7 @@ function mockSyncServer() {
          */
         function publish(definition) {
             if (_.isArray(definition)) {
-                _.forEach(definition, function(def) {
+                _.forEach(definition, function (def) {
                     if (!def.type) {
                         throw new Error('Publish array argument must contain objects with a type property ("object" or "array")');
                     }
@@ -214,7 +217,7 @@ function mockSyncServer() {
                     } else {
                         publishObject(def.sub, def.data);
                     }
-                });
+                })
             } else if (_.isObject(definition)) {
                 publishObject(definition.sub, definition.data);
             } else {
@@ -229,13 +232,15 @@ function mockSyncServer() {
          *   if not provided, a default publication will be created
          */
         function setData(subParams, data) {
-            data.forEach(function(record) {
+            data.forEach(function (record) {
                 if (_.isNil(record.revision)) {
                     throw new Error('Objects in publication must have a revision and id. Check you unit test data for ' + JSON.stringify(subParams));
                 }
             });
             return publicationsWithSubscriptions.create(data, subParams.publication, subParams.params);
         }
+
+
 
 
         function notifyDataUpdate(subParams, data) {
@@ -256,20 +261,18 @@ function mockSyncServer() {
             }
 
             data = publication.remove(data);
-            _.forEach(data, function(record) {
- record.remove = new Date();
-});
+            _.forEach(data, function (record) { record.remove = new Date(); });
             return notifySubscriptions(publication, data);
         }
 
         function notifySubscriptions(publication, data) {
-            var r = $pq.all(_.map(publication.subscriptionIds, function(id) {
+            var r = $pq.all(_.map(publication.subscriptionIds, function (id) {
                 return onPublicationNotficationCallback({
                     name: publication.name,
                     subscriptionId: id,
                     params: publication.params,
                     records: data,
-                    diff: true,
+                    diff: true
                 }, service.acknowledge);
             }));
             if (!$rootScope.$$phase) {
@@ -279,6 +282,7 @@ function mockSyncServer() {
                 // when the digest completes, the notification has been processed by the client, UI might have reacted too.
             }
             return r;
+
         }
 
         function subscribe(subParams) {
@@ -302,11 +306,11 @@ function mockSyncServer() {
                 publication.subscriptionIds.push(subId);
             }
 
-            return $pq.resolve(subId).then(function(subId) {
+            return $pq.resolve(subId).then(function (subId) {
                 publication.subId = subId;
                 onPublicationNotficationCallback({
                     name: publication.name,
-                    subscriptionId: subId, // this is the id for the new subscription.
+                    subscriptionId: subId,  // this is the id for the new subscription.
                     params: publication.params,
                     records: publication.getData(),
                 }, service.acknowledge);
@@ -316,7 +320,7 @@ function mockSyncServer() {
 
         function unsubscribe(subParams) {
             publicationsWithSubscriptions.release(subParams.id, subParams.publication, subParams.params);
-            logDebug('Unsubscribed: ' + JSON.stringify(subParams));
+            logDebug("Unsubscribed: " + JSON.stringify(subParams));
             return $pq.resolve();
         }
 
@@ -338,14 +342,14 @@ function mockSyncServer() {
                 console.debug('MOCKSERV: ' + msg);
             }
         }
-    }];
+    }]
 }
 }());
 
 (function() {
-'use strict';
+"use strict";
 
-publicationService.$inject = ['$sync'];
+publicationService.$inject = ["$sync"];
 angular
     .module('sync.test')
     .service('publicationService', publicationService);
@@ -360,14 +364,14 @@ function publicationService($sync) {
 
     function findBySubscriptionId(id) {
         // find the data for this subscription
-        return _.find(publications, function(pub) {
+        return _.find(publications, function (pub) {
             return _.indexOf(pub.subscriptionIds, id) !== -1;
         });
     }
 
     function find(name, params) {
         // find the data for this subscription
-        return _.find(publications, function(pub) {
+        return _.find(publications, function (pub) {
             return pub.name === name && (
                 (params && pub.params && _.isEqual(params, pub.params)) ||
                 (!params && !pub.params)
@@ -398,14 +402,15 @@ function publicationService($sync) {
     }
 
 
+
     function copyAll(array) {
         var r = [];
-        array.forEach(function(i) {
+        array.forEach(function (i) {
             if (!_.isObject(i)) {
                 throw new Error('Publication data cannot be null');
             }
             r.push(angular.copy(i));
-        });
+        })
         return r;
     }
 
@@ -416,36 +421,36 @@ function publicationService($sync) {
         this.subscriptionIds = [];
     }
 
-    Publication.prototype.hasSubscriptions = function() {
+    Publication.prototype.hasSubscriptions = function () {
         return this.subscriptionIds.length > 0;
-    };
+    }
 
-    Publication.prototype.reset = function(data) {
+    Publication.prototype.reset = function (data) {
         this.cache = {};
         this.update(data);
         return data;
-    };
+    }
 
-    Publication.prototype.update = function(data) {
+    Publication.prototype.update = function (data) {
         var self = this;
         data = copyAll(data);
-        data.forEach(function(record) {
+        data.forEach(function (record) {
             self.cache[$sync.getIdValue(record.id)] = record;
         });
         return data;
-    };
+    }
 
-    Publication.prototype.remove = function(data) {
+    Publication.prototype.remove = function (data) {
         var self = this;
         data = copyAll(data);
-        data.forEach(function(record) {
+        data.forEach(function (record) {
             delete self.cache[$sync.getIdValue(record.id)];
         });
         return data;
-    };
+    }
 
-    Publication.prototype.getData = function() {
+    Publication.prototype.getData = function () {
         return _.values(this.cache);
-    };
+    }
 }
 }());

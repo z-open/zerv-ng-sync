@@ -922,7 +922,7 @@ describe('Basic Sync Service: ', function() {
                 // expect(spec.sds.getData().length).toEqual(2);
                 done();
             });
-            $scope.$broadcast('user_connected');
+            $scope.$broadcast('user_reconnected');
             expect(spec.$socketio.fetch.calls.count()).toEqual(2);
             // 2nd subscription for reconnect
             expect(spec.$socketio.fetch.calls.mostRecent().args[0]).toEqual('sync.subscribe');

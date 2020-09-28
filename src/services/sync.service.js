@@ -1381,7 +1381,7 @@ function syncProvider($syncMappingProvider) {
                     if (!completed && deferredInitialization === initializationPromise) {
                         logError('Failed to load data within ' + (initializationTimeout / 1000) + 's for ' + thisSub);
                         initializationPromise.reject('sync timeout');
-                        // give up syncing.
+                        // give up syncing and release resources.
                         thisSub.syncOff();
                     }
                 }, initializationTimeout);
@@ -1541,10 +1541,10 @@ function syncProvider($syncMappingProvider) {
             }
 
             function listenForReconnectionToResync(listenNow) {
-                // give a chance to connect before listening to reconnection... @TODO should have user_reconnected_event
+                // give a chance to connect before listening to reconnection.
                 setTimeout(function() {
-                    reconnectOff = innerScope.$on('user_connected', function() {
-                        isLogDebug && logDebug('Resyncing after network loss to ' + publication);
+                    reconnectOff = innerScope.$on('user_reconnected', function() {
+                        isLogDebug && logDebug('Resyncing after network loss to ' + publication + JSON.stringify(thisSub.getParameters()));
                         // note the backend might return a new subscription if the client took too much time to reconnect.
                         registerSubscription();
                     });

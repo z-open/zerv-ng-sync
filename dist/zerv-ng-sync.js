@@ -651,6 +651,7 @@
         var benchmark = true,
             isLogDebug = void 0,
             isLogInfo = void 0,
+            isLogTrace = void 0,
             defaultReleaseDelay = 30,
             defaultInitializationTimeout = 10;
 
@@ -658,7 +659,8 @@
 
         this.setDebug = function(value) {
             isLogInfo = value >= 1;
-            isLogDebug = value === 2;
+            isLogDebug = value >= 2;
+            isLogTrace = value >= 3;
             $syncMappingProvider.setDebug(isLogDebug);
             return this;
         };
@@ -1071,7 +1073,7 @@
                 var subParams = {};
                 var recordStates = {};
                 var innerScope = void 0; // = $rootScope.$new(true);
-                var syncListener = new SyncListener();
+                var syncListener = new SyncListener(thisSub);
 
                 var dependentSubscriptions = [];
                 var releaseDelay = defaultReleaseDelay;
@@ -1725,7 +1727,7 @@
 
                 function $notifyUpdateWithinDependentSubscription(idOfObjectImpactedByChange) {
                     var cachedObject = getRecordState({id: idOfObjectImpactedByChange});
-                    syncListener.notify('ready', getData(), [cachedObject]);
+                    syncListener.notify('ready', getData(), [cachedObject], true);
                 }
 
                 /**
@@ -1982,7 +1984,7 @@
                         if (!completed && deferredInitialization === initializationPromise) {
                             logError('Failed to load data within ' + initializationTimeout / 1000 + 's for ' + thisSub);
                             initializationPromise.reject('sync timeout');
-                            // give up syncing.
+                            // give up syncing and release resources.
                             thisSub.syncOff();
                         }
                     }, initializationTimeout);
@@ -2137,10 +2139,10 @@
                 }
 
                 function listenForReconnectionToResync(listenNow) {
-                    // give a chance to connect before listening to reconnection... @TODO should have user_reconnected_event
+                    // give a chance to connect before listening to reconnection.
                     setTimeout(function() {
-                        reconnectOff = innerScope.$on('user_connected', function() {
-                            isLogDebug && logDebug('Resyncing after network loss to ' + publication);
+                        reconnectOff = innerScope.$on('user_reconnected', function() {
+                            isLogDebug && logDebug('Resyncing after network loss to ' + publication + JSON.stringify(thisSub.getParameters()));
                             // note the backend might return a new subscription if the client took too much time to reconnect.
                             registerSubscription();
                         });
@@ -2230,6 +2232,7 @@
                     // cannot only listen to subscriptionId yet...because the registration might have answer provided its id yet...but started broadcasting changes...@TODO can be improved...
                     if (subscriptionId === batch.subscriptionId || !subscriptionId && checkDataSetParamsIfMatchingBatchParams(batch.params)) {
                         var startTime = Date.now();
+                        var dataReceivedIn = Date.now() - initialStartTime;
                         var size = benchmark && isLogInfo ? JSON.stringify(batch.records).length : null;
 
                         return cleanCache(batch.records, !batch.diff).then(function() {
@@ -2239,9 +2242,9 @@
                                 isInitialPushCompleted = true;
 
                                 if (benchmark && isLogInfo) {
-                                    var timeToReceive = Date.now() - initialStartTime;
-                                    var timeToProcess = Date.now() - startTime;
-                                    isLogInfo && logInfo('Initial sync total time for ' + publication + ': ' + (timeToReceive + timeToProcess) + 'ms - Data Received in: ' + timeToReceive + 'ms, applied in: ' + timeToProcess + 'ms - Estimated size: ' + formatSize(size) + ' - Records: ' + batch.records.length + ' - Avg size/time: ' + formatSize(size / (batch.records.length || 1)) + '/' + roundNumber(timeToProcess / (batch.records.length || 1), 2) + 'ms');
+                                    var totalInitialToReady = Date.now() - initialStartTime;
+                                    var applyTime = Date.now() - startTime;
+                                    isLogInfo && logInfo('Initial sync total time for ' + publication + ': ' + totalInitialToReady + 'ms - Data Received in: ' + dataReceivedIn.toFixed(3) + 'ms, applied in: ' + applyTime.toFixed(3) + 'ms - Estimated size: ' + formatSize(size) + ' - Records: ' + batch.records.length + ' - Avg size/time: ' + formatSize(size / (batch.records.length || 1)) + '/' + roundNumber(applyTime / (batch.records.length || 1), 2) + 'ms');
                                 }
                                 deferredInitialization.resolve(getData());
                             }
@@ -2471,9 +2474,9 @@
                 function notifyDataReady(newDataArray) {
                     thisSub.ready = true;
                     if (isSingleObjectCache) {
-                        syncListener.notify('ready', getData());
+                        syncListener.notify('ready', getData(), null, true);
                     } else {
-                        syncListener.notify('ready', getData(), newDataArray);
+                        syncListener.notify('ready', getData(), newDataArray, true);
                     }
                 }
 
@@ -2537,7 +2540,8 @@
                  * @param {boolean} force (let us know if the addition was done by sync, or forcing record manually)
                  */
                 function addRecord(record, force) {
-                    isLogDebug && logDebug('Sync -> Inserted New record #' + JSON.stringify(record.id) + (force ? ' directly' : ' via sync') + ' for subscription to ' + thisSub); // JSON.stringify(record));
+                    // trace can be very verbose
+                    isLogTrace && logTrace('Sync -> Inserted New record #' + JSON.stringify(record.id) + (force ? ' directly' : ' via sync') + ' for subscription to ' + thisSub); // JSON.stringify(record));
                     getRevision(record); // just make sure we can get a revision before we handle this record
 
                     var obj = formatRecord ? formatRecord(record) : record;
@@ -2718,7 +2722,7 @@
             /**
              * this object
              */
-            function SyncListener() {
+            function SyncListener(subscription) {
                 var events = {};
                 var count = 0;
 
@@ -2737,11 +2741,23 @@
                 }
 
                 function notify(event, data1, data2) {
+                    var timingCapable = arguments.length > 3 && arguments[3] !== undefined ? arguments[3] : false;
+
                     var listeners = events[event];
+                    var subDef = void 0;
+                    if (timingCapable === true && !_.isEmpty(listeners)) {
+                        subDef = function subDef() {
+                            return 'Applied notified event [' + event + '] : ' + subscription.getPublication() + JSON.stringify(subscription.getParameters());
+                        };
+                        logTime(subDef);
+                    }
                     if (listeners) {
                         _.forEach(listeners, function(listener, id) {
                             listener.notify(data1, data2);
                         });
+                    }
+                    if (timingCapable === true && !_.isEmpty(listeners)) {
+                        logTimeEnd(subDef);
                     }
                 }
 
@@ -2789,6 +2805,24 @@
         function logDebug(msg) {
             if (isLogDebug) {
                 console.debug('SYNC(debug): ', _.isFunction(msg) ? msg() : msg);
+            }
+        }
+
+        function logTrace(msg) {
+            if (isLogTrace) {
+                console.debug('SYNC(trace): ', _.isFunction(msg) ? msg() : msg);
+            }
+        }
+
+        function logTime(label) {
+            if (isLogDebug) {
+                console.time('SYNC(debug): ' + (_.isFunction(label) ? label() : label));
+            }
+        }
+
+        function logTimeEnd(label) {
+            if (isLogDebug) {
+                console.timeEnd('SYNC(debug): ' + (_.isFunction(label) ? label() : label));
             }
         }
 

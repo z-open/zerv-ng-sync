@@ -1691,9 +1691,6 @@ function syncProvider($syncMappingProvider) {
                 }
                 if (!isSingleObjectCache) {
                     result = cleanArrayCache(findRecordsPresentInCacheOnly(excludedRecords));
-                    if (!isDataCached()) {
-                        cache.length = 0;
-                    }
                 } else {
                     result = cleanObjectCache();
                 }
@@ -1725,16 +1722,18 @@ function syncProvider($syncMappingProvider) {
             /**
              * Removed the following records from the cache, they do no longer exist.
              *
-             * @param {*} records
+             * @param {Array<Object>} recordsToRemove
              * @returns {Promise} resolve when the cache is cleaned.
              */
-            function cleanArrayCache(records) {
+            function cleanArrayCache(recordsToRemove) {
                 const promises = [];
-                _.forEach(records, function(obj) {
+                _.forEach(recordsToRemove, function(obj) {
                     $syncMapping.removePropertyMappers(thisSub, obj);
                     obj.removed = true;
                     promises.push(mapFullObject(obj, 'clear'));
-                    delete recordStates[getIdValue(obj.id)];
+                    const recordId = getIdValue(obj.id);
+                    delete recordStates[recordId];
+                    _.remove(cache, {id: recordId}); // could be optimized later on
                 });
                 return $pq.all(promises)
                     .catch(function(err) {

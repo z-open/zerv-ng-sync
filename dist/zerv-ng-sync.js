@@ -2285,6 +2285,9 @@
                     }
                     if (!isSingleObjectCache) {
                         result = cleanArrayCache(findRecordsPresentInCacheOnly(excludedRecords));
+                        if (!isDataCached()) {
+                            cache.length = 0;
+                        }
                     } else {
                         result = cleanObjectCache();
                     }

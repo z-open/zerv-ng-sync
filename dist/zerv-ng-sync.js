@@ -2305,13 +2305,10 @@
                  * @returns {array} records
                  */
                 function findRecordsPresentInCacheOnly(receivedRecordsToBeSynced) {
-                    var idsTobeSynced = _.map(receivedRecordsToBeSynced, function (record) {
-                        return record.id;
-                    });
-                    var deletedRecords = _.filter(recordStates, function (cachedRecord, id) {
+                    var idsTobeSynced = _.map(receivedRecordsToBeSynced, 'id');
+                    return _.filter(recordStates, function (cachedRecord) {
                         return idsTobeSynced.indexOf(cachedRecord.id) === -1;
                     });
-                    return deletedRecords;
                 }
 
                 /**

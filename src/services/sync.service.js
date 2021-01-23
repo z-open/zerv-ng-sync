@@ -1711,11 +1711,10 @@ function syncProvider($syncMappingProvider) {
              * @returns {array} records
              */
             function findRecordsPresentInCacheOnly(receivedRecordsToBeSynced) {
-                const idsTobeSynced = _.map(receivedRecordsToBeSynced, (record) => record.id);
-                const deletedRecords = _.filter(recordStates, function(cachedRecord, id) {
-                    return idsTobeSynced.indexOf(cachedRecord.id) === -1;
-                });
-                return deletedRecords;
+                const idsTobeSynced = _.map(receivedRecordsToBeSynced, 'id');
+                return _.filter(recordStates, (cachedRecord) =>  
+                    idsTobeSynced.indexOf(cachedRecord.id) === -1
+                );
             }
 
             /**
@@ -1726,7 +1725,7 @@ function syncProvider($syncMappingProvider) {
              */
             function cleanArrayCache(recordsToRemove) {
                 const promises = [];
-                _.forEach(recordsToRemove, function(obj) {
+                _.forEach(recordsToRemove, (obj) => {
                     $syncMapping.removePropertyMappers(thisSub, obj);
                     obj.removed = true;
                     promises.push(mapFullObject(obj, 'clear'));

@@ -2305,13 +2305,11 @@
                  * @returns {array} records
                  */
                 function findRecordsPresentInCacheOnly(receivedRecordsToBeSynced) {
-                    var deletedRecords = [];
-                    _.forEach(recordStates, function (cachedRecord, id) {
-                        if (!_.find(receivedRecordsToBeSynced, function (record) {
-                            return id === getIdValue(record.id);
-                        })) {
-                            deletedRecords.push(cachedRecord);
-                        }
+                    var idsTobeSynced = _.map(receivedRecordsToBeSynced, function (record) {
+                        return record.id;
+                    });
+                    var deletedRecords = _.filter(recordStates, function (cachedRecord, id) {
+                        return idsTobeSynced.indexOf(cachedRecord.id) === -1;
                     });
                     return deletedRecords;
                 }
@@ -2330,7 +2328,11 @@
                         promises.push(mapFullObject(obj, 'clear'));
                         var recordId = getIdValue(obj.id);
                         delete recordStates[recordId];
-                        _.remove(cache, { id: recordId }); // could be optimized later on
+                        // delete in the index cache as well.
+                        var pos = cache.indexOf(obj);
+                        if (pos !== -1) {
+                            cache.splice(pos, 1);
+                        }
                     });
                     return $pq.all(promises).catch(function (err) {
                         logError('Error clearing subscription cache - ' + err);

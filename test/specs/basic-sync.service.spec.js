@@ -906,32 +906,54 @@ describe('Basic Sync Service: ', function() {
         });
     });
 
+    describe('after a network loss', () => {
 
-    it('should force a resubscription after network loss', function(done) {
-        backend.setData(subParams, [spec.r1, spec.r2]);
-        var $scope = $rootScope.$new(true);
-        spec.sds = spec.$sync.subscribe('myPub', $scope);
-        spec.sds.setParameters();
-        $scope.$digest();
-        jasmine.clock().tick(2100); // the subscription does not listen to connection event right away (Need better handling)
-        spec.sds.waitForDataReady().then(function(data) {
-            // initial subscription call
-            expect(spec.$socketio.fetch.calls.count()).toEqual(1);
-            backend.setData(subParams, [spec.r3]);
-            spec.sds.onReady(function() {
-                // expect(spec.sds.getData().length).toEqual(2);
-                done();
-            });
-            $scope.$broadcast('user_reconnected');
-            expect(spec.$socketio.fetch.calls.count()).toEqual(2);
-            // 2nd subscription for reconnect
-            expect(spec.$socketio.fetch.calls.mostRecent().args[0]).toEqual('sync.subscribe');
-
-            // spec.sds.waitForDataReady().then(function () {
-
-            // });
+        beforeEach(() => {
+            backend.setData(subParams, [spec.r1, spec.r2]);
+            spec.$scope = $rootScope.$new(true);
+            spec.sds = spec.$sync.subscribe('myPub', spec.$scope);
+            spec.sds.setParameters();
+            spec.$scope.$digest();
+            jasmine.clock().tick(2100); // the subscription does not listen to connection event right away (Need better handling)
         });
-        $scope.$digest();
+
+        it('should force a resubscription but get different data after reconnection due to data updated on the backend', function(done) {
+            spec.sds.waitForDataReady().then(function() {
+                // initial subscription call
+                expect(spec.$socketio.fetch.calls.count()).toEqual(1);
+                // pretend r1,r2 is no longer in dataset but instead r3 is 
+                // (This situation can happen when data was updated during disconnection on the backend side)
+                backend.setData(subParams, [spec.r3]);
+                spec.sds.onReady(function() {
+                    expect(spec.sds.getData().length).toEqual(1);
+                    expect(spec.sds.getData()[0].id).toEqual(3);
+                    done();
+                });
+                spec.$scope.$broadcast('user_reconnected');
+                expect(spec.$socketio.fetch.calls.count()).toEqual(2);
+                // 2nd subscription for reconnect
+                expect(spec.$socketio.fetch.calls.mostRecent().args[0]).toEqual('sync.subscribe');
+                expect(spec.sds.getData().length).toEqual(2);
+            });
+            spec.$scope.$digest();
+        });
+
+        it('should force a resubscription and NOT duplicate the data already in the cache', function(done) {
+            spec.sds.waitForDataReady().then(function() {
+                // initial subscription call
+                expect(spec.$socketio.fetch.calls.count()).toEqual(1);
+                // pretend r1 and r3 is no longer in dataset 
+                // (This situation can happen when data was updated during disconnection on the backend side)
+                backend.setData(subParams, [spec.r2]);
+                spec.sds.onReady(function() {
+                    expect(spec.sds.getData().length).toEqual(1);
+                    expect(spec.sds.getData()[0].id).toEqual(2);
+                    done();
+                });
+                spec.$scope.$broadcast('user_reconnected');
+            });
+            spec.$scope.$digest();
+        });
     });
 
 

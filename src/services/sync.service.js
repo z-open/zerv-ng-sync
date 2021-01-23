@@ -1711,13 +1711,9 @@ function syncProvider($syncMappingProvider) {
              * @returns {array} records
              */
             function findRecordsPresentInCacheOnly(receivedRecordsToBeSynced) {
-                const deletedRecords = [];
-                _.forEach(recordStates, function(cachedRecord, id) {
-                    if (!_.find(receivedRecordsToBeSynced, function(record) {
-                        return id === getIdValue(record.id);
-                    })) {
-                        deletedRecords.push(cachedRecord);
-                    }
+                const idsTobeSynced = _.map(receivedRecordsToBeSynced, (record) => record.id);
+                const deletedRecords = _.filter(recordStates, function(cachedRecord, id) {
+                    return idsTobeSynced.indexOf(cachedRecord.id) === -1;
                 });
                 return deletedRecords;
             }
@@ -1736,7 +1732,11 @@ function syncProvider($syncMappingProvider) {
                     promises.push(mapFullObject(obj, 'clear'));
                     const recordId = getIdValue(obj.id);
                     delete recordStates[recordId];
-                    _.remove(cache, {id: recordId}); // could be optimized later on
+                    // delete in the index cache as well.
+                    const pos = cache.indexOf(obj);
+                    if (pos !== -1) {
+                        cache.splice(pos,1);
+                    }
                 });
                 return $pq.all(promises)
                     .catch(function(err) {

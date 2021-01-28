@@ -921,7 +921,7 @@ describe('Basic Sync Service: ', function() {
             spec.sds.waitForDataReady().then(function() {
                 // initial subscription call
                 expect(spec.$socketio.fetch.calls.count()).toEqual(1);
-                // pretend r1,r2 is no longer in dataset but instead r3 is 
+                // pretend r1 and r2 are no longer in dataset but instead r3 is 
                 // (This situation can happen when data was updated during disconnection on the backend side)
                 backend.setData(subParams, [spec.r3]);
                 spec.sds.onReady(function() {
@@ -942,7 +942,7 @@ describe('Basic Sync Service: ', function() {
             spec.sds.waitForDataReady().then(function() {
                 // initial subscription call
                 expect(spec.$socketio.fetch.calls.count()).toEqual(1);
-                // pretend r1 and r3 is no longer in dataset 
+                // pretend r1 is no longer in dataset, but r2 is still present.
                 // (This situation can happen when data was updated during disconnection on the backend side)
                 backend.setData(subParams, [spec.r2]);
                 spec.sds.onReady(function() {

@@ -1711,9 +1711,9 @@ function syncProvider($syncMappingProvider) {
              * @returns {array} records
              */
             function findRecordsPresentInCacheOnly(receivedRecordsToBeSynced) {
-                const idsTobeSynced = _.map(receivedRecordsToBeSynced, 'id');
+                const idsToBeSynced = _.map(receivedRecordsToBeSynced, (record) => getIdValue(record.id));
                 return _.filter(recordStates, (cachedRecord) =>  
-                    idsTobeSynced.indexOf(cachedRecord.id) === -1
+                    idsToBeSynced.indexOf(cachedRecord.id) === -1
                 );
             }
 

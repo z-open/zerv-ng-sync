@@ -1711,30 +1711,31 @@ function syncProvider($syncMappingProvider) {
              * @returns {array} records
              */
             function findRecordsPresentInCacheOnly(receivedRecordsToBeSynced) {
-                const deletedRecords = [];
-                _.forEach(recordStates, function(cachedRecord, id) {
-                    if (!_.find(receivedRecordsToBeSynced, function(record) {
-                        return id === getIdValue(record.id);
-                    })) {
-                        deletedRecords.push(cachedRecord);
-                    }
-                });
-                return deletedRecords;
+                const idsToBeSynced = _.map(receivedRecordsToBeSynced, (record) => getIdValue(record.id));
+                return _.filter(recordStates, (cachedRecord) =>  
+                    idsToBeSynced.indexOf(cachedRecord.id) === -1
+                );
             }
 
             /**
              * Removed the following records from the cache, they do no longer exist.
              *
-             * @param {*} records
+             * @param {Array<Object>} recordsToRemove
              * @returns {Promise} resolve when the cache is cleaned.
              */
-            function cleanArrayCache(records) {
+            function cleanArrayCache(recordsToRemove) {
                 const promises = [];
-                _.forEach(records, function(obj) {
+                _.forEach(recordsToRemove, (obj) => {
                     $syncMapping.removePropertyMappers(thisSub, obj);
                     obj.removed = true;
                     promises.push(mapFullObject(obj, 'clear'));
-                    delete recordStates[getIdValue(obj.id)];
+                    const recordId = getIdValue(obj.id);
+                    delete recordStates[recordId];
+                    // delete in the index cache as well.
+                    const pos = cache.indexOf(obj);
+                    if (pos !== -1) {
+                        cache.splice(pos,1);
+                    }
                 });
                 return $pq.all(promises)
                     .catch(function(err) {

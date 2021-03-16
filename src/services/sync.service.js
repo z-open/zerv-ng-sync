@@ -460,6 +460,11 @@ function syncProvider($syncMappingProvider) {
             let releaseTimeout = null;
 
             //  ----public----
+            // to see in the snapshot
+            this.publication = publication;
+            this.subParams = subParams;
+            // ---------------
+
             this.toString = toString;
             this.getPublication = getPublication;
             this.getIdb = getId;
@@ -540,6 +545,8 @@ function syncProvider($syncMappingProvider) {
 
             this.$notifyUpdateWithinDependentSubscription = $notifyUpdateWithinDependentSubscription;
             this.$createDependentSubscription = $createDependentSubscription;
+
+            this.isDestroyed = isDestroyed;
 
             setSingle(false);
 
@@ -623,6 +630,10 @@ function syncProvider($syncMappingProvider) {
                 return publication;
             }
 
+            function isDestroyed() {
+                return destroyed || false;
+            }
+
             function toString() {
                 return publication + '/' + JSON.stringify(subParams);
             }
@@ -646,6 +657,29 @@ function syncProvider($syncMappingProvider) {
                 syncOff();
                 $syncMapping.destroyDependentSubscriptions(thisSub);
                 isLogDebug && logDebug('Subscription to ' + thisSub + ' destroyed.');
+
+                // clear all cached data from memory
+                // to prevent large instance to be kept in memory
+                recordStates = {};
+                if(thisSub.isSingle()) {
+                    clearSingleObject(cache);
+                }
+                cache = null;
+                deferredInitialization = null;
+            }
+
+            function clearSingleObject(object) {
+                if (_.isEmpty(object)) {
+                    return;
+                }
+                Object.keys(object).forEach(function(key) {
+                    try {
+                        delete object[key];
+                    } catch(err) {
+                        console.error(err);
+                    }
+                });
+                return object;
             }
 
             function createSubSet(filter, scope) {
@@ -1155,6 +1189,10 @@ function syncProvider($syncMappingProvider) {
                 cleanCache();
 
                 subParams = fetchingParams || {};
+
+                // to show in snapshot
+                this.subParams = subParams;
+
                 options = options || {};
                 if (angular.isDefined(options.single)) {
                     setSingle(options.single);
@@ -1291,7 +1329,7 @@ function syncProvider($syncMappingProvider) {
              *
              * @returns this subcription
              */
-            function syncOff() {
+            function syncOff(clearCache) {
                 if (isSyncingOn) {
                     unregisterSubscription();
                     isSyncingOn = false;
@@ -1310,6 +1348,9 @@ function syncProvider($syncMappingProvider) {
                 if (deferredInitialization) {
                     // if there is code waiting on this promise.. ex (load in resolve)
                     deferredInitialization.resolve(getData());
+                }
+                if (clearCache) {
+                    cleanCache();
                 }
                 return thisSub;
             }
@@ -1450,18 +1491,18 @@ function syncProvider($syncMappingProvider) {
              */
             function scheduleRelease() {
                 // detach must be called otherwise,  the subscription is planned for release.
-                if (innerScope === $rootScope) {
-                    isLogDebug && logDebug('Release not necessary (unattached): ' + thisSub);
-                } else {
-                    isLogDebug && logDebug('Releasing subscription in ' + (releaseDelay / 1000) + 's: ' + thisSub);
-                    releaseTimeout = setTimeout(function() {
-                        if (releaseTimeout) {
-                            isLogInfo && logInfo('Subscription released: ' + thisSub);
-                            thisSub.syncOff();
-                            releaseTimeout = null;
-                        }
-                    }, Math.max(releaseDelay, initializationTimeout) + 500); // to make sure that a release does not happen during initialization
-                }
+                // if (innerScope === $rootScope) {
+                //     isLogDebug && logDebug('Release not necessary (unattached): ' + thisSub);
+                // } else {
+                //     isLogDebug && logDebug('Releasing subscription in ' + (releaseDelay / 1000) + 's: ' + thisSub);
+                //     releaseTimeout = setTimeout(function() {
+                //         if (releaseTimeout) {
+                //             isLogInfo && logInfo('Subscription released: ' + thisSub);
+                //             thisSub.syncOff();
+                //             releaseTimeout = null;
+                //         }
+                //     }, Math.max(releaseDelay, initializationTimeout) + 500); // to make sure that a release does not happen during initialization
+                // }
             }
 
             /**
@@ -1543,6 +1584,11 @@ function syncProvider($syncMappingProvider) {
             function listenForReconnectionToResync(listenNow) {
                 // give a chance to connect before listening to reconnection.
                 setTimeout(function() {
+                    // already set up for some reason????
+                    // prevent creating many listeners
+                    if (reconnectOff) {
+                        return;
+                    }
                     reconnectOff = innerScope.$on('user_reconnected', function() {
                         isLogDebug && logDebug('Resyncing after network loss to ' + publication + JSON.stringify(thisSub.getParameters()));
                         // note the backend might return a new subscription if the client took too much time to reconnect.

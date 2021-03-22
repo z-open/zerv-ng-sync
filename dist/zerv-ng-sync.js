@@ -1049,7 +1049,8 @@
                 var reconnectOff = void 0,
                     publicationListenerOff = void 0,
                     destroyOff = void 0,
-                    onDestroyOff = void 0;
+                    onDestroyOff = void 0,
+                    _initializationOff = void 0;
                 var ObjectClass = void 0;
                 var subscriptionId = void 0;
                 var mapCustomDataFn = void 0,
@@ -1323,8 +1324,8 @@
                  *
                  */
                 function setForce(value) {
-                    if (value) {
-                        // quick hack to force to reload...recode later.
+                    if (value && this.isSyncingOn) {
+                        // quick hack to force to reload if the subscription is already syncing.
                         thisSub.syncOff();
                     }
                     return thisSub;
@@ -1904,10 +1905,8 @@
                     if (isSyncingOn) {
                         unregisterSubscription();
                         isSyncingOn = false;
-
                         isLogInfo && logInfo('Sync ' + publication + ' off. Params:' + JSON.stringify(subParams));
                     }
-                    // Make sure to clean up listeners
                     if (publicationListenerOff) {
                         publicationListenerOff();
                         publicationListenerOff = null;
@@ -1915,6 +1914,10 @@
                     if (reconnectOff) {
                         reconnectOff();
                         reconnectOff = null;
+                    }
+                    if (_initializationOff) {
+                        _initializationOff();
+                        _initializationOff = null;
                     }
 
                     if (deferredInitialization) {
@@ -1993,19 +1996,19 @@
                     if (!initializationTimeout) {
                         return;
                     }
-                    var initializationPromise = deferredInitialization;
-                    var completed = false;
-                    setTimeout(function () {
-                        if (!completed && deferredInitialization === initializationPromise) {
-                            logError('Failed to load data within ' + initializationTimeout / 1000 + 's for ' + thisSub);
-                            initializationPromise.reject('sync timeout');
-                            // give up syncing and release resources.
-                            thisSub.syncOff();
-                        }
+                    var timeout = setTimeout(function () {
+                        logError('Failed to load data within ' + initializationTimeout / 1000 + 's for ' + thisSub);
+                        deferredInitialization.reject('sync timeout');
+                        // give up syncing and release resources.
+                        thisSub.syncOff();
                     }, initializationTimeout);
-                    initializationPromise.promise.then(function () {
-                        completed = true;
-                    });
+
+                    _initializationOff = function initializationOff() {
+                        clearTimeout(timeout);
+                        _initializationOff = null;
+                    };
+
+                    deferredInitialization.promise.then(_initializationOff).catch(_initializationOff);
                 }
 
                 function readyForListening() {

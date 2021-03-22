@@ -428,7 +428,7 @@ function syncProvider($syncMappingProvider) {
             let isSyncingOn = false;
             let isSingleObjectCache, updateDataStorage, cache, orderByFn, isInitialPushCompleted, initialStartTime, deferredInitialization;
             let onReadyOff, onUpdateOff, formatRecord;
-            let reconnectOff, publicationListenerOff, destroyOff, onDestroyOff;
+            let reconnectOff, publicationListenerOff, destroyOff, onDestroyOff, initializationOff;
             let ObjectClass;
             let subscriptionId;
             let mapCustomDataFn, mapPropertyFns = [];
@@ -704,8 +704,8 @@ function syncProvider($syncMappingProvider) {
              *
              */
             function setForce(value) {
-                if (value) {
-                    // quick hack to force to reload...recode later.
+                if (value && this.isSyncingOn) {
+                    // quick hack to force to reload if the subscription is already syncing.
                     thisSub.syncOff();
                 }
                 return thisSub;
@@ -1300,10 +1300,8 @@ function syncProvider($syncMappingProvider) {
                 if (isSyncingOn) {
                     unregisterSubscription();
                     isSyncingOn = false;
-
                     isLogInfo && logInfo('Sync ' + publication + ' off. Params:' + JSON.stringify(subParams));
                 }
-                // Make sure to clean up listeners
                 if (publicationListenerOff) {
                     publicationListenerOff();
                     publicationListenerOff = null;
@@ -1311,6 +1309,10 @@ function syncProvider($syncMappingProvider) {
                 if (reconnectOff) {
                     reconnectOff();
                     reconnectOff = null;
+                }
+                if (initializationOff) {
+                    initializationOff();
+                    initializationOff = null;
                 }
 
                 if (deferredInitialization) {
@@ -1389,19 +1391,21 @@ function syncProvider($syncMappingProvider) {
                 if (!initializationTimeout) {
                     return;
                 }
-                const initializationPromise = deferredInitialization;
-                let completed = false;
-                setTimeout(function() {
-                    if (!completed && deferredInitialization === initializationPromise) {
-                        logError('Failed to load data within ' + (initializationTimeout / 1000) + 's for ' + thisSub);
-                        initializationPromise.reject('sync timeout');
-                        // give up syncing and release resources.
-                        thisSub.syncOff();
-                    }
+                const timeout = setTimeout(function() {
+                    logError('Failed to load data within ' + (initializationTimeout / 1000) + 's for ' + thisSub);
+                    deferredInitialization.reject('sync timeout');
+                    // give up syncing and release resources.
+                    thisSub.syncOff();
                 }, initializationTimeout);
-                initializationPromise.promise.then(function() {
-                    completed = true;
-                });
+
+                initializationOff = () => {
+                    clearTimeout(timeout);
+                    initializationOff = null;
+                }
+
+                deferredInitialization.promise
+                    .then(initializationOff)
+                    .catch(initializationOff);
             }
 
             function readyForListening() {

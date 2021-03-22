@@ -426,9 +426,9 @@ function syncProvider($syncMappingProvider) {
 
         function Subscription(publication, scope) {
             let isSyncingOn = false;
-            let destroyed, isSingleObjectCache, updateDataStorage, cache, orderByFn, isInitialPushCompleted, initialStartTime, deferredInitialization;
+            let isSingleObjectCache, updateDataStorage, cache, orderByFn, isInitialPushCompleted, initialStartTime, deferredInitialization;
             let onReadyOff, onUpdateOff, formatRecord;
-            let reconnectOff, publicationListenerOff, destroyOff;
+            let reconnectOff, publicationListenerOff, destroyOff, onDestroyOff;
             let ObjectClass;
             let subscriptionId;
             let mapCustomDataFn, mapPropertyFns = [];
@@ -446,12 +446,9 @@ function syncProvider($syncMappingProvider) {
             const dependentSubscriptions = [];
             let initializationTimeout = defaultInitializationTimeout;
 
-            let releaseTimeout = null;
-
             //  ----public----
-            // to see in the snapshot
+            // to help debugging in the memory snapshot
             this.publication = publication;
-            this.subParams = subParams;
             // ---------------
 
             this.toString = toString;
@@ -515,6 +512,7 @@ function syncProvider($syncMappingProvider) {
             this.detach = detach;
             this.setInitializationTimeout = setInitializationTimeout;
             this.destroy = destroy;
+            this.onDestroy = onDestroy;
 
             this.isExistingStateFor = isExistingStateFor; // for testing purposes
 
@@ -532,8 +530,6 @@ function syncProvider($syncMappingProvider) {
 
             this.$notifyUpdateWithinDependentSubscription = $notifyUpdateWithinDependentSubscription;
             this.$createDependentSubscription = $createDependentSubscription;
-
-            this.isDestroyed = isDestroyed;
 
             setSingle(false);
 
@@ -617,10 +613,6 @@ function syncProvider($syncMappingProvider) {
                 return publication;
             }
 
-            function isDestroyed() {
-                return destroyed || false;
-            }
-
             function toString() {
                 return publication + '/' + JSON.stringify(subParams);
             }
@@ -628,10 +620,6 @@ function syncProvider($syncMappingProvider) {
              * destroy this subscription but also dependent subscriptions if any
              */
             function destroy() {
-                if (destroyed) {
-                    return;
-                }
-                destroyed = true;
                 _.forEach(filteredDataSets, function(ds) {
                     ds.destroy();
                 });
@@ -645,28 +633,19 @@ function syncProvider($syncMappingProvider) {
                 $syncMapping.destroyDependentSubscriptions(thisSub);
                 isLogDebug && logDebug('Subscription to ' + thisSub + ' destroyed.');
 
-                // clear all cached data from memory
-                // to prevent large instance to be kept in memory
-                recordStates = {};
-                if (thisSub.isSingle()) {
-                    clearSingleObject(cache);
-                }
-                cache = null;
-                deferredInitialization = null;
+                detach();
+                syncListener.notify('destroy', publication, subParams);
+                onDestroyOff && onDestroyOff();
             }
 
-            function clearSingleObject(object) {
-                if (_.isEmpty(object)) {
-                    return;
+            function onDestroy(callback) {
+                if (strictCode && onReadyOff) {
+                    throw new Error('onDestroy is already set in subscription to ' + publication + '. It cannot be resetted to prevent bad practice leading to potential memory leak . Consider using onDestroy when subscription is instantiated.');
                 }
-                Object.keys(object).forEach(function(key) {
-                    try {
-                        delete object[key];
-                    } catch (err) {
-                        console.error(err);
-                    }
-                });
-                return object;
+                onDestroyOff && onDestroyOff();
+                // this onReady is not attached to any scope and will only be gone when the sub is destroyed
+                onDestroyOff = syncListener.on('destroy', callback, null);
+                return thisSub;
             }
 
             function createSubSet(filter, scope) {
@@ -1145,7 +1124,7 @@ function syncProvider($syncMappingProvider) {
              * @returns {Promise} returns on object with the last synced data.
              */
             function load(fetchingParams, options) {
-                return setParameters(fetchingParams, options).waitForDataReady();
+                return this.setParameters(fetchingParams, options).waitForDataReady();
             }
 
             /**
@@ -1169,7 +1148,7 @@ function syncProvider($syncMappingProvider) {
 
                 subParams = fetchingParams || {};
 
-                // to show in snapshot
+                // to help debug using memory snapshot
                 this.subParams = subParams;
 
                 options = options || {};
@@ -1323,14 +1302,15 @@ function syncProvider($syncMappingProvider) {
                     isSyncingOn = false;
 
                     isLogInfo && logInfo('Sync ' + publication + ' off. Params:' + JSON.stringify(subParams));
-                    if (publicationListenerOff) {
-                        publicationListenerOff();
-                        publicationListenerOff = null;
-                    }
-                    if (reconnectOff) {
-                        reconnectOff();
-                        reconnectOff = null;
-                    }
+                }
+                // Make sure to clean up listeners
+                if (publicationListenerOff) {
+                    publicationListenerOff();
+                    publicationListenerOff = null;
+                }
+                if (reconnectOff) {
+                    reconnectOff();
+                    reconnectOff = null;
                 }
 
                 if (deferredInitialization) {
@@ -1428,7 +1408,7 @@ function syncProvider($syncMappingProvider) {
                 if (!publicationListenerOff) {
                     // if the subscription belongs to a parent one and the network is lost, the top parent subscription will release/destroy all dependent subscriptions and take care of re-registering itself and its dependents.
                     if (!thisSub.$parentSubscription) {
-                        listenForReconnectionToResync();
+                        reconnectOff = listenForReconnectionToResync();
                     }
 
                     publicationListenerOff = addPublicationListener(
@@ -1462,12 +1442,6 @@ function syncProvider($syncMappingProvider) {
              */
             function detach() {
                 isLogDebug && logDebug('Detach subscription(release): ' + thisSub);
-                // if sub was about to be released, keep it.
-                if (releaseTimeout) {
-                    isLogInfo && logInfo('Re-use before release: ' + thisSub);
-                    clearTimeout(releaseTimeout);
-                    releaseTimeout = null;
-                }
                 if (destroyOff) {
                     destroyOff();
                 }
@@ -1521,19 +1495,20 @@ function syncProvider($syncMappingProvider) {
             }
 
             function listenForReconnectionToResync(listenNow) {
-                // give a chance to connect before listening to reconnection.
-                setTimeout(function() {
-                    // already set up for some reason????
-                    // prevent creating many listeners
-                    if (reconnectOff) {
-                        return;
-                    }
-                    reconnectOff = innerScope.$on('user_reconnected', function() {
+                let scopeReconnectOff;
+                // give a chance to connect before listening to reconnection (might need revising)
+                const delay = setTimeout(function() {
+                    scopeReconnectOff = innerScope.$on('user_reconnected', function() {
                         isLogDebug && logDebug('Resyncing after network loss to ' + publication + JSON.stringify(thisSub.getParameters()));
                         // note the backend might return a new subscription if the client took too much time to reconnect.
                         registerSubscription();
                     });
                 }, listenNow ? 0 : 2000);
+
+                return () => {
+                    clearTimeout(delay);
+                    scopeReconnectOff && scopeReconnectOff();
+                }
             }
 
 

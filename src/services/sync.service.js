@@ -648,7 +648,7 @@ function syncProvider($syncMappingProvider) {
                 // clear all cached data from memory
                 // to prevent large instance to be kept in memory
                 recordStates = {};
-                if(thisSub.isSingle()) {
+                if (thisSub.isSingle()) {
                     clearSingleObject(cache);
                 }
                 cache = null;
@@ -662,7 +662,7 @@ function syncProvider($syncMappingProvider) {
                 Object.keys(object).forEach(function(key) {
                     try {
                         delete object[key];
-                    } catch(err) {
+                    } catch (err) {
                         console.error(err);
                     }
                 });
@@ -1697,7 +1697,7 @@ function syncProvider($syncMappingProvider) {
              */
             function findRecordsPresentInCacheOnly(receivedRecordsToBeSynced) {
                 const idsToBeSynced = _.map(receivedRecordsToBeSynced, (record) => getIdValue(record.id));
-                return _.filter(recordStates, (cachedRecord) =>  
+                return _.filter(recordStates, (cachedRecord) =>
                     idsToBeSynced.indexOf(cachedRecord.id) === -1
                 );
             }
@@ -1719,7 +1719,7 @@ function syncProvider($syncMappingProvider) {
                     // delete in the index cache as well.
                     const pos = cache.indexOf(obj);
                     if (pos !== -1) {
-                        cache.splice(pos,1);
+                        cache.splice(pos, 1);
                     }
                 });
                 return $pq.all(promises)

@@ -907,7 +907,6 @@ describe('Basic Sync Service: ', function() {
     });
 
     describe('after a network loss', () => {
-
         beforeEach(() => {
             backend.setData(subParams, [spec.r1, spec.r2]);
             spec.$scope = $rootScope.$new(true);

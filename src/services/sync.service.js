@@ -26,7 +26,7 @@ angular
 function syncProvider($syncMappingProvider) {
     let totalSub = 0, strictCode = false;
 
-    let benchmark = true, isLogDebug, isLogInfo, isLogTrace, defaultReleaseDelay = 30, defaultInitializationTimeout = 10;
+    let benchmark = true, isLogDebug, isLogInfo, isLogTrace, defaultInitializationTimeout = 10;
 
     let latencyInMilliSecs = 0;
 
@@ -55,16 +55,6 @@ function syncProvider($syncMappingProvider) {
      */
     this.setLatency = function(seconds) {
         latencyInMilliSecs = seconds;
-        return this;
-    };
-
-    /**
-     * Delay before a released subscription stop syncing (see attach)
-     *
-     *  @param <number> seconds
-     */
-    this.setReleaseDelay = function(seconds) {
-        defaultReleaseDelay = seconds * 1000;
         return this;
     };
 
@@ -453,8 +443,7 @@ function syncProvider($syncMappingProvider) {
             const syncListener = new SyncListener(thisSub);
 
 
-            let dependentSubscriptions = [];
-            let releaseDelay = defaultReleaseDelay;
+            const dependentSubscriptions = [];
             let initializationTimeout = defaultInitializationTimeout;
 
             let releaseTimeout = null;
@@ -524,8 +513,6 @@ function syncProvider($syncMappingProvider) {
 
             this.attach = attach;
             this.detach = detach;
-            this.setDependentSubscriptions = setDependentSubscriptions;
-            this.setReleaseDelay = setReleaseDelay;
             this.setInitializationTimeout = setInitializationTimeout;
             this.destroy = destroy;
 
@@ -968,14 +955,6 @@ function syncProvider($syncMappingProvider) {
                 }
             }
 
-            // function mapPropertyDs(propertyName, externalDs, idProperty) {
-            //     dependentSubscriptions.push(externalDs);
-            //     var onReadyOff = externalDs.onReady(function() {
-            //         dependentSub.invalid = true; // means the external sub data has changed, making this subscription obj potentially mapped to wrong data
-            //     });
-            // }
-
-
             /**
              *  this function allows to add to the subscription multiple mapping strategies at the same time
              *
@@ -1327,9 +1306,18 @@ function syncProvider($syncMappingProvider) {
              *
              * the dataset is no longer listening and will not call any callback
              *
+             * A future option could be
+             * - delay: which would stop the sync after a delay. This would be useful for
+             *   dataset that are not destroyed and might be resused quickly going from one page
+             *   to another.
+             *   Otherwise, going to the next page will force to pull the data again from the network.
+             * 
+             * @param {object} options 
+             * @param {Boolean} options.clearCache when true, clear the cache content from memory
              * @returns this subcription
+             * 
              */
-            function syncOff(clearCache) {
+            function syncOff(options = {}) {
                 if (isSyncingOn) {
                     unregisterSubscription();
                     isSyncingOn = false;
@@ -1349,8 +1337,13 @@ function syncProvider($syncMappingProvider) {
                     // if there is code waiting on this promise.. ex (load in resolve)
                     deferredInitialization.resolve(getData());
                 }
-                if (clearCache) {
+
+                if (options.clearCache === true) {
+                    // Currently it is more a hack than anything else but it does release memory for large objects.
                     cleanCache();
+                    // proper solution would be to set the cache to null for single and empty array.
+                    // however this could have a side effect on code relying on getData() before
+                    // the sync in on.
                 }
                 return thisSub;
             }
@@ -1457,52 +1450,9 @@ function syncProvider($syncMappingProvider) {
                 }
             }
 
-            /**
-             * set which external subscription this subscription depends on.
-             * When this subscription is released, the other subscription will be released as well.
-             *
-             * When a subscription is released, it remains in sync for a little while to promote reuse.
-             *
-             * @param {Array} subscriptions
-             */
-            function setDependentSubscriptions(subs) {
-                dependentSubscriptions = subs;
-                return thisSub;
-            }
-
-            /**
-             * set the number of seconds before a subscription stops syncing after it is release for destruction.
-             * This promotes re-use.
-             *
-             * @param {int} t in seconds
-             */
-            function setReleaseDelay(t) {
-                releaseDelay = t * 1000;
-            }
 
             function setInitializationTimeout(t) {
                 initializationTimeout = t * 1000;
-            }
-
-
-            /**
-             * Schedule this subscription to stop syncing after a lap of time (releaseDelay)
-             *
-             */
-            function scheduleRelease() {
-                // detach must be called otherwise,  the subscription is planned for release.
-                // if (innerScope === $rootScope) {
-                //     isLogDebug && logDebug('Release not necessary (unattached): ' + thisSub);
-                // } else {
-                //     isLogDebug && logDebug('Releasing subscription in ' + (releaseDelay / 1000) + 's: ' + thisSub);
-                //     releaseTimeout = setTimeout(function() {
-                //         if (releaseTimeout) {
-                //             isLogInfo && logInfo('Subscription released: ' + thisSub);
-                //             thisSub.syncOff();
-                //             releaseTimeout = null;
-                //         }
-                //     }, Math.max(releaseDelay, initializationTimeout) + 500); // to make sure that a release does not happen during initialization
-                // }
             }
 
             /**
@@ -1522,9 +1472,6 @@ function syncProvider($syncMappingProvider) {
                     destroyOff();
                 }
                 innerScope = $rootScope;
-                _.forEach(dependentSubscriptions, function(dsub) {
-                    dsub.detach();
-                });
             }
 
             /**
@@ -1566,17 +1513,9 @@ function syncProvider($syncMappingProvider) {
                 innerScope = newScope;
                 const destroyScope = innerScope; // memorize scope as it is used during destroy
 
-                destroyOff = innerScope.$on('$destroy', function() {
+                destroyOff = innerScope.$on('$destroy', () => {
                     syncListener.dropListeners(destroyScope);
-                    if (delayRelease) {
-                        scheduleRelease();
-                    } else {
-                        destroy();
-                    }
-                });
-
-                _.forEach(dependentSubscriptions, function(dsub) {
-                    dsub.attach(newScope, delayRelease);
+                    destroy();
                 });
                 return thisSub;
             }

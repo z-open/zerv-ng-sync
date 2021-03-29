@@ -636,6 +636,18 @@ function syncProvider($syncMappingProvider) {
                 detach();
                 syncListener.notify('destroy', publication, subParams);
                 onDestroyOff && onDestroyOff();
+
+                // by clearing cache, it makes a little easier to find which object might be retaining it and this subscription. 
+                // at least it will not be the subscription.
+                // not working cleanCache([]], true);
+                // if (isSingle())  {
+                //     clearObject(cache);
+                // }
+                // cache = null;
+                // recordStates = null;
+                // To help with mem snapshot
+                thisSub.cache = cache;
+                thisSub.STATUS = 'Destroyed ' + publication;
             }
 
             function onDestroy(callback) {
@@ -1493,7 +1505,7 @@ function syncProvider($syncMappingProvider) {
 
                 destroyOff = innerScope.$on('$destroy', () => {
                     syncListener.dropListeners(destroyScope);
-                    destroy();
+                    thisSub.destroy();
                 });
                 return thisSub;
             }

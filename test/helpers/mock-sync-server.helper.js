@@ -146,8 +146,8 @@ function mockSyncServer() {
 
             data = publication.remove(data);
             _.forEach(data, function(record) {
- record.remove = new Date();
-});
+                record.remove = new Date();
+            });
             return notifySubscriptions(publication, data);
         }
 
@@ -191,16 +191,24 @@ function mockSyncServer() {
                 publication.subscriptionIds.push(subId);
             }
 
-            return $pq.resolve(subId).then(function(subId) {
-                publication.subId = subId;
-                onPublicationNotficationCallback({
-                    name: publication.name,
-                    subscriptionId: subId, // this is the id for the new subscription.
-                    params: publication.params,
-                    records: publication.getData(),
-                }, service.acknowledge);
-                return subId;
-            });
+            // return $pq.resolve(subId).then(function(subId) {
+            //     publication.subId = subId;
+            //     onPublicationNotficationCallback({
+            //         name: publication.name,
+            //         subscriptionId: subId, // this is the id for the new subscription.
+            //         params: publication.params,
+            //         records: publication.getData(),
+            //     }, service.acknowledge);
+            //     return subId;
+            // });
+            publication.subId = subId;
+            onPublicationNotficationCallback({
+                name: publication.name,
+                subscriptionId: subId, // this is the id for the new subscription.
+                params: publication.params,
+                records: publication.getData(),
+            }, service.acknowledge);
+            return $pq.resolve(subId);
         }
 
         function unsubscribe(subParams) {

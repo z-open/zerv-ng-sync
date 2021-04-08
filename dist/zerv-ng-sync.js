@@ -641,10 +641,10 @@
      *
      */
 
-    syncProvider.$inject = ["$syncMappingProvider"];
+    syncProvider.$inject = ["$syncMappingProvider", "$pqProvider"];
     angular.module('zerv.sync').provider('$sync', syncProvider);
 
-    function syncProvider($syncMappingProvider) {
+    function syncProvider($syncMappingProvider, $pqProvider) {
         var totalSub = 0,
             strictCode = false;
 
@@ -671,6 +671,15 @@
         this.setStrictCode = function (value) {
             strictCode = value;
             return this;
+        };
+
+        /**
+         * Mixing angular promises with native implementation can make unit test very difficult to implement.
+         * This forces the sync library to use native primitive implementation.
+         * In the future, sync will not longer support angular.
+         */
+        this.useNativePromiseImpl = function () {
+            $pqProvider.useBluebird();
         };
 
         /**
@@ -1267,6 +1276,7 @@
                     // To help with mem snapshot
                     thisSub.cache = cache;
                     thisSub.STATUS = 'Destroyed ' + publication;
+                    thisSub.isDestroyed = true;
                 }
 
                 function onDestroy(callback) {
@@ -1969,6 +1979,9 @@
                  * @returns a promise that will be resolved when the data is ready.
                  */
                 function startSyncing() {
+                    if (thisSub.isDestroyed) {
+                        throw new Error('Sync ' + publication + ' already destroyed. Params:' + JSON.stringify(subParams));
+                    }
                     if (dependentSubscriptions.length && !isSingle()) {
                         throw new Error('Mapping to an external datasource can only be used when subscribing to a single object.');
                     }
@@ -1993,8 +2006,9 @@
                     isInitialPushCompleted = false;
                     isLogInfo && logInfo('Sync ' + publication + ' on. Params:' + JSON.stringify(subParams));
                     isSyncingOn = true;
-                    registerSubscription();
                     readyForListening();
+
+                    registerSubscription();
                     setTimeoutOnInitialization();
 
                     return deferredInitialization.promise;

@@ -23,7 +23,7 @@ angular
     .module('zerv.sync')
     .provider('$sync', syncProvider);
 
-function syncProvider($syncMappingProvider) {
+function syncProvider($syncMappingProvider, $pqProvider) {
     let totalSub = 0, strictCode = false;
 
     let benchmark = true, isLogDebug, isLogInfo, isLogTrace, defaultInitializationTimeout = 10;
@@ -45,6 +45,15 @@ function syncProvider($syncMappingProvider) {
     this.setStrictCode = function(value) {
         strictCode = value;
         return this;
+    };
+
+    /**
+     * Mixing angular promises with native implementation can make unit test very difficult to implement.
+     * This forces the sync library to use native primitive implementation.
+     * In the future, sync will not longer support angular.
+     */
+    this.useNativePromiseImpl = () => {
+        $pqProvider.useBluebird();
     };
 
     /**
@@ -648,6 +657,7 @@ function syncProvider($syncMappingProvider) {
                 // To help with mem snapshot
                 thisSub.cache = cache;
                 thisSub.STATUS = 'Destroyed ' + publication;
+                thisSub.isDestroyed = true;
             }
 
             function onDestroy(callback) {
@@ -1207,7 +1217,6 @@ function syncProvider($syncMappingProvider) {
                 });
             }
 
-
             // does the dataset returns only one object? not an array?
             function setSingle(value) {
                 if (deferredInitialization) {
@@ -1364,6 +1373,9 @@ function syncProvider($syncMappingProvider) {
              * @returns a promise that will be resolved when the data is ready.
              */
             function startSyncing() {
+                if (thisSub.isDestroyed) {
+                    throw new Error('Sync ' + publication + ' already destroyed. Params:' + JSON.stringify(subParams));
+                }
                 if (dependentSubscriptions.length && !isSingle()) {
                     throw new Error('Mapping to an external datasource can only be used when subscribing to a single object.');
                 }
@@ -1388,8 +1400,9 @@ function syncProvider($syncMappingProvider) {
                 isInitialPushCompleted = false;
                 isLogInfo && logInfo('Sync ' + publication + ' on. Params:' + JSON.stringify(subParams));
                 isSyncingOn = true;
-                registerSubscription();
                 readyForListening();
+
+                registerSubscription();
                 setTimeoutOnInitialization();
 
                 return deferredInitialization.promise;
@@ -1413,7 +1426,7 @@ function syncProvider($syncMappingProvider) {
                 initializationOff = () => {
                     clearTimeout(timeout);
                     initializationOff = null;
-                }
+                };
 
                 deferredInitialization.promise
                     .then(initializationOff)
@@ -1524,7 +1537,7 @@ function syncProvider($syncMappingProvider) {
                 return () => {
                     clearTimeout(delay);
                     scopeReconnectOff && scopeReconnectOff();
-                }
+                };
             }
 
 

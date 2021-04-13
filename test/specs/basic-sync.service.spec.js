@@ -174,6 +174,10 @@ describe('Basic Sync Service: ', function() {
             spec.sds = spec.$sync.subscribe('myPub');
         });
 
+        it('should have an empty cache right after subscribing', () => {
+            expect(spec.sds.isEmpty()).toBe(true);
+        });
+
         it('should NOT start right after subscribing', function() {
             expect(spec.sds.isSyncing()).toBe(false);
         });

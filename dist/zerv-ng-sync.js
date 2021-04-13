@@ -2020,7 +2020,7 @@
                 }
 
                 function isEmpty() {
-                    return thisSub.isSingle() ? cache.$empty || false : cache.length === 0;
+                    return thisSub.isSingle() ? cache.timestamp && cache.timestamp.$empty || false : cache.length === 0;
                 }
 
                 function setTimeoutOnInitialization() {

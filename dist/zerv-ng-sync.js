@@ -1130,6 +1130,7 @@
                 this.setForce = setForce;
                 this.isSyncing = isSyncing;
                 this.isReady = isReady;
+                this.isEmpty = isEmpty;
 
                 this.setSingle = setSingle;
                 this.isSingle = isSingle;
@@ -2016,6 +2017,10 @@
 
                 function isSyncing() {
                     return isSyncingOn;
+                }
+
+                function isEmpty() {
+                    return thisSub.isSingle() ? cache.$empty || false : cache.length === 0;
                 }
 
                 function setTimeoutOnInitialization() {

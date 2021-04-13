@@ -508,6 +508,7 @@ function syncProvider($syncMappingProvider, $pqProvider) {
             this.setForce = setForce;
             this.isSyncing = isSyncing;
             this.isReady = isReady;
+            this.isEmpty = isEmpty;
 
             this.setSingle = setSingle;
             this.isSingle = isSingle;
@@ -1410,6 +1411,10 @@ function syncProvider($syncMappingProvider, $pqProvider) {
 
             function isSyncing() {
                 return isSyncingOn;
+            }
+
+            function isEmpty() {
+                return thisSub.isSingle() ? (cache.$empty || false) : (cache.length === 0);
             }
 
             function setTimeoutOnInitialization() {

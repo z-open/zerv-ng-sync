@@ -932,6 +932,7 @@ describe('Basic Sync Service: ', function() {
                     expect(spec.sds.getData()[0].id).toEqual(3);
                     done();
                 });
+
                 expect(spec.sds.getData().length).toEqual(2);
 
                 spec.$scope.$broadcast('user_reconnected');

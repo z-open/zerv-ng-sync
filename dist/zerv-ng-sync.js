@@ -894,7 +894,7 @@
                 }
 
                 /**
-                 * Attach this dataset, it will be released (no longer updating on sync) when the scope is destroyed;
+                 * Attach this dataset, it will be destroyed when the scope is destroyed;
                  *
                  * @param {*} newScope
                  */
@@ -1265,18 +1265,6 @@
                     detach();
                     syncListener.notify('destroy', publication, subParams);
                     onDestroyOff && onDestroyOff();
-
-                    // by clearing cache, it makes a little easier to find which object might be retaining it and this subscription. 
-                    // at least it will not be the subscription.
-                    // not working cleanCache([]], true);
-                    // if (isSingle())  {
-                    //     clearObject(cache);
-                    // }
-                    // cache = null;
-                    // recordStates = null;
-                    // To help with mem snapshot
-                    thisSub.cache = cache;
-                    thisSub.STATUS = 'Destroyed ' + publication;
                     thisSub.isDestroyed = true;
                 }
 
@@ -1348,7 +1336,6 @@
                  */
                 function setForce(value) {
                     if (value && this.isSyncingOn) {
-                        // quick hack to force to reload if the subscription is already syncing.
                         thisSub.syncOff();
                     }
                     return thisSub;
@@ -1777,7 +1764,7 @@
 
                     subParams = fetchingParams || {};
 
-                    // to help debug using memory snapshot
+                    // to help debugging using chrome memory snapshot
                     this.subParams = subParams;
 
                     options = options || {};
@@ -1917,14 +1904,10 @@
                  *   to another.
                  *   Otherwise, going to the next page will force to pull the data again from the network.
                  * 
-                 * @param {object} options 
-                 * @param {Boolean} options.clearCache when true, clear the cache content from memory
                  * @returns this subcription
                  * 
                  */
                 function syncOff() {
-                    var options = arguments.length > 0 && arguments[0] !== undefined ? arguments[0] : {};
-
                     if (isSyncingOn) {
                         unregisterSubscription();
                         isSyncingOn = false;
@@ -1942,18 +1925,9 @@
                         _initializationOff();
                         _initializationOff = null;
                     }
-
                     if (deferredInitialization) {
                         // if there is code waiting on this promise.. ex (load in resolve)
                         deferredInitialization.resolve(getData());
-                    }
-
-                    if (options.clearCache === true) {
-                        // Currently it is more a hack than anything else but it does release memory for large objects.
-                        cleanCache();
-                        // proper solution would be to set the cache to null for single and empty array.
-                        // however this could have a side effect on code relying on getData() before
-                        // the sync in on.
                     }
                     return thisSub;
                 }

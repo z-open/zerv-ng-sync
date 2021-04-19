@@ -302,16 +302,6 @@ function mockSyncServer() {
                 publication.subscriptionIds.push(subId);
             }
 
-            // return $pq.resolve(subId).then(function(subId) {
-            //     publication.subId = subId;
-            //     onPublicationNotficationCallback({
-            //         name: publication.name,
-            //         subscriptionId: subId, // this is the id for the new subscription.
-            //         params: publication.params,
-            //         records: publication.getData(),
-            //     }, service.acknowledge);
-            //     return subId;
-            // });
             publication.subId = subId;
             onPublicationNotficationCallback({
                 name: publication.name,

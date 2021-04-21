@@ -791,8 +791,8 @@
             function listenToPublicationNotification() {
                 $socketio.on('SYNC_NOW', function (serializedObj, fn) {
                     var subNotification = deserialize(serializedObj);
-
-                    isLogInfo && logInfo('Syncing with [' + subNotification.name + ', id:' + subNotification.subscriptionId + ' , params:' + JSON.stringify(subNotification.params) + ']. Records:' + subNotification.records.length + '[' + (subNotification.diff ? 'Diff' : 'All') + ']');
+                    // data can be received from the socket
+                    isLogDebug && logDebug('Received to sync [' + subNotification.name + ', id:' + subNotification.subscriptionId + ' , params:' + JSON.stringify(subNotification.params) + ']. Records:' + subNotification.records.length + '[' + (subNotification.diff ? 'Diff' : 'All') + ']');
                     var listeners = publicationListeners[subNotification.name];
                     var processed = [];
                     if (listeners) {
@@ -2206,6 +2206,9 @@
                 function processPublicationData(batch) {
                     // cannot only listen to subscriptionId yet...because the registration might have answer provided its id yet...but started broadcasting changes...@TODO can be improved...
                     if (subscriptionId === batch.subscriptionId || !subscriptionId && checkDataSetParamsIfMatchingBatchParams(batch.params)) {
+                        // if some sub listeners exist, it will be processed
+                        isLogInfo && logInfo('Syncing with [' + batch.name + ', id:' + batch.subscriptionId + ' , params:' + JSON.stringify(batch.params) + ']. Records:' + batch.records.length + '[' + (batch.diff ? 'Diff' : 'All') + ']');
+
                         var startTime = Date.now();
                         var dataReceivedIn = Date.now() - initialStartTime;
                         var size = benchmark && isLogInfo ? JSON.stringify(batch.records).length : null;

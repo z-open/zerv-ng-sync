@@ -225,7 +225,16 @@ describe('Basic Sync Service: ', function() {
         $rootScope.$digest();
     });
 
-    it('should unsubscribe when subscription is destroyed', function() {
+    it('should not be in destroyed state on subcription creation', () => {
+        backend.setData(subParams, []);
+        spec.sds = spec.$sync.subscribe('myPub');
+        expect(spec.sds.isDestroyed()).toBe(false);
+        spec.sds.waitForDataReady();
+        $rootScope.$digest();
+        expect(spec.sds.isDestroyed()).toBe(false);
+    });
+
+    it('should unsubscribe when subscription is destroyed', () => {
         backend.setData(subParams, []);
         spec.sds = spec.$sync.subscribe('myPub');
         spec.sds.waitForDataReady();
@@ -235,9 +244,10 @@ describe('Basic Sync Service: ', function() {
         spec.sds.destroy();
         expect(spec.sds.isSyncing()).toBe(false);
         expect(backend.unsubscribe).toHaveBeenCalled();
+        expect(spec.sds.isDestroyed()).toBe(true);
     });
 
-    it('should unsubscribe when attached scope is destroyed', function(done) {
+    it('should unsubscribe when attached scope is destroyed', () => {
         backend.setData(subParams, []);
         var scope = $rootScope.$new();
         spec.sds = spec.$sync.subscribe('myPub');
@@ -245,14 +255,13 @@ describe('Basic Sync Service: ', function() {
         spec.sds.waitForDataReady();
         $rootScope.$digest();
         expect(spec.sds.isSyncing()).toBe(true);
-
         scope.$destroy();
         expect(spec.sds.isSyncing()).toBe(false);
         expect(backend.unsubscribe).toHaveBeenCalled();
-        done();
+        expect(spec.sds.isDestroyed()).toBe(true);
     });
 
-    it('should unsubscribe when provided scope is destroyed', function(done) {
+    it('should unsubscribe when provided scope is destroyed', () => {
         backend.setData(subParams, []);
         var scope = $rootScope.$new();
         spec.sds = spec.$sync.subscribe('myPub', scope);
@@ -263,7 +272,19 @@ describe('Basic Sync Service: ', function() {
         scope.$destroy();
         expect(spec.sds.isSyncing()).toBe(false);
         expect(backend.unsubscribe).toHaveBeenCalled();
-        done();
+        expect(spec.sds.isDestroyed()).toBe(true);
+    });
+
+    it('should not start syncing on a destroyed subscription', () => {
+        backend.setData(subParams, []);
+        var scope = $rootScope.$new();
+        spec.sds = spec.$sync.subscribe('myPub', scope);
+        spec.sds.waitForDataReady();
+        expect(spec.sds.isSyncing()).toBe(true);
+        scope.$destroy();
+        spec.sds.waitForDataReady();
+        expect(spec.sds.isSyncing()).toBe(false);
+        expect(spec.sds.isDestroyed()).toBe(true);
     });
 
     // it('should not allow attaching a different scope after initialization', function () {

@@ -507,6 +507,7 @@ function syncProvider($syncMappingProvider, $pqProvider) {
 
             this.setForce = setForce;
             this.isSyncing = isSyncing;
+            this.isDestroyed = isDestroyed;
             this.isReady = isReady;
             this.isEmpty = isEmpty;
 
@@ -646,7 +647,7 @@ function syncProvider($syncMappingProvider, $pqProvider) {
                 detach();
                 syncListener.notify('destroy', publication, subParams);
                 onDestroyOff && onDestroyOff();
-                thisSub.isDestroyed = true;
+                thisSub.destroyed = true; // value is the object so that it can be seen in the mem snapshot.
             }
 
             function onDestroy(callback) {
@@ -1350,8 +1351,9 @@ function syncProvider($syncMappingProvider, $pqProvider) {
              * @returns a promise that will be resolved when the data is ready.
              */
             function startSyncing() {
-                if (thisSub.isDestroyed) {
-                    throw new Error('Sync ' + publication + ' already destroyed. Params:' + JSON.stringify(subParams));
+                if (thisSub.isDestroyed()) {
+                    // the sub was destroyed, just return the result of the initialization
+                    return deferredInitialization.promise; 
                 }
                 if (dependentSubscriptions.length && !isSingle()) {
                     throw new Error('Mapping to an external datasource can only be used when subscribing to a single object.');
@@ -1387,6 +1389,10 @@ function syncProvider($syncMappingProvider, $pqProvider) {
 
             function isSyncing() {
                 return isSyncingOn;
+            }
+
+            function isDestroyed() {
+                return thisSub.destroyed === true;
             }
 
             function isEmpty() {

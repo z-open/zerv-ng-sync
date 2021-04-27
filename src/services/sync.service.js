@@ -1485,7 +1485,7 @@ function syncProvider($syncMappingProvider, $pqProvider) {
              *
              *
              */
-            function attach(newScope, delayRelease) {
+            function attach(newScope) {
                 detach();
 
                 if (newScope === innerScope) {

@@ -2082,7 +2082,7 @@
                  *
                  *
                  */
-                function attach(newScope, delayRelease) {
+                function attach(newScope) {
                     detach();
 
                     if (newScope === innerScope) {

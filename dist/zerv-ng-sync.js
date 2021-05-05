@@ -1336,7 +1336,7 @@
                  *
                  */
                 function setForce(value) {
-                    if (value && this.isSyncingOn) {
+                    if (value && isSyncingOn) {
                         thisSub.syncOff();
                     }
                     return thisSub;

@@ -4,16 +4,14 @@ angular
     .provider('mockSyncServer', mockSyncServer);
 
 function mockSyncServer() {
-
     var debug;
 
-    this.setDebug = function (value) {
+    this.setDebug = function(value) {
         debug = value;
     };
 
 
     this.$get = function sync($rootScope, $pq, $socketio, $sync, publicationService) {
-
         var publicationsWithSubscriptions = publicationService;
         var subCount = 0;
 
@@ -34,15 +32,14 @@ function mockSyncServer() {
             acknowledge: acknowledge,
 
 
+            setData: setData,
+        };
 
-            setData: setData
-        }
-
-        $socketio.onFetch('sync.subscribe', function () {
+        $socketio.onFetch('sync.subscribe', function() {
             return service.subscribe.apply(self, arguments);
         });
 
-        $socketio.onFetch('sync.unsubscribe', function () {
+        $socketio.onFetch('sync.unsubscribe', function() {
             return service.unsubscribe.apply(self, arguments);
         });
 
@@ -97,7 +94,7 @@ function mockSyncServer() {
          */
         function publish(definition) {
             if (_.isArray(definition)) {
-                _.forEach(definition, function (def) {
+                _.forEach(definition, function(def) {
                     if (!def.type) {
                         throw new Error('Publish array argument must contain objects with a type property ("object" or "array")');
                     }
@@ -106,7 +103,7 @@ function mockSyncServer() {
                     } else {
                         publishObject(def.sub, def.data);
                     }
-                })
+                });
             } else if (_.isObject(definition)) {
                 publishObject(definition.sub, definition.data);
             } else {
@@ -121,15 +118,13 @@ function mockSyncServer() {
          *   if not provided, a default publication will be created
          */
         function setData(subParams, data) {
-            data.forEach(function (record) {
+            data.forEach(function(record) {
                 if (_.isNil(record.revision)) {
                     throw new Error('Objects in publication must have a revision and id. Check you unit test data for ' + JSON.stringify(subParams));
                 }
             });
             return publicationsWithSubscriptions.create(data, subParams.publication, subParams.params);
         }
-
-
 
 
         function notifyDataUpdate(subParams, data) {
@@ -150,18 +145,20 @@ function mockSyncServer() {
             }
 
             data = publication.remove(data);
-            _.forEach(data, function (record) { record.remove = new Date(); });
+            _.forEach(data, function(record) {
+                record.remove = new Date();
+            });
             return notifySubscriptions(publication, data);
         }
 
         function notifySubscriptions(publication, data) {
-            var r = $pq.all(_.map(publication.subscriptionIds, function (id) {
+            var r = $pq.all(_.map(publication.subscriptionIds, function(id) {
                 return onPublicationNotficationCallback({
                     name: publication.name,
                     subscriptionId: id,
                     params: publication.params,
                     records: data,
-                    diff: true
+                    diff: true,
                 }, service.acknowledge);
             }));
             if (!$rootScope.$$phase) {
@@ -171,7 +168,6 @@ function mockSyncServer() {
                 // when the digest completes, the notification has been processed by the client, UI might have reacted too.
             }
             return r;
-
         }
 
         function subscribe(subParams) {
@@ -195,21 +191,19 @@ function mockSyncServer() {
                 publication.subscriptionIds.push(subId);
             }
 
-            return $pq.resolve(subId).then(function (subId) {
-                publication.subId = subId;
-                onPublicationNotficationCallback({
-                    name: publication.name,
-                    subscriptionId: subId,  // this is the id for the new subscription.
-                    params: publication.params,
-                    records: publication.getData(),
-                }, service.acknowledge);
-                return subId;
-            });
+            publication.subId = subId;
+            onPublicationNotficationCallback({
+                name: publication.name,
+                subscriptionId: subId, // this is the id for the new subscription.
+                params: publication.params,
+                records: publication.getData(),
+            }, service.acknowledge);
+            return $pq.resolve(subId);
         }
 
         function unsubscribe(subParams) {
             publicationsWithSubscriptions.release(subParams.id, subParams.publication, subParams.params);
-            logDebug("Unsubscribed: " + JSON.stringify(subParams));
+            logDebug('Unsubscribed: ' + JSON.stringify(subParams));
             return $pq.resolve();
         }
 
@@ -231,11 +225,7 @@ function mockSyncServer() {
                 console.debug('MOCKSERV: ' + msg);
             }
         }
-    }
+    };
 }
-
-
-
-
 
 
